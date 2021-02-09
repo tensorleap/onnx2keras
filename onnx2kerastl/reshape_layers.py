@@ -263,7 +263,7 @@ def convert_flatten(node, params, layers, lambda_func, node_name, keras_name):
         layers[node_name] = flatten(tensor_chw)
         lambda_func["%s_CHW" % keras_name] = target_layer
     else:
-        reshape = keras.layers.Reshape([-1], name=keras_name)
+        reshape = keras.layers.Flatten(name=keras_name)
         layers[node_name] = reshape(input_0)
 
 
