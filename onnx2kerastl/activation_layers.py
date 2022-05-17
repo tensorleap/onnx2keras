@@ -1,3 +1,5 @@
+import torch.nn
+import tensorflow as tf
 from tensorflow import keras
 import logging
 from .utils import ensure_tf_type, ensure_numpy_type
@@ -85,7 +87,7 @@ def convert_sigmoid(node, params, layers, lambda_func, node_name, keras_name):
     layers[node_name] = sigmoid(input_0)
 
 
-def convert_hard_sigmoid(node, params, layers, lambda_func, node_name, keras_name):
+def convert_hard_sigmoid(node, params, layers, lambda_func, node_name, keras_name, alpha=0.167, beta=0.5):
     """
     Convert Hard Sigmoid activation layer
     :param node: current operation node
@@ -101,6 +103,7 @@ def convert_hard_sigmoid(node, params, layers, lambda_func, node_name, keras_nam
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
+    input_0 = tf.multiply(input_0, 5/6)     # TODO: conversion from torch HardSigmoid to tf version
     hard_sigmoid = keras.layers.Activation('hard_sigmoid', name=keras_name)
     layers[node_name] = hard_sigmoid(input_0)
 
