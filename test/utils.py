@@ -1,6 +1,10 @@
 import io
-import torch
+import warnings
+
 import onnx
+import torch
+from keras.layers import Lambda
+from keras.models import Model
 
 from onnx2kerastl import onnx_to_keras, check_torch_keras_error
 
@@ -29,4 +33,10 @@ def convert_and_test(model: torch.nn.Module,
                      epsilon=1e-5):
     k_model = torch2keras(model, input_variable, verbose=verbose, change_ordering=change_ordering)
     error = check_torch_keras_error(model, k_model, input_variable, change_ordering=change_ordering, epsilon=epsilon)
+    if is_lambda_layers_exist(k_model):
+        warnings.warn("Found Lambda layers")
     return error
+
+
+def is_lambda_layers_exist(model: Model):
+    return any(isinstance(layer, Lambda) for layer in model.layers)
