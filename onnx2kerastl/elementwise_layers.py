@@ -59,9 +59,14 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
 
     input_0 = layers[node.input[0]]
     input_1 = layers[node.input[1]]
+    input_0_is_np = is_numpy(input_0)
+    input_1_is_np = is_numpy(input_1)
     try:
-        add = keras.layers.Add(name=keras_name)
-        layers[node_name] = add([input_0, input_1])
+        if not input_0_is_np and not input_1_is_np:
+            add = keras.layers.Add(name=keras_name)
+            layers[node_name] = add([input_0, input_1])
+        else:
+            raise ValueError('Operands are different.')
 
     except (IndexError, ValueError):
         logger.warning('Failed to use keras.layers.Add. Fallback to TF lambda.')
@@ -86,10 +91,16 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
 
     input_0 = layers[node.input[0]]
     input_1 = layers[node.input[1]]
+    input_0_is_np = is_numpy(input_0)
+    input_1_is_np = is_numpy(input_1)
 
     try:
-        mul = keras.layers.Multiply(name=keras_name)
-        layers[node_name] = mul([input_0, input_1])
+        if not input_0_is_np and not input_1_is_np:
+            mul = keras.layers.Multiply(name=keras_name)
+            layers[node_name] = mul([input_0, input_1])
+        else:
+            raise ValueError('Operands are different.')
+
     except (IndexError, ValueError):
         logger.warning('Failed to use keras.layers.Multiply. Fallback to TF lambda.')
         layers[node_name] = input_0 * input_1
@@ -113,10 +124,16 @@ def convert_elementwise_sub(node, params, layers, lambda_func, node_name, keras_
 
     input_0 = layers[node.input[0]]
     input_1 = layers[node.input[1]]
+    input_0_is_np = is_numpy(input_0)
+    input_1_is_np = is_numpy(input_1)
 
     try:
-        sub = keras.layers.Subtract(name=keras_name)
-        layers[node_name] = sub([input_0, input_1])
+        if not input_0_is_np and not input_1_is_np:
+            sub = keras.layers.Subtract(name=keras_name)
+            layers[node_name] = sub([input_0, input_1])
+        else:
+            raise ValueError('Operands are different.')
+
     except (IndexError, ValueError):
         logger.warning('Failed to use keras.layers.Subtract. Fallback to TF lambda.')
         layers[node_name] = input_0 - input_1
