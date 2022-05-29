@@ -6,6 +6,7 @@ from tensorflow import keras
 from tensorflow.keras import backend as K
 
 from onnx2kerastl.customonnxlayer.onnxreducemean import OnnxReduceMean
+from .customonnxlayer.onnxpow import OnnxPow
 from .utils import is_numpy, ensure_tf_type, ensure_numpy_type
 
 # Handle python 2.7 import error
@@ -206,13 +207,8 @@ def convert_pow(node, params, layers, lambda_func, node_name, keras_name):
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     power = ensure_numpy_type(layers[node.input[1]])
 
-    def target_layer(x, a=power):
-        import tensorflow.keras.backend as K
-        return K.pow(x, a)
-
-    lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
-    layers[node_name] = lambda_layer(input_0)
-    lambda_func[keras_name] = target_layer
+    pow_layer = OnnxPow(name=keras_name)
+    layers[node_name] = pow_layer([input_0, power])
 
 
 def convert_sqrt(node, params, layers, lambda_func, node_name, keras_name):
