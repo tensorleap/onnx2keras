@@ -1,5 +1,6 @@
 from keras.layers import SlicingOpLambda
 from tensorflow import keras
+import tensorflow as tf
 import numpy as np
 import logging
 from .utils import is_numpy, ensure_tf_type, ensure_numpy_type
@@ -300,7 +301,6 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
         layers[node_name] = input_0
 
         if 'axes' in params:
-            import tensorflow as tf
             slice_spec = []
             for i in range(len(params["axes"])):
                 slice_spec.append({
