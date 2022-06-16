@@ -1,5 +1,5 @@
+from onnx2keras import onnx_to_keras, check_torch_keras_error
 import torch
-import pickle
 from detectron2 import model_zoo
 from detectron2.config import get_cfg
 from detectron2.export import Caffe2Tracer
@@ -9,8 +9,6 @@ import pathlib
 from os.path import join
 from detectron2.modeling import build_model
 from detectron2.checkpoint import DetectionCheckpointer
-
-import onnx
 import pytest
 
 
@@ -107,3 +105,17 @@ def get_detectron2_models_and_inputs_batch(model_yaml_path:  str = "COCO-Detecti
     tracer = Caffe2Tracer(cfg, model, sample_inputs) #this might raise w
     onnx_model = tracer.export_onnx() #this requires pip install onnx==1.8.1
     return onnx_model, model, sample_inputs
+
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize('change_ordering', [True, False])
+@pytest.mark.parametrize('model_class', ["COCO-Detection/retinanet_R_50_FPN_1x.yaml"])
+def test_retinaNet(change_ordering, model_class):
+    if change_ordering:
+        pytest.skip("this doesn't work when you need to change ordering")
+    onnx_model, model, inputs_dict = get_detectron2_models_and_inputs(model_class)
+    k_model = onnx_to_keras(onnx_model, ["data", "im_info"], verbose=True, change_ordering=change_ordering)
+    error = check_torch_keras_error(model, k_model, inputs_dict, change_ordering=change_ordering, epsilon=1e-5) #     2. 1x3 float "im_info", each row of which is (height, width, 1.0).
+
+    print(1)
