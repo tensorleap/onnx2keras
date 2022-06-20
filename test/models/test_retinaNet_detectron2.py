@@ -1,4 +1,4 @@
-run_test = True
+run_test = False
 if run_test: #note that to run this test you must use a different environment described in retinanet/RETINANET_README.md
     from onnx2kerastl import onnx_to_keras
     import torch
