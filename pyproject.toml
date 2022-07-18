@@ -17,6 +17,8 @@ tensorflow-addons = "^0.17.1"
 pytest = "^7.1.2"
 torch = {version = "^1.11.0", markers = "platform_machine  == 'x86_64'"}
 torchvision = {version = "^0.12.0", markers = "platform_machine  == 'x86_64'"}
+transformers = {extras = ["onnx"], version = "^4.20.1", markers = "platform_machine  == 'x86_64'"}
+sentencepiece ={version = "^0.1.96", markers = "platform_machine  == 'x86_64'"}
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
