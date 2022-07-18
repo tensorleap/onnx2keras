@@ -89,8 +89,19 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
             raise AttributeError('Can\'t gather by axis more than 3.')
     else:
         input_0 = ensure_tf_type(layers[node.input[0]], layers[list(layers)[0]], name="%s_const" % keras_name)
-        indices = layers[node.input[1]].tolist()
-        layers[node_name] = tf.gather(input_0, indices, axis=params['axis'])
+        if tf.keras.backend.is_keras_tensor(layers[node.input[1]]):
+            indices = layers[node.input[1]]
+        else:
+            indices = layers[node.input[1]].tolist()
+        if "is_embedding" in params:
+            if len(input_0.shape) == 2:
+                emb = tf.keras.layers.Embedding(input_0.shape[0], input_0.shape[1], weights=[layers[node.input[0]]],
+                                                name=keras_name)
+                layers[node_name] = emb(indices)
+            else:
+                raise AttributeError("Cannot transform gather into embedding with non 2D array")
+        else:
+            layers[node_name] = tf.gather(input_0, indices, axis=params['axis'])
 
 
 def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
