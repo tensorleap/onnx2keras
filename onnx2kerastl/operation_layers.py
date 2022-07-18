@@ -310,10 +310,7 @@ def convert_cast(node, params, layers, lambda_func, node_name, keras_name):
                 11: tf.double,
             }
             return tf.cast(x, cast_map[dtype])
-
-        lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
-        layers[node_name] = lambda_layer(input_0)
-        lambda_func[keras_name] = target_layer
+        layers[node_name] = target_layer(input_0)
 
 
 def convert_floor(node, params, layers, lambda_func, node_name, keras_name):
