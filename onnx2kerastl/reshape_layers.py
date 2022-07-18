@@ -332,10 +332,7 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
                     e[axis] = _e
                     mask = mask ^ (0x1 << axis)
                 return tf.strided_slice(x, s, e, begin_mask=mask, end_mask=mask)
-
-            lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
-            layers[node_name] = lambda_layer(input_0)
-            lambda_func[keras_name] = target_layer
+            layers[node_name] = target_layer(input_0)
         else:
             def target_layer(x, axis=axes, starts=starts, ends=ends):
                 import tensorflow as tf
@@ -372,10 +369,7 @@ def convert_squeeze(node, params, layers, lambda_func, node_name, keras_name):
     def target_layer(x, axis=params['axes'][0]):
         from tensorflow import keras
         return keras.backend.squeeze(x, axis)
-
-    lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
-    layers[node_name] = lambda_layer(input_0)
-    lambda_func[keras_name] = target_layer
+    layers[node_name] = target_layer(input_0)
 
 
 def convert_expand(node, params, layers, lambda_func, node_name, keras_name):
