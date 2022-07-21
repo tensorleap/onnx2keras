@@ -141,6 +141,7 @@ def convert_reduce_mean(node, params, layers, lambda_func, node_name, keras_name
     param_keepdims = params.get('keepdims', 1)
     keepdims = param_keepdims == 1
     axes = params['axes']
+    reduce_mean_layer = OnnxReduceMean(axes=axes, keepdims=keepdims)
     axes_for_last = [a - 1 for a in axes]
     if 0 in axes:
         axes_for_last.remove(0)
@@ -156,7 +157,8 @@ def convert_reduce_mean(node, params, layers, lambda_func, node_name, keras_name
 
         return handle_axis_change
 
-    layers[node_name] = K.mean(input_0, axis=axes, keepdims=keepdims)
+    reduce_mean_layer.get_special_data_format_handler = get_special_data_format_handler
+    layers[node_name] = reduce_mean_layer(input_0)
 
 
 def convert_reduce_max(node, params, layers, lambda_func, node_name, keras_name):
@@ -220,8 +222,8 @@ def convert_sqrt(node, params, layers, lambda_func, node_name, keras_name):
         assert AttributeError('More than 1 input for sqrt layer.')
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-    layers[node_name] = K.sqrt(input_0)
-
+    sqrt_layer = OnnxSqrt(name=keras_name)
+    layers[node_name] = sqrt_layer(input_0)
 
 
 def convert_split(node, params, layers, lambda_func, node_name, keras_names):
