@@ -4,7 +4,7 @@ import logging
 from .customonnxlayer.onnxerf import OnnxErf
 from .customonnxlayer.onnxhardsigmoid import OnnxHardSigmoid
 from .utils import ensure_tf_type, ensure_numpy_type
-
+import tensorflow as tf
 
 def convert_relu(node, params, layers, lambda_func, node_name, keras_name):
     """
@@ -218,6 +218,6 @@ def convert_erf(node, params, layers, lambda_func, node_name, keras_name):
         assert AttributeError('More than 1 input for an activation layer.')
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-
-    onnx_erf = OnnxErf(name=keras_name)
-    layers[node_name] = onnx_erf(input_0)
+    layers[node_name] = tf.math.erf(input_0)
+    # onnx_erf = OnnxErf(name=keras_name)
+    # layers[node_name] = onnx_erf(input_0)
