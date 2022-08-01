@@ -36,7 +36,7 @@ def convert_gemm(node, params, layers, lambda_func, node_name, keras_name):
     # Estimate input/output neurons
     input_channels, output_channels = keras_weights[0].shape[-2:]
     logger.debug('Input units %s, output units %s.', input_channels, output_channels)
-    if len(keras_weights[0].shape) > 3: #N-dim tensor multipication Dense doesn't work
+    if len(keras_weights[0].shape) > 2: #N-dim tensor multipication Dense doesn't work
         assert len(node.input) == 2
         layers[node_name] = tf.matmul(layers[node.input[0]], layers[node.input[1]], name=keras_name)
     else:
