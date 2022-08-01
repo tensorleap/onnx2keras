@@ -1,6 +1,7 @@
 from tensorflow import keras
 import logging
 from .utils import ensure_tf_type
+import numpy as np
 
 
 def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
@@ -16,7 +17,10 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
     """
     # It's binary by-default
     logger = logging.getLogger("onnx2keras.padding")
-    params['mode'] = params['mode'].decode('ascii')
+    try:
+        params['mode'] = params['mode'].decode('ascii')
+    except KeyError:
+        params['mode'] = 'constant'
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
     if 'pads' in params:
@@ -33,9 +37,14 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
 
         if 'value' in params and params['value'] != 0.0:
             raise AssertionError('Cannot convert non-zero padding')
-
+        if len(pads) == 6:
+            curr_pad = np.array([[pads[0], pads[3]], [pads[1], pads[4]], [pads[2], pads[5]]])
+            if not(curr_pad[0,:].any() or curr_pad[2, :].any()):
+                padding_layer = keras.layers.ZeroPadding1D(padding=curr_pad[1,:], name=keras_name)
+            else:
+                layers[node_name] = tf.pad(input_0, curr_pad)
         # Magic ordering
-        if len(pads) == 8:
+        elif len(pads) == 8:
             padding_layer = keras.layers.ZeroPadding2D(
                 padding=((pads[2], pads[6]), (pads[3], pads[7])),
                 name=keras_name
