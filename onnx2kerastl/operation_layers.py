@@ -239,15 +239,18 @@ def convert_split(node, params, layers, lambda_func, node_name, keras_names):
         assert AttributeError('More than 1 input for split layer.')
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_names[0])
-    splits = params["split"]
     axis = params.get("axis", 0)
+    try:
+        splits = params["split"]
+    except:
+        splits = np.ones(input_0.shape[axis], dtype=int)
     if not isinstance(splits, Iterable):
         # This might not work if `split` is a tensor.
         chunk_size = K.int_size(input_0)[axis] // splits
         splits = (chunk_size,) * splits
 
     cur = 0
-    for i, split in enumerate(splits):
+    for i, split in reversed(list( enumerate(splits))):
         node_name = params['_outputs'][i]
 
         def target_layer(x, axis=axis, start_i=cur, end_i=cur + split):
@@ -255,9 +258,9 @@ def convert_split(node, params, layers, lambda_func, node_name, keras_names):
             slices[axis] = slice(start_i, end_i)
             return x[tuple(slices)]
 
-        lambda_layer = keras.layers.Lambda(target_layer, name=keras_names[i])
-        layers[node_name] = lambda_layer(input_0)
-        lambda_func[keras_names[i]] = target_layer
+        # lambda_layer = keras.layers.Lambda(target_layer, name=keras_names[i])
+        layers[node_name] = target_layer(input_0)
+        # lambda_func[keras_names[i]] = target_layer
         cur += split
 
 
