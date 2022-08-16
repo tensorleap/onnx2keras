@@ -46,7 +46,11 @@ def convert_shape(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     logger = logging.getLogger('onnx2keras.shape')
-    input_0 = ensure_tf_type(layers[node.input[0]], layers[list(layers)[0]], name="%s_const" % keras_name)
+    try:
+        input_0 = ensure_tf_type(layers[node.input[0]], layers[list(layers)[0]], name="%s_const" % keras_name)
+    except ValueError:
+        input_0 = layers[node.input[0]]
+
 
     logger.debug('Actual shape:')
     logger.debug(np.array(input_0.shape))
