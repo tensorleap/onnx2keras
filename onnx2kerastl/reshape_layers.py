@@ -297,8 +297,14 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             ends = params["ends"][0]
             starts = params["starts"][0]
         else:
-            raise AttributeError('Not implemented')
-
+            try:
+                assert len(layers[node.input[1]]) == 1 and len(layers[node.input[2]]) == 1 \
+                        and len(layers[node.input[3]]) == 1
+                axes = layers[node.input[3]][0]
+                starts = layers[node.input[1]][0]
+                ends = layers[node.input[2]][0]
+            except:
+                raise AttributeError('Not implemented')
         if axes == 0:
             layers[node_name] = layers[node.input[0]][starts:ends]
         elif axes == 1:
