@@ -71,7 +71,10 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
 
     except (IndexError, ValueError):
         logger.warning('Failed to use keras.layers.Add. Fallback to TF lambda.')
-        layers[node_name] = input_0 + input_1
+        if input_0_is_np:
+            layers[node_name] = input_1 + input_0
+        else:
+            layers[node_name] = input_0 + input_1
 
 
 def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_name):
