@@ -62,7 +62,7 @@ def convert_shape(node, params, layers, lambda_func, node_name, keras_name):
         else:
             shapes.append(None)
 
-    layers[node_name] = np.array(shapes)
+    layers[node_name] = np.array(shapes, dtype=np.int32)
 
 
 def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
