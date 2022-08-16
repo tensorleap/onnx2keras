@@ -5,11 +5,11 @@ from .operation_layers import convert_clip, convert_exp, convert_reduce_sum, con
     convert_log, convert_pow, convert_sqrt, convert_split, convert_cast, convert_floor, convert_identity, \
     convert_argmax, convert_reduce_l2, convert_reduce_max, convert_reciprocal
 from .elementwise_layers import convert_elementwise_div, convert_elementwise_add, convert_elementwise_mul, \
-    convert_elementwise_sub, convert_max, convert_min, convert_mean
+    convert_elementwise_sub, convert_max, convert_min, convert_mean, convert_equal, convert_where
 from .linear_layers import convert_gemm
 from .reshape_layers import convert_transpose, convert_shape, convert_gather, convert_unsqueeze, \
     convert_concat, convert_reshape, convert_flatten, convert_slice, convert_squeeze, convert_expand
-from .constant_layers import convert_constant
+from .constant_layers import convert_constant, convert_constant_of_shape
 from .normalization_layers import convert_batchnorm, convert_instancenorm, convert_dropout, convert_lrn
 from .pooling_layers import convert_avgpool, convert_maxpool, convert_global_avg_pool
 from .padding_layers import convert_padding
@@ -58,6 +58,7 @@ AVAILABLE_CONVERTERS = {
     'MatMul': convert_gemm,
     'Transpose': convert_transpose,
     'Constant': convert_constant,
+    'ConstantOfShape': convert_constant_of_shape,
     'BatchNormalization': convert_batchnorm,
     'InstanceNormalization': convert_instancenorm,
     'Dropout': convert_dropout,
@@ -75,5 +76,7 @@ AVAILABLE_CONVERTERS = {
     'Flatten': convert_flatten,
     'Upsample': convert_upsample,
     'Erf': convert_erf,
-    'Reciprocal': convert_reciprocal
+    'Reciprocal': convert_reciprocal,
+    'Equal': convert_equal,
+    'Where': convert_where
 }
