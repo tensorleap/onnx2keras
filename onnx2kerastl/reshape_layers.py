@@ -215,8 +215,8 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                         reshape = keras.layers.Reshape(np.int32(input_1[1:]), name=keras_name)
                         layers[node_name] = reshape(input_0)
     else:
-        raise AttributeError('Can\'t reshape dynamic size.')
-
+        layers[node_name] = tf.reshape(input_0, input_1, name=keras_name)
+        
 
 def convert_unsqueeze(node, params, layers, lambda_func, node_name, keras_name):
     """
