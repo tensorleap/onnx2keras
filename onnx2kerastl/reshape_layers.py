@@ -123,30 +123,56 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
     logger = logging.getLogger('onnx2keras.concat')
 
     layer_input = [layers[node.input[i]] for i in range(len(node.input))]
-
     if all([is_numpy(layers[node.input[i]]) for i in range(len(node.input))]):
         logger.debug('Concat numpy arrays.')
         layers[node_name] = np.concatenate(layer_input, axis=params['axis'])
     else:
         logger.debug('Concat Keras layers.')
         if len(layer_input) > 1:
-            try:
-                layers[node_name] = keras.layers.concatenate(inputs=layer_input,
-                                                             axis=params['axis'],
-                                                             name=keras_name)
-            except:
-                logger.warning('!!! IMPORTANT INFORMATION !!!')
-                logger.warning('Something goes wrong with concat layers. Will use TF fallback.')
-                logger.warning('---')
+            if not np.array([tf.is_tensor(layer_input[i]) and tf.keras.backend.is_keras_tensor(layer_input[i]) for i in range(len(layer_input))]).all():
+                try:
+                    layers[node_name] = tf.concat(layer_input, axis=params['axis'], name=keras_name)
+                except:
+                    is_numpy_ele = np.array([is_numpy(layer_input[i]) for i in range(len(layer_input))])
+                    if is_numpy_ele.any() and not is_numpy_ele.all():  # at least one numpy_array but not all
+                        np_dtype = layer_input[is_numpy_ele.argmin()].dtype.as_numpy_dtype
+                        if np.issubdtype(np_dtype, np.integer):
+                            for i in range(len(layer_input)):
+                                if is_numpy_ele[i]:
+                                    layer_input[i] = layer_input[i].astype(np_dtype)
+                        layers[node_name] = tf.concat(layer_input,
+                                                                     axis=params['axis'],
+                                                                     name=keras_name)
+            else:
+                try:
+                    layers[node_name] = keras.layers.concatenate(inputs=layer_input,
+                                                                 axis=params['axis'],
+                                                                 name=keras_name)
+                except Exception as ex:
+                    logger.warning('!!! IMPORTANT INFORMATION !!!')
+                    logger.warning('Something goes wrong with concat layers. Will use TF fallback.')
+                    logger.warning('---')
 
-                def target_layer(x, axis=params['axis']):
-                    import tensorflow as tf
-                    x = tf.concat(x, axis=axis)
-                    return x
-
-                lambda_layer = keras.layers.Lambda(target_layer, name="%s_CHW" % keras_name)
-                layers[node_name] = lambda_layer(layer_input)
-                lambda_func["%s_CHW" % keras_name] = target_layer
+                    def target_layer(x, axis=params['axis']):
+                        import tensorflow as tf
+                        x = tf.concat(x, axis=axis)
+                        return x
+                    try:
+                        lambda_layer = keras.layers.Lambda(target_layer, name="%s_CHW" % keras_name)
+                        layers[node_name] = lambda_layer(layer_input)
+                    except:
+                        is_numpy_ele = np.array([is_numpy(layer_input[i]) for i in range(len(layer_input))])
+                        if is_numpy_ele.any() and not is_numpy_ele.all():  # at least one numpy_array but not all
+                            np_dtype = layer_input[is_numpy_ele.argmin()].dtype.as_numpy_dtype
+                            if np.issubdtype(np_dtype, np.integer):
+                                for i in range(len(layer_input)):
+                                    if is_numpy_ele[i]:
+                                        layer_input[i] = layer_input[i].astype(np_dtype)
+                            layers[node_name] = keras.layers.concatenate(inputs=layer_input,
+                                                                         axis=params['axis'],
+                                                                         name=keras_name)
+                            return
+                    lambda_func["%s_CHW" % keras_name] = target_layer
         else:
             layers[node_name] = layer_input[0]
 
@@ -216,7 +242,7 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                         layers[node_name] = reshape(input_0)
     else:
         layers[node_name] = tf.reshape(input_0, input_1, name=keras_name)
-        
+
 
 def convert_unsqueeze(node, params, layers, lambda_func, node_name, keras_name):
     """
@@ -285,6 +311,7 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     logger = logging.getLogger('onnx2keras.slice')
+
 
     if is_numpy(layers[node.input[0]]):
         if params['change_ordering']:
