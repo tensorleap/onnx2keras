@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "onnx2kerastl"
-version = "0.0.45.dev1"
+version = "0.0.45.dev2"
 description = ""
 authors = ["dorhar <doron.harnoy@tensorleap.ai>"]
 license = "MIT"
