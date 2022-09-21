@@ -266,7 +266,7 @@ python-versions = "*"
 
 [[package]]
 name = "keras-data-format-converter"
-version = "0.1.1.dev1"
+version = "0.1.1.dev3"
 description = "Generates equal keras models with the desired data format"
 category = "main"
 optional = false
@@ -274,6 +274,7 @@ python-versions = ">=3.8,<3.11"
 
 [package.dependencies]
 libclang = "14.0.1"
+protobuf = "3.20.1"
 tensorflow = {version = "2.8.0", markers = "platform_machine == \"x86_64\""}
 tensorflow-addons = {version = ">=0.17.1,<0.18.0", markers = "platform_machine == \"x86_64\""}
 tensorflow-macos = {version = "2.8.0", markers = "platform_machine == \"arm64\""}
@@ -1059,7 +1060,7 @@ testing = ["func-timeout", "jaraco.itertools", "pytest (>=6)", "pytest-black (>=
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.8, <3.11"
-content-hash = "448895ed05c91d51eb3691dc3cd45dae9b2b137c309f5f1e7b9191fbd3e91880"
+content-hash = "5638216106386ad9363c75f8fab7985b428c57bf610e1a23647f99c53dbaf1bc"
 
 [metadata.files]
 absl-py = [
@@ -1216,8 +1217,8 @@ keras = [
     {file = "keras-2.8.0-py2.py3-none-any.whl", hash = "sha256:744d39dc6577dcd80ff4a4d41549e92b77d6a17e0edd58a431d30656e29bc94e"},
 ]
 keras-data-format-converter = [
-    {file = "keras-data-format-converter-0.1.1.dev1.tar.gz", hash = "sha256:4dacd9da9ea38709c65a463d6e196c3a46395dc8a82d90b08a788412e5294a63"},
-    {file = "keras_data_format_converter-0.1.1.dev1-py3-none-any.whl", hash = "sha256:7de0551705ee5730b8c00cf164122f91e078b7d3631cad2710d7521b40c879fa"},
+    {file = "keras-data-format-converter-0.1.1.dev3.tar.gz", hash = "sha256:bce0dd42e46c6346c985c153bf23ec1932ea44ef819bda44d0aaf773ce846a9e"},
+    {file = "keras_data_format_converter-0.1.1.dev3-py3-none-any.whl", hash = "sha256:098d0df7844865ea5c0c4e61ae78c85d351b3632fe65e24800b81eb5930d8943"},
 ]
 keras-preprocessing = [
     {file = "Keras_Preprocessing-1.1.2-py2.py3-none-any.whl", hash = "sha256:7b82029b130ff61cc99b55f3bd27427df4838576838c5b2f65940e4fcec99a7b"},
