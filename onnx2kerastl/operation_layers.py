@@ -256,9 +256,7 @@ def convert_split(node, params, layers, lambda_func, node_name, keras_names):
             slices[axis] = slice(start_i, end_i)
             return x[tuple(slices)]
 
-        # lambda_layer = keras.layers.Lambda(target_layer, name=keras_names[i])
         layers[node_name] = target_layer(input_0)
-        # lambda_func[keras_names[i]] = target_layer
         cur += split
 
 

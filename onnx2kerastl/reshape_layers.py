@@ -389,16 +389,6 @@ def convert_squeeze(node, params, layers, lambda_func, node_name, keras_name):
 
 
 def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
-    """
-    Convert reshape.
-    :param node: current operation node
-    :param params: operation attributes
-    :param layers: available keras layers
-    :param lambda_func: function for keras Lambda layer
-    :param node_name: internal converter name
-    :param keras_name: resulting layer name
-    :return: None
-    """
     logger = logging.getLogger('onnx2keras.reshape')
 
     input_tensor = layers[node.input[0]]
@@ -411,8 +401,13 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     if roi:
         raise Exception("Resize with roi not supported")
 
-    if params['mode'] != b'nearest':
-        raise Exception("only support resize with nearest method")
+    if params['mode'] == b'nearest':
+        resize_method = ResizeMethod.NEAREST_NEIGHBOR
+    elif params['mode'] == b'cubic':
+        resize_method = ResizeMethod.BICUBIC
+    else:
+        raise Exception("unsupported resize method")
+
 
     to_channel_last = keras.layers.Permute((2, 3, 1))(input_tensor)
     if len(scales) > 0:
@@ -429,7 +424,7 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     resized = tf.image.resize(to_channel_last,
                               size=[int(scales[2] * to_channel_last.shape[1]),
                                     int(scales[3] * to_channel_last.shape[2])],
-                              method=ResizeMethod.NEAREST_NEIGHBOR)
+                              method=resize_method)
     to_channel_first = keras.layers.Permute((3, 1, 2))(resized)
     layers[node_name] = to_channel_first
 
