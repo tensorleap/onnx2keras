@@ -229,7 +229,10 @@ def convert_unsqueeze(node, params, layers, lambda_func, node_name, keras_name):
     logger = logging.getLogger('onnx2keras.unsqueeze')
 
     if len(node.input) != 1:
-        raise AttributeError('Number of inputs is not equal 1 for unsqueeze layer')
+        if len(node.input) == 2:
+            params['axes'] = layers[node.input[1]]
+        else:
+            raise AttributeError('Number of inputs is not equal 1 for unsqueeze layer')
 
     if is_numpy(layers[node.input[0]]):
         logger.debug('Work with numpy types.')
