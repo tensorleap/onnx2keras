@@ -395,12 +395,11 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     logger = logging.getLogger('onnx2keras.reshape')
 
     input_tensor = layers[node.input[0]]
-    roi = layers[node.input[1]]
-    scales = layers[node.input[2]]
+    roi = None if len(node.input[1]) == 0 else layers[node.input[1]]
+    scales = [] if len(node.input[2]) == 0 else layers[node.input[2]]
     sizes = None
     if len(node.input) == 4:
         sizes = layers[node.input[3]]
-
     if roi:
         raise Exception("Resize with roi not supported")
 
@@ -408,6 +407,8 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
         resize_method = ResizeMethod.NEAREST_NEIGHBOR
     elif params['mode'] == b'cubic':
         resize_method = ResizeMethod.BICUBIC
+    elif params['mode'] == b'linear':
+        resize_method = ResizeMethod.BILINEAR
     else:
         raise Exception("unsupported resize method")
 
@@ -420,13 +421,12 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
         tf_resize_shapes = [int(scales[2] * to_channel_last.shape[1]),
                             int(scales[3] * to_channel_last.shape[2])]
     else:
-        if sizes[0] != 1 or sizes[1] != 1:
+        if sizes[0] != input_tensor.shape[0] or sizes[1] != input_tensor.shape[1]:
             raise Exception("Resize of channels or batch dim not suppported")
         tf_resize_shapes = [int(sizes[2]), int(sizes[3])]
 
     resized = tf.image.resize(to_channel_last,
-                              size=[int(scales[2] * to_channel_last.shape[1]),
-                                    int(scales[3] * to_channel_last.shape[2])],
+                              size=tf_resize_shapes,
                               method=resize_method)
     to_channel_first = keras.layers.Permute((3, 1, 2))(resized)
     layers[node_name] = to_channel_first
