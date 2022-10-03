@@ -6,7 +6,7 @@ from torchvision.models import googlenet
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize('pretrained', [True, False])
+@pytest.mark.parametrize('pretrained', [True])
 def test_googlenet(pretrained):
     model = googlenet(pretrained=pretrained)
     model.eval()
