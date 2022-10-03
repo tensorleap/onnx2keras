@@ -26,5 +26,4 @@ jobs:
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction --no-root
       - name: Test with pytest
-        run: |
-          pytest
+        run: pytest test/models/
