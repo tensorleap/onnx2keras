@@ -16,3 +16,6 @@ jobs:
           python-version: '3.6'
       - name: Install Poetry
         uses: snok/install-poetry@v1
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
