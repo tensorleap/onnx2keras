@@ -1,0 +1,18 @@
+name: CI
+
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-20.04]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # OR "2" -> To retrieve the preceding commit.
+      - uses: actions/setup-python@v3
+        with:
+          python-version: '3.6'
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
