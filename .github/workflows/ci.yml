@@ -34,4 +34,4 @@ jobs:
       - name: Test with pytest
         run: |
           source .venv/bin/activate
-          pytest test/models/test_bert_huggingface
+          pytest test/models/test_bert_huggingface.py
