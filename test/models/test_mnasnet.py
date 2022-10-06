@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from test.utils import convert_and_test
-from torchvision.models import mnasnet0_5, mnasnet0_75
+from torchvision.models import mnasnet0_5
 
 
 
