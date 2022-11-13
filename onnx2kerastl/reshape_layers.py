@@ -47,7 +47,7 @@ def convert_shape(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     logger = logging.getLogger('onnx2keras.shape')
-    input_0 = ensure_tf_type(layers[node.input[0]], layers[list(layers)[0]], name="%s_const" % keras_name)
+    input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
     logger.debug('Actual shape:')
     logger.debug(np.array(input_0.shape))
@@ -89,7 +89,7 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
         else:
             raise AttributeError('Can\'t gather by axis more than 3.')
     else:
-        input_0 = ensure_tf_type(layers[node.input[0]], layers[list(layers)[0]], name="%s_const" % keras_name)
+        input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
         if not isinstance(layers[node.input[1]], np.ndarray) and \
                 tf.keras.backend.is_keras_tensor(layers[node.input[1]]):
             indices = layers[node.input[1]]
@@ -168,7 +168,7 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
             layers[node_name] = np.reshape(input_0, np.int32(input_1))
         else:
             if params['change_ordering']:
-                input_0 = ensure_tf_type(layers[node.input[0]], layers[list(layers)[0]], name="%s_const" % keras_name)
+                input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
                 # Fix critical issue with NHWC
                 if input_1[0] is None and input_1[1] == -1:
@@ -193,7 +193,7 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                 layers[node_name] = reshape(layers[node_name])
 
             else:
-                input_0 = ensure_tf_type(layers[node.input[0]], layers[list(layers)[0]], name="%s_const" % keras_name)
+                input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
                 logger.debug('The first argument is Keras/tf layer. Apply keras.Reshape.')
                 logger.debug('Target shape :')
                 logger.debug(np.int32(input_1[1:]))
@@ -261,7 +261,7 @@ def convert_flatten(node, params, layers, lambda_func, node_name, keras_name):
         raise AttributeError('Number of inputs is not equal 1 for flatten layer')
 
     logger.debug('Convert inputs to Keras/TF layers if needed.')
-    input_0 = ensure_tf_type(layers[node.input[0]], layers[list(layers)[0]], name="%s_const" % keras_name)
+    input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
     # Fix critical issue with flatten
     permute = keras.layers.Permute((3, 1, 2))
@@ -423,7 +423,6 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
         resize_method = ResizeMethod.BILINEAR
     else:
         raise Exception("unsupported resize method")
-
 
     to_channel_last = keras.layers.Permute((2, 3, 1))(input_tensor)
     if len(scales) > 0:
