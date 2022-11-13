@@ -190,7 +190,7 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
 
                 if node_input in weights:
                     logger.debug('Found in weights, add as a numpy constant.')
-                    if node_type == "Gather":
+                    if node_type == "Gather" and i == 0:
                         node_params['is_embedding'] = True
                     layers[node_input] = weights[node_input]
                 else:
