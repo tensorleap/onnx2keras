@@ -398,30 +398,7 @@ def convert_expand(node, params, layers, lambda_func, node_name, keras_name):
         assert AttributeError('More than 2 input for expand layer.')
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-    input_1 = ensure_numpy_type(layers[node.input[1]])
+    input_1 = ensure_numpy_type(layers[node.input[1]]).astype(np.int32)
 
-    # skipping empty expand
-    if np.all(input_1 == 1):
-        layers[node_name] = input_0
-        return
+    layers[node_name] = input_0 * tf.ones(input_1)
 
-    def target_layer(x, shape=input_1):
-        from tensorflow import keras
-
-        # if (len(x.shape) == len(shape)):
-        #     for axis, new_shape in enumerate(shape):
-        #         if axis == 0:
-        #             continue
-        #         x = keras.backend.repeat_elements(x, int(new_shape // x.shape[axis]), axis)
-        #     pass
-
-        x = keras.backend.repeat_elements(x, int(shape[1] // x.shape[1]), 1)
-        x = keras.backend.repeat_elements(x, int(shape[2] // x.shape[2]), 2)
-        return x
-
-        # Proper version
-        # return tf.broadcast_to(x, (1, *shape[1:]))
-
-    lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
-    layers[node_name] = lambda_layer(input_0)
-    lambda_func[keras_name] = target_layer
