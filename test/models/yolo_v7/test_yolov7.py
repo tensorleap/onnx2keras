@@ -5,7 +5,7 @@ import onnx
 import pytest
 
 from onnx2kerastl import onnx_to_keras
-from test.utils import NP_SEED, test_conversion
+from test.utils import NP_SEED
 
 
 @pytest.mark.slow
