@@ -13,10 +13,9 @@ from test.utils import NP_SEED
 def test_yolov7(pretrained):
     np.random.seed(seed=NP_SEED)
 
-    # dir = pathlib.Path(__file__).parent.resolve()
-    # yolov7_model_path = f"{dir}/test_yolov7.onnx"
-    path = "/Users/dorhar/PycharmProjects/onnx2keras/test/models/yolo_v7/yolov7-tiny.onnx"
-    onnx_model = onnx.load(path)
+    dir = pathlib.Path(__file__).parent.resolve()
+    yolov7_model_path = f"{dir}/yolov7-tiny.onnx"
+    onnx_model = onnx.load(yolov7_model_path)
 
     input_all = [_input.name for _input in onnx_model.graph.input]
     input_initializer = [node.name for node in onnx_model.graph.initializer]
