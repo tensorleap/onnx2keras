@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from test.utils import convert_and_test, NP_SEED
-from conv3dnet import Net
+from test.models.fnet.conv3dnet import Net
 
 
 @pytest.mark.slow
