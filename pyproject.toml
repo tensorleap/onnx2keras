@@ -12,7 +12,7 @@ tensorflow-macos = {version = "2.11.0", markers = "platform_machine  == 'arm64'"
 onnx = "1.10.1"
 protobuf = "^3.19.6"
 keras-data-format-converter = "0.1.12"
-tensorflow-addons = {version = "^0.19.0", markers = "platform_machine  == 'x86_64'"}
+tensorflow-addons = "^0.19.0"
 numpy = "1.23.5"
 fvcore = "^0.1.5.post20221221"
 
