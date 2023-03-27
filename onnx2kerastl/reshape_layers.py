@@ -300,10 +300,12 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             steps = list(params.get("steps", [None] * len(axes)))
 
     input_shape_len = len(layers[node.input[0]].shape)
+    axes_positives = [axis if axis >= 0 else input_shape_len + axis for axis in axes]
+
     slice_spec_param = []
     for axis in range(input_shape_len):
-        if axis in axes:
-            axis_index = axes.index(axis)
+        if axis in axes_positives:
+            axis_index = axes_positives.index(axis)
             start = starts[axis_index]
             end = ends[axis_index] if ends[axis_index] < 2147483647 else None
             step = steps[axis_index]
@@ -337,10 +339,10 @@ def convert_squeeze(node, params, layers, lambda_func, node_name, keras_name):
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-    def target_layer(x, axis=params['axes'][0]):
-        from keras import backend as K
-        return K.squeeze(x, axis)
-    layers[node_name] = target_layer(input_0)
+    axis = None
+    if 'axes' in params:
+        axis = params['axes'][0]
+    layers[node_name] = tf.squeeze(input_0, axis=axis)
 
 
 def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
