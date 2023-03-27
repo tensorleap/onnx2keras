@@ -40,9 +40,9 @@ def convert_clip(node, params, layers, lambda_func, node_name, keras_name):
     if clip_min is None or clip_max is None:
         if len(node.input) == 1:
             raise UnsupportedLayer('Clip without max or min params')
-        if len(node.input) > 1 and node.input[1]:
+        if len(node.input) > 1 and node.input[1] != '':
             clip_min = float(layers[node.input[1]])
-        if len(node.input) == 3 and node.input[2]:
+        if len(node.input) == 3 and node.input[2] != '':
             clip_max = float(layers[node.input[2]])
 
     if clip_min is None and clip_max is None:
