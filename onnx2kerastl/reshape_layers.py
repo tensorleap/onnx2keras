@@ -79,15 +79,22 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
         logger.debug('Gather from numpy array')
 
         if params['axis'] == 0:
-            layers[node_name] = np.array(layers[node.input[0]][layers[node.input[1]]])
+            gathered = np.array(layers[node.input[0]][layers[node.input[1]]])
         elif params['axis'] == 1:
-            layers[node_name] = np.array(layers[:, node.input[0]][layers[node.input[1]]])
+            gathered = np.array(layers[:, node.input[0]][layers[node.input[1]]])
         elif params['axis'] == 2:
-            layers[node_name] = np.array(layers[:, :, node.input[0]][layers[node.input[1]]])
+            gathered = np.array(layers[:, :, node.input[0]][layers[node.input[1]]])
         elif params['axis'] == 3:
-            layers[node_name] = np.array(layers[:, :, :, node.input[0]][layers[node.input[1]]])
+            gathered = np.array(layers[:, :, :, node.input[0]][layers[node.input[1]]])
         else:
             raise AttributeError('Can\'t gather by axis more than 3.')
+
+        if gathered.dtype == np.object0:
+            try:
+                gathered = gathered.astype(np.int32)
+            except TypeError:
+                pass
+        layers[node_name] = gathered
     else:
         input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
         if not isinstance(layers[node.input[1]], np.ndarray) and \
@@ -130,17 +137,18 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
     else:
         logger.debug('Concat Keras layers.')
         if len(layer_input) > 1:
-            if not np.array([tf.is_tensor(layer_input[i]) and K.is_keras_tensor(layer_input[i]) for i in range(len(layer_input))]).all():
+            if not np.array([tf.is_tensor(layer_input[i]) and K.is_keras_tensor(layer_input[i]) for i in
+                             range(len(layer_input))]).all():
                 try:
                     layers[node_name] = tf.concat(layer_input, axis=params['axis'], name=keras_name)
                 except Exception as ex:
-                        # might be due to type mismatch between different inputs of tf.concat
-                        raise
+                    # might be due to type mismatch between different inputs of tf.concat
+                    raise
 
             else:
-                    layers[node_name] = keras.layers.concatenate(inputs=layer_input,
-                                                                 axis=params['axis'],
-                                                                 name=keras_name)
+                layers[node_name] = keras.layers.concatenate(inputs=layer_input,
+                                                             axis=params['axis'],
+                                                             name=keras_name)
         else:
             layers[node_name] = layer_input[0]
 
