@@ -331,15 +331,15 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             slice_spec_param.append({'start': start, 'step': step, 'stop': end})
         else:
             slice_spec_param.append({'start': None, 'step': None, 'stop': None})
-
-    input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-    slicing_layer = SlicingOpLambda(tf.__operators__.getitem)
-    sliced = slicing_layer(input_0, slice_spec=slice_spec_param)
-
-    if is_numpy(layers[node.input[0]]):
-        layers[node_name] = sliced.numpy()
+    if is_numpy(layers[node.input[0]]) and not np.array([not x is None for x in layers[node.input[0]]]).all(): # shape with None
+        sliced = layers[node.input[0]][start:end:step]
     else:
-        layers[node_name] = sliced
+        input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
+        slicing_layer = SlicingOpLambda(tf.__operators__.getitem)
+        sliced = slicing_layer(input_0, slice_spec=slice_spec_param)
+        if is_numpy(layers[node.input[0]]):
+            sliced = sliced.numpy()
+    layers[node_name] = sliced
 
 
 def convert_squeeze(node, params, layers, lambda_func, node_name, keras_name):
