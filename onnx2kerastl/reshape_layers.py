@@ -410,7 +410,7 @@ def convert_expand(node, params, layers, lambda_func, node_name, keras_name):
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     input_1 = ensure_numpy_type(layers[node.input[1]]).astype(np.int32)
 
-    layers[node_name] = input_0 * tf.ones(input_1)
+    layers[node_name] = input_0 * tf.ones(input_1, dtype=input_0.dtype)
 
 
 def convert_tile(node, params, layers, lambda_func, node_name, keras_name):
