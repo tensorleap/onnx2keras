@@ -2,6 +2,13 @@ import keras
 import tensorflow as tf
 
 
+def convert_range(node, params, layers, lambda_func, node_name, keras_name):
+    start_range = layers[node.input[0]]
+    limit_range = layers[node.input[1]]
+    delta_range = layers[node.input[2]]
+    layers[node_name] = tf.range(start_range, limit_range, delta_range)
+
+
 def convert_gridsample(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert gridsample.
