@@ -17,6 +17,7 @@ from .pooling_layers import convert_avgpool, convert_maxpool, convert_global_avg
 from .padding_layers import convert_padding
 from .upsampling_layers import convert_upsample
 from .caffe2_layers import convert_alias_with_name, convert_resize_nearest
+from .sampling_layers import convert_gridsample, convert_range
 
 AVAILABLE_CONVERTERS = {
     'Abs': convert_abs,
@@ -86,7 +87,9 @@ AVAILABLE_CONVERTERS = {
     'Equal': convert_equal,
     'Where': convert_where,
     'LSTM': convert_lstm,
-    'Tile': convert_tile
+    'Tile': convert_tile,
+    'GridSample': convert_gridsample,
+    'Range': convert_range
 
 
 }
