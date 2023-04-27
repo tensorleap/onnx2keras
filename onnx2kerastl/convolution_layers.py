@@ -55,6 +55,7 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
         raise NotImplementedError('Not implemented')
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
+    is_constant = is_numpy(input_0) or isinstance(input_0, EagerTensor)
     n_groups = params['group'] if 'group' in params else 1
     dilation = params['dilations'][0] if 'dilations' in params else 1
     pads = params['pads'] if 'pads' in params else [0, 0, 0]
@@ -77,19 +78,31 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
             weights = [W, bias]
         else:
             weights = [W]
-        conv = keras.layers.Conv3D(
-            filters=out_channels,
-            kernel_size=(dimension, height, width),
-            strides=(strides[0], strides[1], strides[2]),
-            padding='valid',
-            weights=weights,
-            use_bias=has_bias,
-            activation=None,
-            dilation_rate=dilation,
-            name=keras_name,
-            groups=n_groups
-        )
-        layers[node_name] = conv(input_0)
+        conv_args = { "filters": out_channels,
+        "kernel_size": (dimension, height, width),
+        "strides": (strides[0], strides[1], strides[2]),
+        "padding": 'valid',
+        "weights": weights,
+        "use_bias": has_bias,
+        "activation": None,
+        "dilation_rate": dilation,
+        "name": keras_name,
+        "groups": n_groups}
+        partial_conv = partial(keras.layers.Conv3D, **conv_args)
+        layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant)
+        # conv = keras.layers.Conv3D(
+        #     filters=out_channels,
+        #     kernel_size=(dimension, height, width),
+        #     strides=(strides[0], strides[1], strides[2]),
+        #     padding='valid',
+        #     weights=weights,
+        #     use_bias=has_bias,
+        #     activation=None,
+        #     dilation_rate=dilation,
+        #     name=keras_name,
+        #     groups=n_groups
+        # )
+        # layers[node_name] = conv(input_0)
 
     elif len(W.shape) == 4:  # 2D conv
         logger.debug('2D convolution')
@@ -117,21 +130,32 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
             weights = [W, bias]
         else:
             weights = [W]
-
-        conv = keras.layers.Conv2D(
-            filters=out_channels,
-            kernel_size=(height, width),
-            strides=(strides[0], strides[1]),
-            padding='valid',
-            weights=weights,
-            use_bias=has_bias,
-            activation=None,
-            dilation_rate=dilation,
-            groups=n_groups,
-            name=keras_name
-        )
-
-        layers[node_name] = conv(input_0)
+        conv_args = {"filters": out_channels,
+        "kernel_size": (height, width),
+        "strides": (strides[0], strides[1]),
+        "padding": 'valid',
+        "weights": weights,
+        "use_bias": has_bias,
+        "activation": None,
+        "dilation_rate": dilation,
+        "name": keras_name,
+        "groups": n_groups}
+        partial_conv = partial(keras.layers.Conv2D, **conv_args)
+        layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant)
+        # conv = keras.layers.Conv2D(
+        #     filters=out_channels,
+        #     kernel_size=(height, width),
+        #     strides=(strides[0], strides[1]),
+        #     padding='valid',
+        #     weights=weights,
+        #     use_bias=has_bias,
+        #     activation=None,
+        #     dilation_rate=dilation,
+        #     groups=n_groups,
+        #     name=keras_name
+        # )
+        #
+        # layers[node_name] = conv(input_0)
     else:
         # 1D conv
         W = W.transpose(2, 1, 0)
@@ -146,35 +170,47 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
         padding = None
         if len(pads) == 2 and (pads[0] > 0 or pads[1] > 0):
             padding = (pads[0], pads[1])
-
+        conv_args = {"filters": n_filters,
+        "kernel_size": (width),
+        "strides": (strides[0]),
+        "weights": weights,
+        "use_bias": has_bias,
+        "activation": None,
+        "dilation_rate": dilation,
+        "name": keras_name,
+        "groups": n_groups}
         if padding:
-            conv = keras.layers.Conv1D(
-                filters=n_filters,
-                kernel_size=width,
-                strides=strides[0],
-                padding='same',
-                weights=weights,
-                use_bias=has_bias,
-                activation=None,
-                dilation_rate=dilation,
-                groups=n_groups,
-                name=keras_name,
-                data_format='channels_first')
+            conv_args['padding'] = 'same'
+            # conv = keras.layers.Conv1D(
+            #     filters=n_filters,
+            #     kernel_size=width,
+            #     strides=strides[0],
+            #     padding='same',
+            #     weights=weights,
+            #     use_bias=has_bias,
+            #     activation=None,
+            #     dilation_rate=dilation,
+            #     groups=n_groups,
+            #     name=keras_name,
+            #     data_format='channels_first')
         else:
-            conv = keras.layers.Conv1D(
-                filters=n_filters,
-                kernel_size=width,
-                strides=strides[0],
-                padding='valid',
-                weights=weights,
-                use_bias=has_bias,
-                activation=None,
-                dilation_rate=dilation,
-                groups=n_groups,
-                name=keras_name,
-                data_format='channels_first')
+            conv_args['padding'] = 'valid'
 
-        layers[node_name] = conv(input_0)
+            # conv = keras.layers.Conv1D(
+            #     filters=n_filters,
+            #     kernel_size=width,
+            #     strides=strides[0],
+            #     padding='valid',
+            #     weights=weights,
+            #     use_bias=has_bias,
+            #     activation=None,
+            #     dilation_rate=dilation,
+            #     groups=n_groups,
+            #     name=keras_name,
+            #     data_format='channels_first')
+        partial_conv = partial(keras.layers.Conv1D, **conv_args)
+        layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant)
+        # layers[node_name] = conv(input_0)
 
         # padding_name = keras_name + '_pad'
         # padding_layer = keras.layers.ZeroPadding1D(
