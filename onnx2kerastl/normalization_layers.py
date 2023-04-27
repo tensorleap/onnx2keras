@@ -3,7 +3,7 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 import logging
 from .utils import ensure_tf_type, ensure_numpy_type
-
+import numpy as np
 
 def convert_batchnorm(node, params, layers, lambda_func, node_name, keras_name):
     """
@@ -69,6 +69,7 @@ def convert_instancenorm(node, params, layers, lambda_func, node_name, keras_nam
     :param keras_name: resulting layer name
     :return: None
     """
+    #based on https://github.com/onnx/onnx/blob/main/docs/Operators.md#InstanceNormalization
     logger = logging.getLogger('onnx2keras.instancenorm2d')
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
@@ -80,15 +81,16 @@ def convert_instancenorm(node, params, layers, lambda_func, node_name, keras_nam
         raise AttributeError('Unknown arguments for instance norm')
 
     epsilon = params['epsilon']
-
-    instance_norm = tfa.layers.InstanceNormalization(
-        axis=1,
-        epsilon=epsilon,
-        beta_initializer=tf.constant_initializer(beta),
-        gamma_initializer=tf.constant_initializer(gamma),
-        trainable=False
-        )
-    layers[node_name] = instance_norm(input_0)
+    dims_x = tf.size(tf.shape(input_0))
+    axis = tf.range(2, dims_x)
+    var = tf.math.reduce_variance(
+        input_0, axis=axis, keepdims=True, name=None
+    )
+    mean = tf.math.reduce_mean(input_0, axis=axis, keepdims=True, name=None)
+    dim_ones = tf.repeat(dims_x, dims_x-2)/dims_x #[1,1,1,...]
+    scale = tf.reshape(gamma, (-1, *dim_ones))
+    bias = tf.reshape(beta, (-1, *dim_ones))
+    layers[node_name] = scale * (input_0 - mean) / tf.sqrt(var + epsilon) + bias
 
 
 def convert_dropout(node, params, layers, lambda_func, node_name, keras_name):
