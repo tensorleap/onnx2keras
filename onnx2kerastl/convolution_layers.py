@@ -1,8 +1,28 @@
 import logging
-
+from typing import List
+import tensorflow as tf
 import keras
+from .utils import ensure_tf_type, ensure_numpy_type, is_numpy
+from functools import partial
+from tensorflow.python.framework.ops import EagerTensor
 
-from .utils import ensure_tf_type, ensure_numpy_type
+
+def calculate_permute_values(n_dims: int, to_channel_first: bool) -> List[int]:
+    if to_channel_first:
+        return [n_dims - 1] + list(range(1, n_dims - 1))
+    else:
+        return list(range(2, n_dims)) + [1]
+
+
+def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant):
+    if is_constant:
+        input_shape = tf.shape(conv_input)
+        permuted = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=False))(conv_input)
+        conv_res = partial_func(data_format="channels_last")(permuted)
+        result = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=True))(conv_res)
+    else:
+        result = partial_func()(conv_input)
+    return result
 
 
 def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
