@@ -1,9 +1,11 @@
-import keras
-import tensorflow as tf
-import tensorflow_addons as tfa
 import logging
-from .utils import ensure_tf_type, ensure_numpy_type
+
+import keras
 import numpy as np
+import tensorflow as tf
+
+from .utils import ensure_tf_type, ensure_numpy_type
+
 
 def convert_batchnorm(node, params, layers, lambda_func, node_name, keras_name):
     """
@@ -69,28 +71,26 @@ def convert_instancenorm(node, params, layers, lambda_func, node_name, keras_nam
     :param keras_name: resulting layer name
     :return: None
     """
-    #based on https://github.com/onnx/onnx/blob/main/docs/Operators.md#InstanceNormalization
+    # based on https://github.com/onnx/onnx/blob/main/docs/Operators.md#InstanceNormalization
     logger = logging.getLogger('onnx2keras.instancenorm2d')
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
     if len(node.input) == 3:
-        gamma = ensure_numpy_type(layers[node.input[1]])
-        beta = ensure_numpy_type(layers[node.input[2]])
+        scale = ensure_numpy_type(layers[node.input[1]])
+        bias = ensure_numpy_type(layers[node.input[2]])
     else:
         raise AttributeError('Unknown arguments for instance norm')
 
     epsilon = params['epsilon']
-    dims_x = tf.size(tf.shape(input_0))
-    axis = tf.range(2, dims_x)
-    var = tf.math.reduce_variance(
-        input_0, axis=axis, keepdims=True, name=None
-    )
+    dims_x = len(input_0.shape)
+    axis = list(range(2, dims_x))
+    var = tf.math.reduce_variance(input_0, axis=axis, keepdims=True, name=None)
     mean = tf.math.reduce_mean(input_0, axis=axis, keepdims=True, name=None)
-    dim_ones = tf.repeat(dims_x, dims_x-2)/dims_x #[1,1,1,...]
-    scale = tf.reshape(gamma, (-1, *dim_ones))
-    bias = tf.reshape(beta, (-1, *dim_ones))
-    layers[node_name] = scale * (input_0 - mean) / tf.sqrt(var + epsilon) + bias
+    dim_ones = (1,) * (dims_x - 2)
+    scale = np.reshape(scale, (-1, *dim_ones))
+    bias = np.reshape(bias, (-1, *dim_ones))
+    layers[node_name] = (input_0 - mean) * scale / tf.sqrt(var + epsilon) + bias
 
 
 def convert_dropout(node, params, layers, lambda_func, node_name, keras_name):
