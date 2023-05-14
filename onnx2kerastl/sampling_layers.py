@@ -31,21 +31,17 @@ def convert_gridsample(node, params, layers, lambda_func, node_name, keras_name)
     max_xy = tf.expand_dims(
         tf.expand_dims(tf.expand_dims(tf.convert_to_tensor([torch_shape[3] - 1, torch_shape[2] - 1]), 0), 0), 0)
     max_xy = tf.cast(max_xy, tf.float32)
-    grid_index_coords = 0.5 * (sample_grid + 1.) * max_xy # transform from [-1,1] to [0,H-1]/[0,W-1]
+    grid_index_coords = 0.5 * (sample_grid + 1.) * max_xy  # transform from [-1,1] to [0,H-1]/[0,W-1]
     lambda_layer = keras.layers.Lambda(interpolate_wrapper, name=keras_name)
     layers[node_name] = lambda_layer([img, grid_index_coords, torch_shape])
 
 
-def interpolate_wrapper(x):
-    return _interpolate_bilinear_impl(x[0], x[1], x[2])
-
-
-def _interpolate_bilinear_impl(
-        torch_img,
-        grid_index_coords,
-        torch_shape,
-) -> tf.Tensor:
+def interpolate_wrapper(x) -> tf.Tensor:
     """tf.function implementation of interpolate_bilinear."""
+    torch_img = x[0]
+    grid_index_coords = x[1]
+    torch_shape = x[2]
+
     grid_index_coords = grid_index_coords + 1  # fix locs considering we add padding
     orig_query_shape = tf.shape(grid_index_coords)
     query_points = tf.reshape(grid_index_coords, [orig_query_shape[0], -1, 2])
@@ -124,4 +120,4 @@ def _interpolate_bilinear_impl(
     interp_bottom = alphas[1] * (bottom_right - bottom_left) + bottom_left
     interp = alphas[0] * (interp_bottom - interp_top) + interp_top
     tf_reshaped_results = tf.reshape(interp, tf.concat([orig_query_shape[:-1], torch_shape[1:2]], axis=0))
-    return tf.keras.layers.Permute((3,1,2))(tf_reshaped_results)
+    return tf.keras.layers.Permute((3, 1, 2))(tf_reshaped_results)
