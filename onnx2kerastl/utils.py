@@ -1,6 +1,7 @@
 import numpy as np
 import keras
 from keras_data_format_converter import convert_channels_first_to_last
+import tensorflow as tf
 
 
 def is_numpy(obj):
@@ -155,8 +156,9 @@ def match_tensors_rank(tensor_list):
     for tensor in tensor_list:
         tensor_rank = tensor.shape.rank
         if tensor_rank < max_rank:
-            diff_shape = (1,) * (max_rank - tensor_rank) + tensor.shape
-            unsqueezed_tensor = keras.backend.expand_dims(tensor, axis=0)
+            diff_rank = max_rank - tensor_rank
+            diff_shape = [1] * diff_rank + list(tensor.shape)
+            unsqueezed_tensor = tf.broadcast_to(tensor, diff_shape)
             unsqueezed_tensors.append(unsqueezed_tensor)
         else:
             unsqueezed_tensors.append(tensor)
