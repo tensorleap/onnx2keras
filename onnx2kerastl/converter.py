@@ -200,13 +200,14 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
 
         for i, node_input in enumerate(node.input):
             logger.debug('Check input %i (name %s).', i, node_input)
+
+            if node_input in weights and node_type == "Gather" and i == 0:
+                node_params['is_embedding'] = True
+
             if node_input not in layers:
                 logger.debug('The input not found in layers / model inputs.')
-
                 if node_input in weights:
                     logger.debug('Found in weights, add as a numpy constant.')
-                    if node_type == "Gather" and i == 0:
-                        node_params['is_embedding'] = True
                     layers[node_input] = weights[node_input]
                 else:
                     if node_input == "" and node_type in ('Pad', 'Resize', 'Clip', 'LSTM'):
