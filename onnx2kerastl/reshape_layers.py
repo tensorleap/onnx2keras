@@ -207,12 +207,15 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                 input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
                 input_0_shape = input_0.shape
                 first_mismatch = np.argmin(np.array(input_0_shape[:len(input_1)]) == input_1)
-                if (input_1 == None).any() and (np.array(input_0_shape) == None).any() and len(input_1) < len(input_0_shape)\
-                        and input_1[first_mismatch] == -1: #reshape end
+                if (input_1 == None).any() and (np.array(input_0_shape) == None).any() and len(input_1) < len(
+                        input_0_shape) \
+                        and input_1[first_mismatch] == -1:  # reshape end
                     end_match_arr = np.array(input_0_shape[-len(input_1):]) == input_1
                     end_idx_match = np.argmax((np.array(input_0_shape[-len(input_1):]) == input_1))
                     end_idx_match = end_idx_match + len(input_0_shape) - len(input_1) if end_idx_match > first_mismatch \
-                                                     and end_match_arr[end_idx_match] else len(input_0_shape) + 1
+                                                                                         and end_match_arr[
+                                                                                             end_idx_match] else len(
+                        input_0_shape) + 1
                     tf_shape = tf.shape(input_0)
                     layers[node_name] = tf.reshape(input_0, [*tf_shape[:first_mismatch], -1, *tf_shape[end_idx_match:]])
                 else:
@@ -334,8 +337,8 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             slice_spec_param.append({'start': start, 'step': step, 'stop': end})
         else:
             slice_spec_param.append({'start': None, 'step': None, 'stop': None})
-    if is_numpy(layers[node.input[0]]) and np.array([_shape is None for _shape in layers[node.input[0]]]).any()\
-            and len(layers[node.input[0]].shape) == 1: # slice numpy array which is a shape
+    if is_numpy(layers[node.input[0]]) and np.array([_shape is None for _shape in layers[node.input[0]]]).any() \
+            and len(layers[node.input[0]].shape) == 1:  # slice numpy array which is a shape
         sliced = layers[node.input[0]][start:end:step]
     else:
         input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
@@ -424,8 +427,10 @@ def convert_expand(node, params, layers, lambda_func, node_name, keras_name):
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     input_1 = ensure_numpy_type(layers[node.input[1]]).astype(np.int32)
-
+    if input_0.dtype.is_bool:
+        input_0 = tf.cast(input_0, dtype=input_1.dtype)
     layers[node_name] = input_0 * tf.ones(input_1, dtype=input_0.dtype)
+
 
 
 def convert_tile(node, params, layers, lambda_func, node_name, keras_name):
