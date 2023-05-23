@@ -42,23 +42,19 @@ def convert_gemm(node, params, layers, lambda_func, node_name, keras_name):
         assert len(node.input) == 2
         layers[node_name] = tf.matmul(keras_input, layers[node.input[1]], name=keras_name)
     else:
-        if len(keras_weights) == 2:
-            layers[node_name] = tf.add(tf.matmul(keras_input, keras_weights[0]), keras_weights[1], name=keras_name)
-        elif len(keras_weights) == 1:
-            layers[node_name] = tf.matmul(keras_input, keras_weights[0], name=keras_name)
-        # if is_numpy(keras_weights[0]):
-        #     dense = keras.layers.Dense(
-        #         units=output_channels,
-        #         weights=keras_weights, name=keras_name, use_bias=has_bias
-        #     )
-        #
-        #     # The first input - always X
-        #     try:
-        #         layers[node_name] = dense(keras_input)
-        #     except ValueError:
-        #         reshape = keras.layers.Reshape([input_channels], name=keras_name + '_reshape')
-        #         reshaped_x = reshape(keras_input)
-        #         layers[node_name] = dense(reshaped_x)
+        if is_numpy(keras_weights[0]):
+            dense = keras.layers.Dense(
+                units=output_channels,
+                weights=keras_weights, name=keras_name, use_bias=has_bias
+            )
+
+            # The first input - always X
+            try:
+                layers[node_name] = dense(keras_input)
+            except ValueError:
+                reshape = keras.layers.Reshape([input_channels], name=keras_name + '_reshape')
+                reshaped_x = reshape(keras_input)
+                layers[node_name] = dense(reshaped_x)
 
         else:
             layers[node_name] = keras.layers.Multiply()([keras_input, keras_weights[0]])
