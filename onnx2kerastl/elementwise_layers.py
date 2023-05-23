@@ -229,7 +229,7 @@ def convert_equal(node, params, layers, lambda_func, node_name, keras_name):
 
 
 def convert_where(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = np.where(layers[node.input[0]], layers[node.input[1]], layers[node.input[2]])
+    layers[node_name] = tf.where(layers[node.input[0]], layers[node.input[1]], layers[node.input[2]])
 
 
 def convert_scatter_nd(node, params, layers, lambda_func, node_name, keras_name):
