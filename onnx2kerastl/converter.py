@@ -198,11 +198,17 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
         if len(node.input) == 0 and node_type != 'Constant':
             raise AttributeError('Operation doesn\'t have an input. Aborting.')
 
+        ##################### TODO: check if test does not break other tests
+        if node_type == 'Gather':
+            if 'embedding' in node_name:
+                node_params['is_embedding'] = True
+        #####################
+
         for i, node_input in enumerate(node.input):
             logger.debug('Check input %i (name %s).', i, node_input)
 
-            if node_input in weights and node_type == "Gather" and i == 0:
-                node_params['is_embedding'] = True
+            # if node_input in weights and node_type == "Gather" and i == 0:
+            #     node_params['is_embedding'] = True
 
             if node_input not in layers:
                 logger.debug('The input not found in layers / model inputs.')
