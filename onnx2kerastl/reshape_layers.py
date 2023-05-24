@@ -432,6 +432,5 @@ def convert_expand(node, params, layers, lambda_func, node_name, keras_name):
     layers[node_name] = input_0 * tf.ones(input_1, dtype=input_0.dtype)
 
 
-
 def convert_tile(node, params, layers, lambda_func, node_name, keras_name):
     layers[node_name] = tf.tile(layers[node.input[0]], layers[node.input[1]])
