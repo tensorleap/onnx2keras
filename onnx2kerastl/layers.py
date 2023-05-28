@@ -91,5 +91,5 @@ AVAILABLE_CONVERTERS = {
     'GridSample': convert_gridsample,
     'Range': convert_range,
     'Not': convert_not,
-    'Cos': convert_cosine
+    'Cos': convert_cosine,
 }
