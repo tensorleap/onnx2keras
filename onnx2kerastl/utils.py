@@ -21,8 +21,10 @@ def ensure_numpy_type(obj):
     """
     if is_numpy(obj):
         return obj
+    elif isinstance(obj, tf.Tensor):
+        return obj.numpy()
     else:
-        raise AttributeError('Not a numpy type.')
+        raise AttributeError('Not a numpy or tf.Tensor type.')
 
 
 def ensure_tf_type(obj, name="Const"):
