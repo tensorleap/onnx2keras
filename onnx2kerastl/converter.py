@@ -113,6 +113,8 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
                 input_shape = [shape if shape != 0 else None for shape in input_shape]
                 batch_size = input_shape[0]
                 input_shape = input_shape[1:]
+                if len(input_shape) == 0:
+                    input_shape = 1
                 if batch_size is None:
                     layers[input_name] = keras.layers.InputLayer(
                         input_shape=input_shape, name=input_name, dtype=dtype).output
