@@ -134,7 +134,7 @@ def check_torch_keras_error(model, k_model, input_np, epsilon=1e-5, change_order
     return max_error
 
 
-def match_tensors_rank(tensor_list, axis: int):
+def unsqueeze_tensors_of_rank_one(tensor_list, axis: int):
     """
     Adjusts the ranks of tensors of rank 1 in a given list to match the maximum rank by adding dummy dimensions
     e.g., for input tensors shapes [(2,), (1, 4)] the unsqueezed tensors are [(1, 2), (1, 4)]

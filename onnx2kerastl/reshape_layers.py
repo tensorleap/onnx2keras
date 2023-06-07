@@ -149,7 +149,7 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
                     raise
 
             else:
-                layer_input = match_tensors_rank(layer_input, axis=params['axis'])
+                layer_input = unsqueeze_tensors_of_rank_one(layer_input, axis=params['axis'])
                 layers[node_name] = keras.layers.concatenate(inputs=layer_input,
                                                              axis=params['axis'],
                                                              name=keras_name)
