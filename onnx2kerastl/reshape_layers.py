@@ -419,7 +419,7 @@ def convert_expand(node, params, layers, lambda_func, node_name, keras_name):
         assert AttributeError('More than 2 input for expand layer.')
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-    input_1 = ensure_numpy_type(layers[node.input[1]]).astype(np.int32)
+    input_1 = layers[node.input[1]].astype(np.int32)
     if input_0.dtype.is_bool:
         input_0 = tf.cast(input_0, dtype='int32')
     layers[node_name] = input_0 * tf.ones(input_1, dtype=input_0.dtype)
