@@ -6,7 +6,7 @@ import tensorflow as tf
 from keras import backend as K
 from keras.layers import SlicingOpLambda
 
-from .utils import is_numpy, ensure_tf_type, ensure_numpy_type, match_tensors_rank
+from .utils import is_numpy, ensure_tf_type, ensure_numpy_type, unsqueeze_tensors_of_rank_one
 
 
 def convert_transpose(node, params, layers, lambda_func, node_name, keras_name):
