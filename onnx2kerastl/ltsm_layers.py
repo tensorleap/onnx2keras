@@ -71,8 +71,8 @@ def convert_lstm(node, params, layers, lambda_func, node_name, keras_name):
         h_out = tf.expand_dims(h_out, 0)
 
         lstm_tensor = res[:, 1:-1, :]
-        layers[node.output[1]] = c_out
-        layers[node.output[2]] = h_out
+        layers[node.output[1]] = h_out
+        layers[node.output[2]] = c_out
     else:
         lstm_tensor = res
     lstm_tensor_in_onnx_order = tf.transpose(lstm_tensor, perm=[1, 0, 2])
