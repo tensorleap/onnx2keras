@@ -1,10 +1,12 @@
 import logging
-from typing import List
-import tensorflow as tf
-import keras
-from .utils import ensure_tf_type, ensure_numpy_type, is_numpy
 from functools import partial
+from typing import List
+
+import keras
+import tensorflow as tf
 from tensorflow.python.framework.ops import EagerTensor
+
+from .utils import ensure_tf_type, is_numpy
 
 
 def calculate_permute_values(n_dims: int, to_channel_first: bool) -> List[int]:
@@ -42,13 +44,13 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
         logger.debug('Conv with bias')
         # Has bias
         has_bias = True
-        W = ensure_numpy_type(layers[node.input[1]])
-        bias = ensure_numpy_type(layers[node.input[2]])
+        W = layers[node.input[1]]
+        bias = layers[node.input[2]]
 
     elif len(node.input) == 2:
         logger.debug('Conv without bias')
         has_bias = False
-        W = ensure_numpy_type(layers[node.input[1]])
+        W = layers[node.input[1]]
         bias = None
 
     else:
@@ -203,13 +205,13 @@ def convert_convtranspose(node, params, layers,
         logger.debug('ConvTranspose with bias')
         # Has bias
         has_bias = True
-        W = ensure_numpy_type(layers[node.input[1]])
-        bias = ensure_numpy_type(layers[node.input[2]])
+        W = layers[node.input[1]]
+        bias = layers[node.input[2]]
 
     elif len(node.input) == 2:
         logger.debug('ConvTranspose without bias')
         has_bias = False
-        W = ensure_numpy_type(layers[node.input[1]])
+        W = layers[node.input[1]]
         bias = None
 
     else:

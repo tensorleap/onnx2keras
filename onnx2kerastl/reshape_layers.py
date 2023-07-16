@@ -6,7 +6,7 @@ import tensorflow as tf
 from keras import backend as K
 from keras.layers import SlicingOpLambda
 
-from .utils import is_numpy, ensure_tf_type, ensure_numpy_type, unsqueeze_tensors_of_rank_one
+from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
 
 
 def convert_transpose(node, params, layers, lambda_func, node_name, keras_name):
@@ -316,11 +316,11 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
         starts = list(params["starts"])
         steps = list(params.get("steps", [None] * len(axes)))
     else:
-        starts = list(ensure_numpy_type(layers[node.input[1]]))
-        ends = list(ensure_numpy_type(layers[node.input[2]]))
-        axes = list(ensure_numpy_type(layers[node.input[3]]))
+        starts = list(layers[node.input[1]])
+        ends = list(layers[node.input[2]])
+        axes = list(layers[node.input[3]])
         try:
-            steps = list(ensure_numpy_type(layers[node.input[4]]))
+            steps = list(layers[node.input[4]])
         except IndexError:
             steps = list(params.get("steps", [None] * len(axes)))
 
@@ -367,7 +367,7 @@ def convert_squeeze(node, params, layers, lambda_func, node_name, keras_name):
         axis = params['axes'][0]
 
     if len(node.input) == 2:
-        axis = ensure_numpy_type(layers[node.input[1]]).tolist()
+        axis = layers[node.input[1]].tolist()
     layers[node_name] = tf.squeeze(input_0, axis=axis)
 
 
