@@ -208,12 +208,15 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                 input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
                 input_0_shape = input_0.shape
                 first_mismatch = np.argmin(np.array(input_0_shape[:len(input_1)]) == input_1)
-                if (input_1 == None).any() and (np.array(input_0_shape) == None).any() and len(input_1) < len(input_0_shape)\
-                        and input_1[first_mismatch] == -1: #reshape end
+                if (input_1 == None).any() and (np.array(input_0_shape) == None).any() and len(input_1) < len(
+                        input_0_shape) \
+                        and input_1[first_mismatch] == -1:  # reshape end
                     end_match_arr = np.array(input_0_shape[-len(input_1):]) == input_1
                     end_idx_match = np.argmax((np.array(input_0_shape[-len(input_1):]) == input_1))
                     end_idx_match = end_idx_match + len(input_0_shape) - len(input_1) if end_idx_match > first_mismatch \
-                                                     and end_match_arr[end_idx_match] else len(input_0_shape) + 1
+                                                                                         and end_match_arr[
+                                                                                             end_idx_match] else len(
+                        input_0_shape) + 1
                     tf_shape = tf.shape(input_0)
                     layers[node_name] = tf.reshape(input_0, [*tf_shape[:first_mismatch], -1, *tf_shape[end_idx_match:]])
                 else:
@@ -318,7 +321,11 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
     else:
         starts = list(layers[node.input[1]])
         ends = list(layers[node.input[2]])
-        axes = list(layers[node.input[3]])
+        try:
+            axes = list(layers[node.input[3]])
+        except:
+            input_rank = len(layers[node.input[0]].shape)
+            axes = list(range(input_rank))
         try:
             steps = list(layers[node.input[4]])
         except IndexError:
@@ -332,7 +339,7 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
         if axis in axes_positives:
             axis_index = axes_positives.index(axis)
             start = starts[axis_index]
-            end = ends[axis_index] if ends[axis_index] < 2147483647 else None
+            end = ends[axis_index]
             step = steps[axis_index]
             slice_spec_param.append({'start': start, 'step': step, 'stop': end})
         else:
