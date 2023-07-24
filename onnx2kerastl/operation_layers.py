@@ -540,6 +540,10 @@ def convert_less_equal(node, params, layers, lambda_func, node_name, keras_name)
     layers[node_name] = tf.math.less_equal(layers[node.input[0]], layers[node.input[1]])
 
 
+def convert_bitwise_not(node, params, layers, lambda_func, node_name, keras_name):
+    layers[node_name] = tf.bitwise.invert(tf.cast(layers[node.input[0]], tf.int32))
+
+
 def convert_bitwise_and(node, params, layers, lambda_func, node_name, keras_name):
     layers[node_name] = tf.bitwise.bitwise_and(layers[node.input[0]], layers[node.input[1]])
 
