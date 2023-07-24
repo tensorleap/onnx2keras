@@ -8,7 +8,7 @@ from .operation_layers import convert_clip, convert_exp, convert_neg, convert_re
     convert_less, convert_less_equal, convert_and, convert_greater, convert_greater_equal, convert_xor, convert_or, \
     convert_trilu, convert_sign, convert_cosh, convert_sin, convert_sinh, convert_ceil, convert_acosh, convert_acos, \
     convert_asinh, convert_asin, convert_atanh, convert_atan, convert_bitwise_and, convert_argmin, convert_bitwise_xor, \
-    convert_bitwise_or, convert_tan
+    convert_bitwise_or, convert_tan, convert_cumsum
 from .elementwise_layers import convert_elementwise_div, convert_elementwise_add, convert_elementwise_mul, \
     convert_elementwise_sub, convert_max, convert_min, convert_mean, convert_equal, convert_where, convert_scatter_nd, \
     convert_round
@@ -122,7 +122,8 @@ AVAILABLE_CONVERTERS = {
     "ArgMin": convert_argmin,
     "OneHot": convert_one_hot,
     "Round": convert_round,
-    "Tan": convert_tan
+    "Tan": convert_tan,
+    "CumSum": convert_cumsum
 
 }
 

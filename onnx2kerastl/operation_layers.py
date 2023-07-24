@@ -589,3 +589,10 @@ def convert_trilu(node, params, layers, lambda_func, node_name, keras_name):
     else:
         result = tf.experimental.numpy.triu(input, k)
     layers[node_name] = result
+
+
+def convert_cumsum(node, params, layers, lambda_func, node_name, keras_name):
+    exclusive = bool(params.get("exclusive", 0))
+    reverse = bool(params.get("reverse", 0))
+    layers[node_name] = tf.math.cumsum(layers[node.input[0]], layers[node.input[1]],
+                                       exclusive=exclusive, reverse=reverse)
