@@ -223,6 +223,29 @@ def convert_reduce_max(node, params, layers, lambda_func, node_name, keras_name)
     lambda_func[keras_name] = target_layer
 
 
+def convert_reduce_prod(node, params, layers, lambda_func, node_name, keras_name):
+    """
+    Convert reduce max.
+    :param node: current operation node
+    :param params: operation attributes
+    :param layers: available keras layers
+    :param lambda_func: function for keras Lambda layer
+    :param node_name: internal converter name
+    :param keras_name: resulting layer name
+    :return: None
+    """
+    if params.get("axes") is not None: #opset 13
+        axes = params.get("axes")
+    elif len(node.input) == 2:
+        axes = layers.get(node.input[1])
+    noop_with_empty_axes = bool(params.get("noop_with_empty_axes", False))
+    keepdims = params.get("keepdims", True)
+    if not noop_with_empty_axes:
+        layers[node_name] = tf.math.reduce_prod(layers[node.input[0]], axis=axes, keepdims=keepdims)
+    else:
+        layers[node_name] = layers[node.input[0]]
+
+
 def convert_pow(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert Pow layer
