@@ -524,6 +524,10 @@ def convert_atanh(node, params, layers, lambda_func, node_name, keras_name):
     layers[node_name] = tf.math.asinh(layers[node.input[0]])
 
 
+def convert_tan(node, params, layers, lambda_func, node_name, keras_name):
+    layers[node_name] = tf.math.tan(layers[node.input[0]])
+
+
 def convert_atan(node, params, layers, lambda_func, node_name, keras_name):
     layers[node_name] = tf.math.asin(layers[node.input[0]])
 
