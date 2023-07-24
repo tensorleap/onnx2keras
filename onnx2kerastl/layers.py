@@ -10,7 +10,8 @@ from .operation_layers import convert_clip, convert_exp, convert_neg, convert_re
     convert_asinh, convert_asin, convert_atanh, convert_atan, convert_bitwise_and, convert_argmin, convert_bitwise_xor, \
     convert_bitwise_or
 from .elementwise_layers import convert_elementwise_div, convert_elementwise_add, convert_elementwise_mul, \
-    convert_elementwise_sub, convert_max, convert_min, convert_mean, convert_equal, convert_where, convert_scatter_nd
+    convert_elementwise_sub, convert_max, convert_min, convert_mean, convert_equal, convert_where, convert_scatter_nd, \
+    convert_round
 from .linear_layers import convert_gemm
 from .reshape_layers import convert_transpose, convert_shape, convert_gather, convert_unsqueeze, \
     convert_concat, convert_reshape, convert_flatten, convert_slice, convert_squeeze, convert_expand, convert_resize, \
@@ -119,7 +120,8 @@ AVAILABLE_CONVERTERS = {
     "BitwiseOr": convert_bitwise_or,
     "BitwiseXor": convert_bitwise_xor,
     "ArgMin": convert_argmin,
-    "OneHot": convert_one_hot
+    "OneHot": convert_one_hot,
+    "Round": convert_round
 
 }
 
