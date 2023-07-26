@@ -24,6 +24,7 @@ from .padding_layers import convert_padding
 from .upsampling_layers import convert_upsample
 from .caffe2_layers import convert_alias_with_name, convert_resize_nearest
 from .sampling_layers import convert_gridsample, convert_range
+from .fft_layers import convert_dft
 
 AVAILABLE_CONVERTERS = {
     'Abs': convert_abs,
@@ -131,6 +132,7 @@ AVAILABLE_CONVERTERS = {
     "IsInf": convert_is_inf,
     "IsNaN": convert_is_nan,
     "Size": convert_size,
-    "Det": convert_det
+    "Det": convert_det,
+    "DFT": convert_dft
 }
 
