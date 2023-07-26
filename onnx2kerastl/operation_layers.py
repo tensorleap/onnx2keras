@@ -652,3 +652,7 @@ def convert_is_inf(node, params, layers, lambda_func, node_name, keras_name):
     if params.get("detect_negative") is not None or params.get("detect_negative") is not None:
         raise AttributeError("Unsupported params detected in isInf conversion: detect_negative/detect_positive")
     layers[node_name] = tf.math.is_inf(layers[node.input[0]])
+
+
+def convert_is_nan(node, params, layers, lambda_func, node_name, keras_name):
+    layers[node_name] = tf.math.is_nan(layers[node.input[0]])
