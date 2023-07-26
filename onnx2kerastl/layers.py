@@ -13,7 +13,7 @@ from .operation_layers import convert_clip, convert_exp, convert_neg, convert_re
 from .elementwise_layers import convert_elementwise_div, convert_elementwise_add, convert_elementwise_mul, \
     convert_elementwise_sub, convert_max, convert_min, convert_mean, convert_equal, convert_where, convert_scatter_nd, \
     convert_round
-from .linear_layers import convert_gemm
+from .linear_layers import convert_gemm, convert_det
 from .reshape_layers import convert_transpose, convert_shape, convert_gather, convert_unsqueeze, \
     convert_concat, convert_reshape, convert_flatten, convert_slice, convert_squeeze, convert_expand, convert_resize, \
     convert_tile
@@ -130,7 +130,7 @@ AVAILABLE_CONVERTERS = {
     "CumSum": convert_cumsum,
     "IsInf": convert_is_inf,
     "IsNaN": convert_is_nan,
-    "Size": convert_size
-
+    "Size": convert_size,
+    "Det": convert_det
 }
 
