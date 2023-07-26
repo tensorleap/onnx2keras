@@ -656,3 +656,7 @@ def convert_is_inf(node, params, layers, lambda_func, node_name, keras_name):
 
 def convert_is_nan(node, params, layers, lambda_func, node_name, keras_name):
     layers[node_name] = tf.math.is_nan(layers[node.input[0]])
+
+
+def convert_size(node, params, layers, lambda_func, node_name, keras_name):
+    layers[node_name] = tf.size(layers[node.input[0]])
