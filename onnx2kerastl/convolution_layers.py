@@ -167,29 +167,6 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
         else:
             layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2])
 
-        # padding_name = keras_name + '_pad'
-        # padding_layer = keras.layers.ZeroPadding1D(
-        #     padding=(pads[0]),
-        #     name=padding_name
-        # )
-        # print(input_0)
-        # layers[node_name] = padding_layer(input_0)
-        # input_0.set_shape(input_0._keras_shape)
-        # print(input_0._keras_shape)
-        # print(input_0, n_filters, width)
-        # conv = keras.layers.Conv1D(
-        #     filters=n_filters,
-        #     kernel_size=width,
-        #     strides=strides[0],
-        #     padding='valid',
-        #     weights=weights,
-        #     use_bias=has_bias,
-        #     activation=None,
-        #     dilation_rate=dilation,
-        #     name=keras_name
-        # )
-        # layers[node_name] = conv(input_0)
-
 
 def convert_convtranspose(node, params, layers,
                           lambda_func, node_name, keras_name):
