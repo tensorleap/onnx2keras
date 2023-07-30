@@ -175,21 +175,22 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
 
     if is_numpy(input_1):
 
-        # check reshaping type and validity
-        contains_zero_dim = np.isin(input_1, 0).any()
-        contains_infer_dim = np.isin(input_1, -1).any()
+        # if 'allowzero' parameter exist check reshaping type and validity
         dims_to_ignore = None
         dims_to_keep_unchanged = None
-        if params['allowzero']:
-            if contains_infer_dim and contains_zero_dim:
-                raise ValueError(
-                    "Reshape parameter 'allowzero' is set and reshaping argument contains both '0' dim and '-1'"
-                    "which is not allowed"
-                    f"node name: {node_name}")
-            elif contains_zero_dim:
-                dims_to_ignore = np.argwhere(input_1 == 0)
-        elif not params['allowzero'] and contains_zero_dim:
-            dims_to_keep_unchanged = np.squeeze(np.argwhere(input_1 == 0))
+        if 'allowzero' in params:
+            contains_zero_dim = np.isin(input_1, 0).any()
+            contains_infer_dim = np.isin(input_1, -1).any()
+            if params['allowzero']:
+                if contains_infer_dim and contains_zero_dim:
+                    raise ValueError(
+                        "Reshape parameter 'allowzero' is set and reshaping argument contains both '0' dim and '-1'"
+                        "which is not allowed"
+                        f"node name: {node_name}")
+                elif contains_zero_dim:
+                    dims_to_ignore = np.argwhere(input_1 == 0)
+            elif not params['allowzero'] and contains_zero_dim:
+                dims_to_keep_unchanged = np.squeeze(np.argwhere(input_1 == 0))
 
         logger.debug('The second argument is numpy array.')
         if is_numpy(input_0):
