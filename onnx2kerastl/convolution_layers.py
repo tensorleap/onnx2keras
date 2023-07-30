@@ -153,8 +153,19 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
                      "dilation_rate": dilation,
                      "name": keras_name,
                      "groups": n_groups}
+
+        padding = None
+        if len(pads) == 2 and (pads[0] > 0 or pads[1] > 0):
+            padding = (pads[0], pads[1])
+
         if padding:
-            conv_args['padding'] = 'same'
+            # find the dimension to pad and use the exact padding values
+            input_shape = np.asarray(keras.backend.int_shape(input_0))
+            partitioned_dim = np.argwhere(input_shape == channels * n_groups)[0][0]
+            padding_dim = 2 if partitioned_dim == 1 else 1
+            tf_padding = np.zeros((2, len(input_shape))).astype(int)
+            tf_padding[:, padding_dim] = [padding[0], padding[1]]
+            input_0 = tf.pad(input_0, tf.constant(list(tf_padding.transpose())))
         else:
             conv_args['padding'] = 'valid'
         partial_conv = partial(keras.layers.Conv1D, **conv_args)
