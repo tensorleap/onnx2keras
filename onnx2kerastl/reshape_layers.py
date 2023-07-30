@@ -188,7 +188,7 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                     f"node name: {node_name}")
             elif contains_zero_dim:
                 dims_to_set_as_zero = np.argwhere(input_1 == 0)
-        elif not allow_zero:
+        elif not allow_zero and contains_zero_dim:
             dims_to_keep_unchanged = np.squeeze(np.argwhere(input_1 == 0))
 
         logger.debug('The second argument is numpy array.')
