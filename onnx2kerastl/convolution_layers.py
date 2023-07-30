@@ -3,6 +3,7 @@ from functools import partial
 from typing import List
 
 import keras
+import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework.ops import EagerTensor
 
@@ -142,19 +143,12 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
         width, channels, n_filters = W.shape
         print(width, channels, n_filters, has_bias)
 
-        if has_bias:
-            weights = [W, bias]
-        else:
-            weights = [W]
-
-        padding = None
-        if len(pads) == 2 and (pads[0] > 0 or pads[1] > 0):
-            padding = (pads[0], pads[1])
+        weights = [W]
         conv_args = {"filters": n_filters,
                      "kernel_size": (width),
                      "strides": (strides[0]),
                      "weights": weights,
-                     "use_bias": has_bias,
+                     "use_bias": False,
                      "activation": None,
                      "dilation_rate": dilation,
                      "name": keras_name,
@@ -163,9 +157,15 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
             conv_args['padding'] = 'same'
         else:
             conv_args['padding'] = 'valid'
-
         partial_conv = partial(keras.layers.Conv1D, **conv_args)
-        layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2])
+        if has_bias:
+            res = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2])
+            res_shape = np.asarray(keras.backend.int_shape(res))
+            bias_dim = np.argwhere(res_shape == bias.shape)[0][0]
+            expanded_dims = [dim for dim in range(len(res_shape)) if dim != bias_dim]
+            layers[node_name] = res + np.expand_dims(bias, expanded_dims)
+        else:
+            layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2])
 
         # padding_name = keras_name + '_pad'
         # padding_layer = keras.layers.ZeroPadding1D(
