@@ -174,6 +174,23 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
     input_1 = layers[node.input[1]]
 
     if is_numpy(input_1):
+
+        # check reshaping type and validity
+        contains_zero_dim = np.isin(input_1, 0).any()
+        contains_infer_dim = np.isin(input_1, -1).any()
+        dims_to_ignore = None
+        dims_to_keep_unchanged = None
+        if params['allowzero']:
+            if contains_infer_dim and contains_zero_dim:
+                raise ValueError(
+                    "Reshape parameter 'allowzero' is set and reshaping argument contains both '0' dim and '-1'"
+                    "which is not allowed"
+                    f"node name: {node_name}")
+            elif contains_zero_dim:
+                dims_to_ignore = np.argwhere(input_1 == 0)
+        elif not params['allowzero'] and contains_zero_dim:
+            dims_to_keep_unchanged = np.squeeze(np.argwhere(input_1 == 0))
+
         logger.debug('The second argument is numpy array.')
         if is_numpy(input_0):
             logger.debug('The first argument is numpy array. Apply np.reshape.')
@@ -232,7 +249,12 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                         layers[node_name] = flatten(input_0)
                     else:
                         if input_0.shape[0] != input_1[0]:  # keras reshape don't work
-                            layers[node_name] = tf.reshape(input_0, input_1, name=keras_name)
+                            new_shape = input_1.copy()
+                            if dims_to_ignore is not None:
+                                new_shape = np.squeeze(new_shape, axis=dims_to_ignore)
+                            elif dims_to_keep_unchanged is not None:
+                                new_shape[dims_to_keep_unchanged] = input_0.shape[dims_to_keep_unchanged]
+                            layers[node_name] = tf.reshape(input_0, new_shape, name=keras_name)
                         else:
                             reshape = keras.layers.Reshape(np.int32(input_1[1:]), name=keras_name)
                             layers[node_name] = reshape(input_0)
