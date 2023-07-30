@@ -23,7 +23,8 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
         conv_res = partial_func(data_format="channels_last")(permuted)
         result = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=True))(conv_res)
     else:
-        conv = partial_func()
+        data_fmt = keras.backend.image_data_format()
+        conv = partial_func(data_format=data_fmt)
         if conv_input.shape[-1] is None:
             conv.build((None, conv_channels, *conv_input.shape[2:]))
         result = conv(conv_input)
