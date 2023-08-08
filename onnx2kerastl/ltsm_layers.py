@@ -130,14 +130,14 @@ def convert_gru(node, params, layers, lambda_func, node_name, keras_name):
         weights = [w.swapaxes(1, 2)[0, ...], r.swapaxes(1, 2)[0, ...], b[0, ...].reshape(2, -1),
                    w.swapaxes(1, 2)[1, ...], r.swapaxes(1, 2)[1, ...], b[1, ...].reshape(2, -1)]
         gru_layer = OnnxGRU(hidden_size, return_sequences=True, return_state=True, bidirectional=True)
-        concat_res = gru_layer(x_n, [initial_h[0, ...], initial_h[1, ...]])
+        concat_res = gru_layer(x_n, [initial_h[0], initial_h[1]])
     elif direction == "reverse":
         raise AttributeError("Does not currently support reverse direction on GRU layers")
     else:
         weights = [w.swapaxes(1, 2)[0, ...], r.swapaxes(1, 2)[0, ...], b.reshape(2, -1)]
         gru_layer = OnnxGRU(hidden_size, return_sequences=True, return_state=True, bidirectional=False)
-        concat_res = gru_layer(x_n, initial_h[0, ...])
+        concat_res = gru_layer(x_n, initial_h[0])
     gru_layer.gru_layer.set_weights(weights)
-    layers[node.output[0]] = concat_res[:-1, ...]
-    layers[node.output[1]] = concat_res[-1, ...]
+    layers[node.output[0]] = concat_res[:-1, :, :, :]
+    layers[node.output[1]] = concat_res[-1, :, :, :]
     tf.keras.backend.set_image_data_format("channels_first")
