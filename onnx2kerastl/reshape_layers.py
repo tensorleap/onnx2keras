@@ -253,7 +253,7 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                             if dims_to_set_as_zero is not None:
                                 new_shape[dims_to_set_as_zero] = 0
                             elif dims_to_keep_unchanged is not None:
-                                new_shape[dims_to_keep_unchanged] = input_0.shape[dims_to_keep_unchanged]
+                                new_shape[dims_to_keep_unchanged] = np.array(input_0.shape)[dims_to_keep_unchanged]
                             layers[node_name] = tf.reshape(input_0, new_shape, name=keras_name)
                         else:
                             reshape = keras.layers.Reshape(np.int32(input_1[1:]), name=keras_name)
