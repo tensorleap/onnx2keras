@@ -5,6 +5,7 @@ import tensorflow as tf
 
 from onnx2kerastl.customonnxlayer.onnxlstm import OnnxLSTM
 from onnx2kerastl.customonnxlayer.onnxgru import OnnxGRU
+from onnx2kerastl.customonnxlayer.onnxRNN import OnnxRNN
 from .exceptions import UnsupportedLayer
 from .utils import ensure_tf_type
 
@@ -137,6 +138,69 @@ def convert_gru(node, params, layers, lambda_func, node_name, keras_name):
         weights = [w.swapaxes(1, 2)[0, ...], r.swapaxes(1, 2)[0, ...], b.reshape(2, -1)]
         gru_layer = OnnxGRU(hidden_size, return_sequences=True, return_state=True, bidirectional=False)
         concat_res = gru_layer(x_n, initial_h[0])
+    gru_layer.gru_layer.set_weights(weights)
+    layers[node.output[0]] = concat_res[:-1, :, :, :]
+    layers[node.output[1]] = concat_res[-1, :, :, :]
+    tf.keras.backend.set_image_data_format("channels_first")
+
+
+def convert_rnn(node, params, layers, lambda_func, node_name, keras_name):
+    """
+    Convert convolution layer
+    :param node: current operation node
+    :param params: operation attributes
+    :param layers: available keras layers
+    :param lambda_func: function for keras Lambda layer
+    :param node_name: internal converter name
+    :param keras_name: resulting layer name
+    :return: None
+    """
+    activation_alpha = params.get('activation_alpha')
+    activation_beta = params.get('activation_beta')
+    clip = params.get('clip')
+    batch_first = params.get('layout', 0) == 1
+    direction = params.get('direction', b'forward').decode()
+    activations = params.get('activations', [b'tanh', b'tanh'] if direction == 'bidirectional' else [b'tanh'])
+    activations = [act.decode().lower() for act in activations]
+    hidden_size = params.get('hidden_size')
+    if activation_alpha is not None:
+        raise AttributeError("Onnx2kerras : We do not currently support the activation_alpha param in RNN Node")
+    if activation_beta is not None:
+        raise AttributeError("Onnx2kerras : We do not currently support the activation_beta param in RNN Node")
+    if len(activations) > 1:
+        if activations[0] != activations[1]:
+            raise AttributeError("Onnx2kerras : We do not support different activation in fwd bg pass in RNN")
+    activations = activations[0]
+    if clip is not None:
+        raise AttributeError("Onnx2kerras : We do not currently support the clip param in RNN Node")
+    x = layers[node.input[0]]
+    w = layers[node.input[1]]
+    r = layers[node.input[2]]
+    # Since we can't access Optional inputs names we have to use some heuristic to classify them
+    b = layers.get(node.input[3])
+    if b is None:
+        b = np.zeros((w.shape[0], 2*w.shape[1]))
+    sequence_len = layers.get(node.input[4])
+    if sequence_len is not None:
+        raise AttributeError("Onnx2kerras : We do not currently support the Sequence Length param in RNN Node")
+    initial_h = layers.get(node.input[5])
+    if not batch_first:
+        x_n = tf.transpose(x, [1, 0, 2])
+    tf.keras.backend.set_image_data_format("channels_last")
+    if direction == "bidirectional":
+        weights = [w.swapaxes(1, 2)[0, ...], r.swapaxes(1, 2)[0, ...], b[0, ...].reshape(2, -1).sum(axis=0),
+                   w.swapaxes(1, 2)[1, ...], r.swapaxes(1, 2)[1, ...], b[1, ...].reshape(2, -1).sum(axis=0)]
+        states_vector = [initial_h[0], initial_h[1]]
+        gru_layer = OnnxRNN(hidden_size, return_sequences=True, return_state=True, bidirectional=True,
+                            activation=activations)
+    elif direction == "reverse":
+        raise AttributeError("Does not currently support reverse direction on RNN layers")
+    else:
+        weights = [w.swapaxes(1, 2)[0, ...], r.swapaxes(1, 2)[0, ...], b.reshape(2, -1).sum(axis=0)]
+        states_vector = initial_h[0]
+        gru_layer = OnnxRNN(hidden_size, return_sequences=True, return_state=True, bidirectional=False,
+                            activation=activations)
+    concat_res = gru_layer(x_n, states_vector)
     gru_layer.gru_layer.set_weights(weights)
     layers[node.output[0]] = concat_res[:-1, :, :, :]
     layers[node.output[1]] = concat_res[-1, :, :, :]

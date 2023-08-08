@@ -228,7 +228,7 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
                     logger.debug('Found in weights, add as a numpy constant.')
                     layers[node_input] = weights[node_input]
                 else:
-                    if node_input == "" and node_type in ('Pad', 'Resize', 'Clip', 'LSTM', 'GRU'):
+                    if node_input == "" and node_type in ('Pad', 'Resize', 'Clip', 'LSTM', 'GRU', 'RNN'):
                         continue
                     else:
                         raise AttributeError('Current node is not in weights / model inputs / layers.')
