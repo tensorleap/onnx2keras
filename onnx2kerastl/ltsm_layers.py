@@ -191,14 +191,14 @@ def convert_rnn(node, params, layers, lambda_func, node_name, keras_name):
         weights = [w.swapaxes(1, 2)[0, ...], r.swapaxes(1, 2)[0, ...], b[0, ...].reshape(2, -1).sum(axis=0),
                    w.swapaxes(1, 2)[1, ...], r.swapaxes(1, 2)[1, ...], b[1, ...].reshape(2, -1).sum(axis=0)]
         states_vector = [initial_h[0], initial_h[1]]
-        gru_layer = OnnxRNN(hidden_size, return_sequences=True, return_state=True, bidirectional=True,
+        gru_layer = OnnxRNN(hidden_size, return_sequences=True, return_states=True, bidirectional=True,
                             activation=activations)
     elif direction == "reverse":
         raise AttributeError("Does not currently support reverse direction on RNN layers")
     else:
         weights = [w.swapaxes(1, 2)[0, ...], r.swapaxes(1, 2)[0, ...], b.reshape(2, -1).sum(axis=0)]
         states_vector = initial_h[0]
-        gru_layer = OnnxRNN(hidden_size, return_sequences=True, return_state=True, bidirectional=False,
+        gru_layer = OnnxRNN(hidden_size, return_sequences=True, return_states=True, bidirectional=False,
                             activation=activations)
     concat_res = gru_layer(x_n, states_vector)
     gru_layer.gru_layer.set_weights(weights)
