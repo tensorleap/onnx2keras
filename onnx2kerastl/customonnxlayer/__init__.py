@@ -4,6 +4,9 @@ from onnx2kerastl.customonnxlayer.onnxreducemean import OnnxReduceMean
 from onnx2kerastl.customonnxlayer.onnxerf import OnnxErf
 from onnx2kerastl.customonnxlayer.onnxabs import OnnxAbs
 from onnx2kerastl.customonnxlayer.onnxlstm import OnnxLSTM
+from onnx2kerastl.customonnxlayer.onnxgru import OnnxGRU
+from onnx2kerastl.customonnxlayer.onnxRNN import OnnxRNN
+
 
 onnx_custom_objects_map = {
     "OnnxHardSigmoid": OnnxHardSigmoid,
@@ -11,5 +14,7 @@ onnx_custom_objects_map = {
     "OnnxReduceMean": OnnxReduceMean,
     "OnnxAbs": OnnxAbs,
     "OnnxErf": OnnxErf,
-    "OnnxLSTM": OnnxLSTM
+    "OnnxLSTM": OnnxLSTM,
+    "OnnxGRU": OnnxGRU,
+    "OnnxRNN": OnnxRNN
 }
