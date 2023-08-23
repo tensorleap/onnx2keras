@@ -24,7 +24,7 @@ from .pooling_layers import convert_avgpool, convert_maxpool, convert_global_avg
 from .padding_layers import convert_padding
 from .upsampling_layers import convert_upsample
 from .caffe2_layers import convert_alias_with_name, convert_resize_nearest
-from .sampling_layers import convert_gridsample, convert_range
+from .sampling_layers import convert_gridsample, convert_range, convert_unique
 from .fft_layers import convert_dft
 
 AVAILABLE_CONVERTERS = {
@@ -148,5 +148,6 @@ AVAILABLE_CONVERTERS = {
     'GatherElements': convert_gather_elements,
     'GRU': convert_gru,
     'RNN': convert_rnn,
-    'NonMaxSuppression': convert_nms
+    'NonMaxSuppression': convert_nms,
+    'Unique': convert_unique
 }
