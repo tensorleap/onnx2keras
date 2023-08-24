@@ -358,36 +358,6 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
 
 
 
-
-
-def extract_op_node(node_graph, layers, lambda_funcs, keras_names, change_ordering, name_policy):
-    op_node = None
-    for node_i, node in enumerate(node_graph):
-        if node.op_type == 'Constant':
-            node_params = onnx_node_attributes_to_dict(node.attribute)
-            # Add global converter info:
-            node_params['change_ordering'] = change_ordering
-            node_params['name_policy'] = name_policy
-            node_name = str(node.output[0])
-
-            AVAILABLE_CONVERTERS[node.op_type](
-                node,
-                node_params,
-                layers,
-                lambda_funcs,
-                node_name,
-                keras_names
-            )
-        else:       # op type
-            if op_node is not None:
-                raise NotImplementedError('Not Implemented: inner graph in If node with multiple operator nodes')
-            op_node = node
-    if op_node is None:
-        raise NotImplementedError('Something is off with If node')
-    return op_node
-
-
-
 def extract_op_node(node_graph, layers, lambda_funcs, keras_names, change_ordering, name_policy):
     op_node = None
     for node_i, node in enumerate(node_graph):
