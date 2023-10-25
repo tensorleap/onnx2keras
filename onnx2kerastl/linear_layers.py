@@ -2,7 +2,7 @@ import keras
 import logging
 from .utils import is_numpy
 import tensorflow as tf
-
+import numpy as np
 
 def convert_gemm(node, params, layers, lambda_func, node_name, keras_name):
     """
@@ -50,8 +50,9 @@ def convert_gemm(node, params, layers, lambda_func, node_name, keras_name):
             try:
                 layers[node_name] = dense(layers[node.input[0]])
             except ValueError:
-                reshape = keras.layers.Reshape([input_channels], name=keras_name + '_reshape')
-                reshaped_x = reshape(layers[node.input[0]])
+                mid_shape = tf.shape(layers[node.input[0]], out_type=tf.int32)[1:-1]
+                reshape_shape = tf.concat([mid_shape, [input_channels]], axis=0)
+                reshaped_x = tf.reshape(layers[node.input[0]], reshape_shape)
                 layers[node_name] = dense(reshaped_x)
 
         else:
@@ -60,3 +61,6 @@ def convert_gemm(node, params, layers, lambda_func, node_name, keras_name):
 
 def convert_det(node, params, layers, lambda_func, node_name, keras_name):
     layers[node_name] = tf.linalg.det(layers[node.input[0]])
+
+a = tf.keras.layers.Input([None,None, None])
+b = tf.reshape(a, tf.concat([tf.shape(a)[1:-1],[768]],axis=0))

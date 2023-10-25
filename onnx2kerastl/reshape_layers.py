@@ -51,15 +51,17 @@ def convert_shape(node, params, layers, lambda_func, node_name, keras_name):
 
     logger.debug('Actual shape:')
     logger.debug(np.array(input_0.shape))
+    #
+    # shapes = []
+    # for i in input_0.shape:
+    #     if i is not None:
+    #         shapes.append(i)
+    #     else:
+    #         shapes.append(None)
 
-    shapes = []
-    for i in input_0.shape:
-        if i is not None:
-            shapes.append(i)
-        else:
-            shapes.append(None)
+    # layers[node_name] = np.array(shapes)
+    layers[node_name] = tf.shape(input_0, out_type=tf.int64)
 
-    layers[node_name] = np.array(shapes)
 
 
 def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
@@ -156,6 +158,7 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
                     layers[node_name] = tf.concat(layer_input, axis=params['axis'], name=keras_name)
                 except Exception as ex:
                     # might be due to type mismatch between different inputs of tf.concat
+                    print(1)
                     raise
 
             else:
@@ -269,7 +272,8 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                             reshape = keras.layers.Reshape(np.int32(input_1[1:]), name=keras_name)
                             layers[node_name] = reshape(input_0)
     else:
-        raise AttributeError('Can\'t reshape dynamic size.')
+        # raise AttributeError('Can\'t reshape dynamic size.')
+        layers[node_name] = tf.reshape(input_0, input_1)
 
 
 def convert_unsqueeze(node, params, layers, lambda_func, node_name, keras_name):
@@ -386,9 +390,10 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
         input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
         slicing_layer = SlicingOpLambda(tf.__operators__.getitem)
         sliced = slicing_layer(input_0, slice_spec=slice_spec_param)
-        if is_numpy(layers[node.input[0]]):
+        if is_numpy(layers[node.input[0]]) and not K.is_keras_tensor(sliced):
             sliced = sliced.numpy()
-    layers[node_name] = sliced
+    # layers[node_name] = sliced
+    layers[node_name] = tf.strided_slice(input_0, np.array([0, 0], dtype=np.int64), tf.concat([np.array([1], dtype=np.int64), layers[node.input[2]]], np.array(0, dtype=np.int64)), np.ones(2, dtype=np.int64))
 
 
 def convert_squeeze(node, params, layers, lambda_func, node_name, keras_name):
