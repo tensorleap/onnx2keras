@@ -372,25 +372,49 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
     axes_positives = [axis if axis >= 0 else input_shape_len + axis for axis in axes]
 
     slice_spec_param = []
-    for axis in range(input_shape_len):
-        if axis in axes_positives:
-            axis_index = axes_positives.index(axis)
-            start = starts[axis_index]
-            end = ends[axis_index]
-            step = steps[axis_index]
-            slice_spec_param.append({'start': start, 'step': step, 'stop': end})
+    is_dynamic = False
+    for i in range(len(starts)):
+        for index_li in [starts, steps, ends]:
+            if index_li[i] is not None and not isinstance(index_li[i], int) and not is_numpy(index_li[i]) and K.is_keras_tensor(index_li[i]):
+                is_dynamic = True
+    if not is_dynamic:
+        for axis in range(input_shape_len):
+            if axis in axes_positives:
+                axis_index = axes_positives.index(axis)
+                start = starts[axis_index]
+                end = ends[axis_index]
+                step = steps[axis_index]
+                slice_spec_param.append({'start': start, 'step': step, 'stop': end})
+            else:
+                slice_spec_param.append({'start': None, 'step': None, 'stop': None})
+        if is_numpy(layers[node.input[0]]) and np.array([_shape is None for _shape in layers[node.input[0]]]).any() \
+                and len(layers[node.input[0]].shape) == 1:  # slice numpy array which is a shape
+            sliced = layers[node.input[0]][start:end:step]
         else:
-            slice_spec_param.append({'start': None, 'step': None, 'stop': None})
-    if is_numpy(layers[node.input[0]]) and np.array([_shape is None for _shape in layers[node.input[0]]]).any() \
-            and len(layers[node.input[0]].shape) == 1:  # slice numpy array which is a shape
-        sliced = layers[node.input[0]][start:end:step]
+            input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
+            slicing_layer = SlicingOpLambda(tf.__operators__.getitem)
+            sliced = slicing_layer(input_0, slice_spec=slice_spec_param)
+            if is_numpy(layers[node.input[0]]) and not K.is_keras_tensor(sliced):
+                sliced = sliced.numpy()
+        layers[node_name] = sliced
     else:
         input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-        slicing_layer = SlicingOpLambda(tf.__operators__.getitem)
-        sliced = slicing_layer(input_0, slice_spec=slice_spec_param)
-        if is_numpy(layers[node.input[0]]):
-            sliced = sliced.numpy()
-    layers[node_name] = sliced
+        keras_shape = tf.shape(layers[node.input[0]])
+        start_vec = [0] * input_shape_len
+        end_vec = [keras_shape[i] for i in range(input_shape_len)]
+        step_vec = [1] * input_shape_len
+        for axis in range(input_shape_len):
+            if axis in axes_positives:
+                axis_index = axes_positives.index(axis)
+                for res_list, input_list in zip([start_vec, step_vec, end_vec],[starts, steps, ends]):
+                    slice_index = input_list[axis_index]
+                    if not is_numpy(input_list[axis_index]) and input_list[axis_index].dtype != tf.int32:
+                        slice_index = tf.cast(slice_index, tf.int32)
+                    res_list[axis] = slice_index
+        layers[node_name] = tf.strided_slice(input_0,
+                                             tf.concat([start_vec], axis=0),
+                                             tf.concat([end_vec], axis=0),
+                                             tf.concat([step_vec], axis=0))
 
 
 def convert_squeeze(node, params, layers, lambda_func, node_name, keras_name):
