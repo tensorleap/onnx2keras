@@ -464,16 +464,16 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     if len(scales) > 0:
         if scales[0] != 1 or scales[1] != 1:
             raise Exception("Resize of channels or batch dim not suppported")
-
-        tf_resize_shapes = [int(scales[2] * to_channel_last.shape[1]),
-                            int(scales[3] * to_channel_last.shape[2])]
+        shape = tf.cast(tf.shape(to_channel_last), tf.float32)
+        tf_resize_shapes = [tf.cast(scales[2] * shape[1], tf.int32),
+                            tf.cast(scales[3] * shape[2], tf.int32)]
     else:
         if sizes[0] != input_tensor.shape[0] or sizes[1] != input_tensor.shape[1]:
             raise Exception("Resize of channels or batch dim not suppported")
         tf_resize_shapes = [int(sizes[2]), int(sizes[3])]
 
     resized = tf.image.resize(to_channel_last,
-                              size=tf_resize_shapes,
+                              size=tf.stack(tf_resize_shapes, axis=0),
                               method=resize_method)
     to_channel_first = keras.layers.Permute((3, 1, 2))(resized)
     layers[node_name] = to_channel_first
