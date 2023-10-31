@@ -51,15 +51,17 @@ def convert_shape(node, params, layers, lambda_func, node_name, keras_name):
 
     logger.debug('Actual shape:')
     logger.debug(np.array(input_0.shape))
+    if not K.is_keras_tensor(input_0) or not any([input_0.shape[i] == None for i in range(len(input_0.shape))]):
+        shapes = []
+        for i in input_0.shape:
+            if i is not None:
+                shapes.append(i)
+            else:
+                shapes.append(None)
+        layers[node_name] = np.array(shapes)
+    else:
+        layers[node_name] = tf.shape(input_0, out_type=tf.int64)
 
-    shapes = []
-    for i in input_0.shape:
-        if i is not None:
-            shapes.append(i)
-        else:
-            shapes.append(None)
-
-    layers[node_name] = np.array(shapes)
 
 
 def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
