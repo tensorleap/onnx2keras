@@ -1,6 +1,9 @@
 import numpy as np
 import keras
 import logging
+
+from keras.engine.keras_tensor import KerasTensor
+
 from .utils import is_numpy, ensure_tf_type
 import tensorflow as tf
 from tensorflow.python.framework.ops import EagerTensor
@@ -228,6 +231,11 @@ def convert_equal(node, params, layers, lambda_func, node_name, keras_name):
 
 
 def convert_where(node, params, layers, lambda_func, node_name, keras_name):
+    for i in range(len(node.input)):
+        if isinstance(layers[node.input[i]], np.ndarray):
+            layers[node.input[i]] = layers[node.input[i]].astype(np.int32)
+        elif isinstance(layers[node.input[i]], KerasTensor):
+            layers[node.input[i]] = tf.cast(layers[node.input[i]], tf.int32)
     if layers[node.input[0]].dtype != tf.bool:
         casted = tf.cast(layers[node.input[0]], tf.bool)
     else:
