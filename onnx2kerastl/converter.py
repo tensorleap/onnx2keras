@@ -135,10 +135,10 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
     for node_index, node in enumerate(onnx_nodes):
         if node.op_type == 'If':
             if layers[node.input[0]][0]:
-                i = 0
+                replace_node = node.attribute[0].g.node
             else:
-                i = 1
-            replace_node = extract_op_node(node.attribute[i].g.node, layers, lambda_funcs, keras_names, change_ordering, name_policy)
+                replace_node = node.attribute[1].g.node
+            replace_node = extract_op_node(replace_node, layers, lambda_funcs, keras_names, change_ordering, name_policy)
             replace_node.output.pop()
             for i in range(len(node.output)):
                 replace_node.output.append(node.output[i])

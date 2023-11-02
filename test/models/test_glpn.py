@@ -1,3 +1,4 @@
+import io
 from transformers import AutoImageProcessor, GLPNForDepthEstimation, DPTForDepthEstimation
 import onnx
 import torch
@@ -20,15 +21,22 @@ def test_glpn():
     image = Image.open(requests.get(url, stream=True).raw)
     image_processor = AutoImageProcessor.from_pretrained("vinvino02/glpn-kitti")
     inputs = image_processor(images=image, return_tensors="pt")
-    x = inputs.data['pixel_values']
-    torch.onnx.export(model, x, 'glpn.onnx')
-    onnx_model = onnx.load('glpn.onnx')
+    pixel_values = inputs.data['pixel_values']
+
+    # torch.onnx.export(model, pixel_values, 'glpn.onnx')
+    # onnx_model = onnx.load('glpn.onnx')
+
+    temp_f = io.BytesIO()
+    torch.onnx.export(model, pixel_values, temp_f)
+    temp_f.seek(0)
+    onnx_model = onnx.load(temp_f)
 
     keras_model = onnx_to_keras(onnx_model, ['input.1'], name_policy='attach_weights_name')
-    permuted_inputs = np.swapaxes(np.swapaxes(x, 1, 2), 2, 3)
+
+    permuted_inputs = np.swapaxes(np.swapaxes(pixel_values, 1, 2), 2, 3)
     final_model = convert_channels_first_to_last(keras_model, should_transform_inputs_and_outputs=True)
     model = model.eval()
-    this_pred = model(torch.Tensor(x))
+    this_pred = model(torch.Tensor(pixel_values))
     keras_preds = final_model(permuted_inputs)
     keras_preds = np.swapaxes(keras_preds, 1, 2)
     torch_pred = this_pred['predicted_depth']
