@@ -16,7 +16,7 @@ def test_glpn():
 
     model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti")
     model = model.eval()
-
+    #
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
     image_processor = AutoImageProcessor.from_pretrained("vinvino02/glpn-kitti")
@@ -25,7 +25,6 @@ def test_glpn():
 
     # torch.onnx.export(model, pixel_values, 'glpn.onnx')
     # onnx_model = onnx.load('glpn.onnx')
-
     temp_f = io.BytesIO()
     torch.onnx.export(model, pixel_values, temp_f)
     temp_f.seek(0)
