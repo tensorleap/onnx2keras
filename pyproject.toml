@@ -1,25 +1,24 @@
 [tool.poetry]
 name = "onnx2kerastl"
-version = "0.0.122"
+version = "0.0.122.dev9"
 description = ""
 authors = ["dorhar <doron.harnoy@tensorleap.ai>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = ">=3.8, <3.11"
-tensorflow = {version = "2.11.0", markers = "platform_machine  == 'x86_64'"}
-tensorflow-macos = {version = "2.11.0", markers = "platform_machine  == 'arm64'"}
-onnx = "1.10.1"
-protobuf = "^3.19.6"
-keras-data-format-converter = "0.1.16"
-tensorflow-addons = {version = "^0.19.0", markers = "platform_machine  == 'x86_64'"}
+python = ">=3.10, <=3.11.5"
+tensorflow = {version = "2.14.0", markers = "platform_machine  == 'x86_64'"}
+tensorflow-macos = {version = "2.14.0", markers = "platform_machine  == 'arm64'"}
+onnx = "1.14.1"
+keras-data-format-converter = "0.1.17.dev6"
+tensorflow-addons = {version = "^0.23.0", markers = "platform_machine  == 'x86_64'"}
 numpy = "1.23.5"
 fvcore = "^0.1.5.post20221221"
+pytest = "7.4.3"
 
 [tool.poetry.dev-dependencies]
-pytest = "^7.1.2"
-torch = {version = "1.12.1", markers = "platform_machine  == 'x86_64'"}
-torchvision = {version = "^0.12.0", markers = "platform_machine  == 'x86_64'"}
+torch = {version = "2.1.1", markers = "platform_machine  == 'x86_64'"}
+torchvision = {version = "^0.16.1", markers = "platform_machine  == 'x86_64'"}
 transformers = {extras = ["onnx"], version = "^4.25.1", markers = "platform_machine  == 'x86_64'"}
 sentencepiece ={version = "^0.1.96", markers = "platform_machine  == 'x86_64'"}
 pandas = "^2.0.3"

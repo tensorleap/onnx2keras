@@ -351,40 +351,40 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
                     axis = axis[0]
                 layer['config']['axis'] = change_ord_axes_map.get(axis, layer['config']['axis'])
 
-        for layer in conf['layers']:
-            if 'function' in layer['config'] and layer['config']['function'][1] is not None:
-                kerasf = list(layer['config']['function'])
-                dargs = list(kerasf[1])
-                func = lambda_funcs.get(layer['name'])
-
-                if func:
-                    # ReduceSum operation has 'axis' param as array of ints. When onnx uses ReduceSum
-                    # to reproduce SoftMax - dargs become something like [[1]] (list of lists)
-                    # that why we handle collections.Iterable
-                    if len(dargs) > 1 or isinstance(dargs[0], (tuple, list)):
-                        params = inspect.signature(func).parameters
-                        i = list(params.keys()).index('axes') if ('axes' in params) else -1
-
-                        if i > 0:
-                            i -= 1
-                            axes = list(range(len(dargs[i].shape)))
-                            axes = axes[0:1] + axes[2:] + axes[1:2]
-                            dargs[i] = np.transpose(dargs[i], axes)
-
-                        i = list(params.keys()).index('axis') if ('axis' in params) else -1
-
-                        if i > 0:
-                            i -= 1
-                            axis = np.array(dargs[i])
-                            axes_map = np.array([0, 3, 1, 2])
-                            # to list because some tf operations check only for core python types (e.g tf.norm)
-                            dargs[i] = axes_map[axis].tolist()
-                    else:
-                        # if map exits will change else will remain the same
-                        dargs[0] = change_ord_axes_map.get(dargs[0], dargs[0])
-
-                kerasf[1] = tuple(dargs)
-                layer['config']['function'] = tuple(kerasf)
+        # for layer in conf['layers']:
+        #     if 'function' in layer['config'] and layer['config']['function'][1] is not None:
+        #         kerasf = list(layer['config']['function'])
+        #         dargs = list(kerasf[1])
+        #         func = lambda_funcs.get(layer['name'])
+        #
+        #         if func:
+        #             # ReduceSum operation has 'axis' param as array of ints. When onnx uses ReduceSum
+        #             # to reproduce SoftMax - dargs become something like [[1]] (list of lists)
+        #             # that why we handle collections.Iterable
+        #             if len(dargs) > 1 or isinstance(dargs[0], (tuple, list)):
+        #                 params = inspect.signature(func).parameters
+        #                 i = list(params.keys()).index('axes') if ('axes' in params) else -1
+        #
+        #                 if i > 0:
+        #                     i -= 1
+        #                     axes = list(range(len(dargs[i].shape)))
+        #                     axes = axes[0:1] + axes[2:] + axes[1:2]
+        #                     dargs[i] = np.transpose(dargs[i], axes)
+        #
+        #                 i = list(params.keys()).index('axis') if ('axis' in params) else -1
+        #
+        #                 if i > 0:
+        #                     i -= 1
+        #                     axis = np.array(dargs[i])
+        #                     axes_map = np.array([0, 3, 1, 2])
+        #                     # to list because some tf operations check only for core python types (e.g tf.norm)
+        #                     dargs[i] = axes_map[axis].tolist()
+        #             else:
+        #                 # if map exits will change else will remain the same
+        #                 dargs[0] = change_ord_axes_map.get(dargs[0], dargs[0])
+        #
+        #         kerasf[1] = tuple(dargs)
+        #         layer['config']['function'] = tuple(kerasf)
 
         keras.backend.set_image_data_format('channels_last')
         model_tf_ordering = keras.models.Model.from_config(conf, custom_objects=onnx_custom_objects_map)
@@ -402,7 +402,6 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
 
     response = ConvertedResponse(model, error_info)
     return response
-
 
 def extract_op_node(node_graph, layers, lambda_funcs, keras_names, change_ordering, name_policy):
     op_node = None

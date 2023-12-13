@@ -4,7 +4,9 @@ import keras
 import numpy as np
 import tensorflow as tf
 from keras import backend as K
-from keras.layers import SlicingOpLambda, Lambda
+from keras.layers import Lambda
+from keras.src.layers import SlicingOpLambda
+
 
 from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
 
