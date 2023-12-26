@@ -4,6 +4,10 @@ __pycache__/
 *.egg-info
 *.onnx
 *.h5
+*.pth
 dist/
 *.DS_Store
 .python-version
+
+# local directories and files
+test/models/custom_conversion_tests
