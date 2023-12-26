@@ -63,7 +63,6 @@ def convert_shape(node, params, layers, lambda_func, node_name, keras_name):
         layers[node_name] = tf.shape(input_0, out_type=tf.int64)
 
 
-
 def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert gather.
@@ -236,6 +235,9 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
             else:
                 input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
                 input_0_shape = input_0.shape
+                if K.int_shape(input_0) == ():
+                    input_0 = tf.expand_dims(input_0, axis=0)
+                    input_0_shape = input_0.shape
                 first_mismatch = np.argmin(np.array(input_0_shape[:len(input_1)]) == input_1)
                 if (input_1 == None).any() and (np.array(input_0_shape) == None).any() and len(input_1) < len(
                         input_0_shape) \
@@ -260,7 +262,7 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                         flatten = keras.layers.Flatten(name=keras_name)
                         layers[node_name] = flatten(input_0)
                     else:
-                        if input_0.shape[0] != input_1[0]:  # keras reshape don't work
+                        if input_0_shape[0] != input_1[0]:  # keras reshape don't work
                             new_shape = input_1.copy()
                             if dims_to_set_as_zero is not None:
                                 new_shape[dims_to_set_as_zero] = 0
@@ -270,7 +272,7 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                         else:
                             reshape = keras.layers.Reshape(np.int32(input_1[1:]), name=keras_name)
                             layers[node_name] = reshape(input_0)
-    else: #dynamic reshape
+    else:  # dynamic reshape
         layers[node_name] = tf.reshape(input_0, input_1)
 
 
@@ -375,7 +377,8 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
     is_dynamic = False
     for i in range(len(starts)):
         for index_li in [starts, steps, ends]:
-            if index_li[i] is not None and not isinstance(index_li[i], int) and not is_numpy(index_li[i]) and K.is_keras_tensor(index_li[i]):
+            if index_li[i] is not None and not isinstance(index_li[i], int) and not is_numpy(
+                    index_li[i]) and K.is_keras_tensor(index_li[i]):
                 is_dynamic = True
     if not is_dynamic:
         for axis in range(input_shape_len):
@@ -406,7 +409,7 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
         for axis in range(input_shape_len):
             if axis in axes_positives:
                 axis_index = axes_positives.index(axis)
-                for res_list, input_list in zip([start_vec, step_vec, end_vec],[starts, steps, ends]):
+                for res_list, input_list in zip([start_vec, step_vec, end_vec], [starts, steps, ends]):
                     slice_index = input_list[axis_index]
                     if not is_numpy(input_list[axis_index]) and input_list[axis_index].dtype != tf.int32:
                         slice_index = tf.cast(slice_index, tf.int32)
