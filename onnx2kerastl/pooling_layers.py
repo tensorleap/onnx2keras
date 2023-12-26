@@ -216,6 +216,7 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
 
     def target_layer(in_tensor,k=k, to_sort=to_sort, axis=axis):
         rank = len(in_tensor.shape)
+        k = int(k)
         if axis >= rank-1 or axis == -1:
             permuted = in_tensor
         else:
