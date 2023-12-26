@@ -359,7 +359,9 @@ def convert_cast(node, params, layers, lambda_func, node_name, keras_name):
             11: np.double,
         }
         cast_result = layers[node.input[0]]
-        result = (layers[node.input[0]] == None)
+        result = cast_result == None
+        if isinstance(result, np.bool_):
+            result = bool(result)
         if isinstance(result, bool) and not result:
             cast_result = cast_map[params['to']](layers[node.input[0]])
         elif not isinstance(result, bool) and not any(result):
