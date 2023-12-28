@@ -238,12 +238,11 @@ def convert_reduce_prod(node, params, layers, lambda_func, node_name, keras_name
     :param keras_name: resulting layer name
     :return: None
     """
-    if params.get("axes") is not None:  # opset 13
-        axes = params.get("axes")
-    elif len(node.input) == 2:
+    axes = params.get('axes', None)
+    if len(node.input) == 2:
         axes = layers.get(node.input[1])
     noop_with_empty_axes = bool(params.get("noop_with_empty_axes", False))
-    keepdims = params.get("keepdims", True)
+    keepdims = bool(params.get("keepdims", True))
     if noop_with_empty_axes and params.get("axes") is None:
         layers[node_name] = layers[node.input[0]]
     else:
