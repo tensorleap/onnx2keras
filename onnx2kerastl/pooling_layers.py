@@ -282,7 +282,10 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
     else:
         raise NotImplementedError("To support channels_last in RoiAlign - need to remove permutes")
     # extract inputs
-    x0, y0, x1, y1 = tf.split(rois, 4, axis=1)
+    x0 = rois[:, 0:1]
+    y0 = rois[:, 1:2]
+    x1 = rois[:, 2:3]
+    y1 = rois[:, 3:4]
     if not adaptive_ratio:
         crop_shape = (
             output_height * sampling_ratio,
