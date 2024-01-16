@@ -277,8 +277,10 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
 
     rois = rois * spatial_scale
     box_ind = tf.cast(batch_indices, tf.int32)
-
-    fm_shape = tf.shape(feature_map)[1:3]
+    if keras.backend.image_data_format() == 'channels_first':
+        fm_shape = tf.shape(feature_map)[2:] # H, W
+    else:
+        raise NotImplementedError("To support channels_last in RoiAlign - need to remove permutes")
     # extract inputs
     x0, y0, x1, y1 = tf.split(rois, 4, axis=1)
     if not adaptive_ratio:
@@ -335,6 +337,7 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
             strides=[1, sampling_ratio, sampling_ratio, 1],
             padding='SAME',
             name=node_name,
+            data_format='NHWC'
         )
     elif mode.lower() == 'max':
         pooled_tensor = tf.nn.max_pool(
@@ -343,5 +346,6 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
             strides=[1, sampling_ratio, sampling_ratio, 1],
             padding='SAME',
             name=node_name,
+            data_format='NHWC'
         )
-    layers[node_name] = keras.layers.Permute([3, 1, 2])(pooled_tensor) # move to channels first
+    layers[node_name] = keras.layers.Permute([3, 1, 2])(pooled_tensor)
