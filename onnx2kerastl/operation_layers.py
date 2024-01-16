@@ -191,17 +191,19 @@ def convert_reduce_max(node, params, layers, lambda_func, node_name, keras_name)
     """
     if len(node.input) != 1:
         assert AttributeError('More than 1 input for reduce max layer.')
+    try:
+        input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-    input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
+        def target_layer(x, axis=params.get('axes'), keepdims=params['keepdims']):
+            import keras.backend as K
+            return K.max(x, keepdims=(keepdims == 1), axis=axis)
 
-    def target_layer(x, axis=params['axes'], keepdims=params['keepdims']):
-        import keras.backend as K
-        return K.max(x, keepdims=(keepdims == 1), axis=axis)
-
-    lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
-    layers[node_name] = lambda_layer(input_0)
-    layers[node_name].set_shape(layers[node_name].shape)
-    lambda_func[keras_name] = target_layer
+        lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
+        layers[node_name] = lambda_layer(input_0)
+        layers[node_name].set_shape(layers[node_name].shape)
+        lambda_func[keras_name] = target_layer
+    except Exception as e:
+        print(1)
 
 
 def convert_reduce_min(node, params, layers, lambda_func, node_name, keras_name):
@@ -242,12 +244,17 @@ def convert_reduce_prod(node, params, layers, lambda_func, node_name, keras_name
         axes = params.get("axes")
     elif len(node.input) == 2:
         axes = layers.get(node.input[1])
+    else:
+        axes = None #default is to reduce over all dimensions
     noop_with_empty_axes = bool(params.get("noop_with_empty_axes", False))
-    keepdims = params.get("keepdims", True)
+    keepdims = bool(params.get("keepdims", True))
     if noop_with_empty_axes and params.get("axes") is None:
         layers[node_name] = layers[node.input[0]]
     else:
-        layers[node_name] = tf.math.reduce_prod(layers[node.input[0]], axis=axes, keepdims=keepdims)
+        try:
+            layers[node_name] = tf.math.reduce_prod(layers[node.input[0]], axis=axes, keepdims=keepdims)
+        except Exception as e:
+            print(1)
 
 
 def convert_pow(node, params, layers, lambda_func, node_name, keras_name):
@@ -316,16 +323,20 @@ def convert_split(node, params, layers, lambda_func, node_name, keras_names):
         splits = (chunk_size,) * splits
 
     cur = 0
-    for i, split in enumerate(splits):
-        node_name = params['_outputs'][i]
+    try:
+        for i, split in enumerate(splits):
+            if len(splits) > 1:
+             node_name = params['_outputs'][i]
 
-        def target_layer(x, axis=axis, start_i=cur, end_i=cur + split):
-            slices = [slice(None, None)] * len(K.int_shape(x))
-            slices[axis] = slice(start_i, end_i)
-            return x[tuple(slices)]
+            def target_layer(x, axis=axis, start_i=cur, end_i=cur + split):
+                slices = [slice(None, None)] * len(K.int_shape(x))
+                slices[axis] = slice(start_i, end_i)
+                return x[tuple(slices)]
 
-        layers[node_name] = target_layer(input_0)
-        cur += split
+            layers[node_name] = target_layer(input_0)
+            cur += split
+    except Exception as e:
+        print(1)
 
 
 def convert_cast(node, params, layers, lambda_func, node_name, keras_name):
@@ -360,10 +371,13 @@ def convert_cast(node, params, layers, lambda_func, node_name, keras_name):
         }
         cast_result = layers[node.input[0]]
         result = (layers[node.input[0]] == None)
-        if isinstance(result, bool) and not result:
-            cast_result = cast_map[params['to']](layers[node.input[0]])
-        elif not isinstance(result, bool) and not any(result):
-            cast_result = cast_map[params['to']](layers[node.input[0]])
+        try:
+            if isinstance(result, (bool, np.bool_)) and not result:
+                cast_result = cast_map[params['to']](layers[node.input[0]])
+            elif not isinstance(result, (bool, np.bool_)) and not any(result):
+                cast_result = cast_map[params['to']](layers[node.input[0]])
+        except Exception as e:
+            print(1)
         layers[node_name] = cast_result
     else:
         input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
@@ -769,3 +783,22 @@ def convert_nms(node, params, layers, lambda_func, node_name, keras_name):
             res = tf.concat([batch_tensor[..., None], class_tensor[..., None], indices[..., None]], axis=-1)
             all_results.append(res)
     layers[node_name] = tf.concat(all_results, axis=0)
+
+
+def convert_if(node, params, layers, lambda_func, node_name, keras_name):
+    if len(layers[node.input[0]].shape) == 0:
+        cond = layers[node.input[0]]
+    else:
+        cond = layers[node.input[0]][0]
+    outputs = [layers[node.attribute[i].g.output[0].name] for i in range(2)]
+    outputs_dtypes = [output.dtype for output in outputs]
+    outputs_numpy_dtypes = [outputs_dtypes[i] if is_numpy(outputs[i]) else outputs_dtypes[i].as_numpy_dtype for i in
+                            range(2)]
+    if outputs_numpy_dtypes[0] != outputs_numpy_dtypes[1]:
+        smallest_idx = np.argmin([np.iinfo(outputs_numpy_dtypes[i]).max for i in range(2)])
+        if is_numpy(outputs[smallest_idx]):
+            outputs[smallest_idx] = outputs[smallest_idx].astype(outputs_numpy_dtypes[1 - smallest_idx])
+        else:
+            outputs[smallest_idx] = tf.cast(outputs[smallest_idx], tf.as_dtype(outputs_dtypes[1 - smallest_idx]))
+    layers[node_name] = tf.keras.backend.switch(cond, outputs[0], outputs[1])
+    print(1)

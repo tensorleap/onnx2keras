@@ -51,16 +51,20 @@ def convert_shape(node, params, layers, lambda_func, node_name, keras_name):
 
     logger.debug('Actual shape:')
     logger.debug(np.array(input_0.shape))
-    if not K.is_keras_tensor(input_0) or not any([input_0.shape[i] == None for i in range(len(input_0.shape))]):
-        shapes = []
-        for i in input_0.shape:
-            if i is not None:
-                shapes.append(i)
-            else:
-                shapes.append(None)
-        layers[node_name] = np.array(shapes)
-    else:
-        layers[node_name] = tf.shape(input_0, out_type=tf.int64)
+    is_unknown_tensor = input_0.shape == None
+    try:
+        if not is_unknown_tensor and (not K.is_keras_tensor(input_0) or not any([input_0.shape[i] == None for i in range(len(input_0.shape))])):
+            shapes = []
+            for i in input_0.shape:
+                if i is not None:
+                    shapes.append(i)
+                else:
+                    shapes.append(None)
+            layers[node_name] = np.array(shapes)
+        else:
+            layers[node_name] = tf.shape(input_0, out_type=tf.int64)
+    except Exception as e:
+        print(1)
 
 
 
@@ -120,13 +124,20 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
         else:
             if tf.is_tensor(indices) and indices.dtype not in [tf.int16, tf.int32, tf.int64]:
                 indices = tf.cast(indices, tf.int32)
-
-            dim_len = input_0.shape[axis]
+            if isinstance(indices, list):
+                indices = np.array(indices)
+            if type(indices) == int:
+                out_type = tf.int32
+            else:
+                out_type = indices.dtype
+            dim_len = tf.shape(input_0, out_type=out_type)[axis] #support None
             if isinstance(indices, (int, np.integer)) and indices < 0:
                 indices += dim_len
-
-            if tf.is_tensor(indices):
-                indices = tf.where(indices < 0, indices + dim_len, indices)
+            try:
+                if tf.is_tensor(indices):
+                    indices = tf.where(indices < 0, indices + dim_len, indices)
+            except Exception as e:
+                print(1)
 
             layers[node_name] = tf.gather(input_0, indices, axis=axis)
 
@@ -153,7 +164,7 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
         logger.debug('Concat Keras layers.')
         if len(layer_input) > 1:
             if not np.array([tf.is_tensor(layer_input[i]) and K.is_keras_tensor(layer_input[i]) for i in
-                             range(len(layer_input))]).all():
+                             range(len(layer_input))]).all() or any([layer_input[i].shape == None for i in range(len(layer_input))]):
                 try:
                     layers[node_name] = tf.concat(layer_input, axis=params['axis'], name=keras_name)
                 except Exception as ex:
@@ -161,7 +172,10 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
                     raise
 
             else:
-                layer_input = unsqueeze_tensors_of_rank_one(layer_input, axis=params['axis'])
+                try:
+                    layer_input = unsqueeze_tensors_of_rank_one(layer_input, axis=params['axis'])
+                except Exception as e:
+                    print(1)
                 layers[node_name] = keras.layers.concatenate(inputs=layer_input,
                                                              axis=params['axis'],
                                                              name=keras_name)
@@ -236,7 +250,10 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
             else:
                 input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
                 input_0_shape = input_0.shape
-                first_mismatch = np.argmin(np.array(input_0_shape[:len(input_1)]) == input_1)
+                if len(input_0_shape) > 0:
+                    first_mismatch = np.argmin(np.array(input_0_shape[:len(input_1)]) == input_1)
+                else: # does not need to reshape dynamicalyy (skip next section)
+                    first_mismatch = 0
                 if (input_1 == None).any() and (np.array(input_0_shape) == None).any() and len(input_1) < len(
                         input_0_shape) \
                         and input_1[first_mismatch] == -1:  # reshape end
@@ -253,14 +270,14 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                     logger.debug('Target shape :')
                     logger.debug(np.int32(input_1[1:]))
 
-                    if len(np.int32(input_1[1:])) == 1 and np.int32(input_1[1:])[0] == -1:
+                    if len(np.int32(input_1[1:])) == 1 and len(np.int32(input_1[1:]))>0 and np.int32(input_1[1:])[0] == -1:
                         if input_0.shape.rank == 1:
                             input_0 = tf.expand_dims(input_0, 0)
                         logger.debug('The first argument is Keras/tf layer. Apply keras.Flatten.')
                         flatten = keras.layers.Flatten(name=keras_name)
                         layers[node_name] = flatten(input_0)
                     else:
-                        if input_0.shape[0] != input_1[0]:  # keras reshape don't work
+                        if len(input_0.shape) == 0 or input_0.shape[0] != input_1[0]:  # keras reshape don't work
                             new_shape = input_1.copy()
                             if dims_to_set_as_zero is not None:
                                 new_shape[dims_to_set_as_zero] = 0
@@ -285,28 +302,32 @@ def convert_unsqueeze(node, params, layers, lambda_func, node_name, keras_name):
     :param keras_name: resulting layer name
     :return: None
     """
-    logger = logging.getLogger('onnx2keras.unsqueeze')
+    try:
+        logger = logging.getLogger('onnx2keras.unsqueeze')
 
-    if len(node.input) != 1:
-        if len(node.input) == 2:
-            params['axes'] = layers[node.input[1]]
+        if len(node.input) != 1:
+            if len(node.input) == 2:
+                params['axes'] = layers[node.input[1]]
+            else:
+                raise AttributeError('Number of inputs is not equal 1 for unsqueeze layer')
+
+        if len(np.unique(params['axes'])) < len(params['axes']):
+            raise AttributeError(f"The specified axes contains duplicates values: {params['axes']}")
+
+        if is_numpy(layers[node.input[0]]):
+            logger.debug('Work with numpy types.')
+            layers[node_name] = layers[node.input[0]]
+            for axis in params['axes']:
+                layers[node_name] = np.expand_dims(layers[node_name], axis)
         else:
-            raise AttributeError('Number of inputs is not equal 1 for unsqueeze layer')
-
-    if len(np.unique(params['axes'])) < len(params['axes']):
-        raise AttributeError(f"The specified axes contains duplicates values: {params['axes']}")
-
-    if is_numpy(layers[node.input[0]]):
-        logger.debug('Work with numpy types.')
-        layers[node_name] = layers[node.input[0]]
-        for axis in params['axes']:
-            layers[node_name] = np.expand_dims(layers[node_name], axis)
-    else:
-        unsqueezed_input = layers[node.input[0]]
-        for axis in params['axes']:
-            unsqueezed_input = tf.expand_dims(unsqueezed_input, axis)
-
-        layers[node_name] = unsqueezed_input
+            unsqueezed_input = layers[node.input[0]]
+            for axis in params['axes']:
+                unsqueezed_input = tf.expand_dims(unsqueezed_input, axis)
+                # print(unsqueezed_input)
+            layers[node_name] = unsqueezed_input
+        print(1)
+    except Exception as e:
+        print(1)
 
 
 def convert_flatten(node, params, layers, lambda_func, node_name, keras_name):
@@ -327,11 +348,13 @@ def convert_flatten(node, params, layers, lambda_func, node_name, keras_name):
 
     logger.debug('Convert inputs to Keras/TF layers if needed.')
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-
-    input_dims = input_0.shape
-    flatten_axis = params.get('axis', 1)
-    reshaped_input = tf.reshape(input_0, [tf.reduce_prod(input_dims[:flatten_axis]),
-                                          tf.reduce_prod(input_dims[flatten_axis:])])
+    try:
+        input_dims = tf.shape(input_0)
+        flatten_axis = params.get('axis', 1)
+        reshaped_input = tf.reshape(input_0, [tf.reduce_prod(input_dims[:flatten_axis]),
+                                              tf.reduce_prod(input_dims[flatten_axis:])])
+    except Exception as e:
+        print(1)
     layers[node_name] = reshaped_input
 
 
@@ -367,10 +390,19 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             steps = list(layers[node.input[4]])
         except IndexError:
             steps = list(params.get("steps", [None] * len(axes)))
-
-    input_shape_len = len(layers[node.input[0]].shape)
-    axes_positives = [axis if axis >= 0 else input_shape_len + axis for axis in axes]
-
+    try:
+        max_len = len(layers[node.input[0]].shape)
+        axes_positives = [axis if axis >= 0 else max_len + axis for axis in axes]
+    except ValueError as e:
+        if layers[node.input[0]].shape == None: #tensor with unknown shape (not the same as dynamic)
+            max_len = max(axes)+1
+            if any([axis < 0 for axis in axes]):
+                raise NotImplementedError("For a tensor with unknown shape, can't use negative axis")
+            else:
+                axes_positives = axes
+        else:
+            raise NotImplementedError(f"Couldn't transform the axis in a slice layer {node_name}")
+        print(1)
     slice_spec_param = []
     is_dynamic = False
     for i in range(len(starts)):
@@ -378,7 +410,7 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             if index_li[i] is not None and not isinstance(index_li[i], int) and not is_numpy(index_li[i]) and K.is_keras_tensor(index_li[i]):
                 is_dynamic = True
     if not is_dynamic:
-        for axis in range(input_shape_len):
+        for axis in range(max_len):
             if axis in axes_positives:
                 axis_index = axes_positives.index(axis)
                 start = starts[axis_index]
@@ -398,23 +430,33 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
                 sliced = sliced.numpy()
         layers[node_name] = sliced
     else:
+        try:
+            steps = list(layers[node.input[4]])
+        except IndexError:
+            steps = list(params.get("steps", [1] * len(axes)))
         input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
         keras_shape = tf.shape(layers[node.input[0]])
-        start_vec = [0] * input_shape_len
-        end_vec = [keras_shape[i] for i in range(input_shape_len)]
-        step_vec = [1] * input_shape_len
-        for axis in range(input_shape_len):
+        start_vec = [0] * max_len
+        end_vec = [keras_shape[i] for i in range(max_len)]
+        step_vec = [1] * max_len
+        for axis in range(max_len):
             if axis in axes_positives:
                 axis_index = axes_positives.index(axis)
                 for res_list, input_list in zip([start_vec, step_vec, end_vec],[starts, steps, ends]):
                     slice_index = input_list[axis_index]
-                    if not is_numpy(input_list[axis_index]) and input_list[axis_index].dtype != tf.int32:
-                        slice_index = tf.cast(slice_index, tf.int32)
+                    try:
+                        if input_list[axis_index] is not None and not isinstance(slice_index, int) and not is_numpy(input_list[axis_index]) and input_list[axis_index].dtype != tf.int32:
+                            slice_index = tf.cast(slice_index, tf.int32)
+                    except Exception as e:
+                        print(1)
                     res_list[axis] = slice_index
-        layers[node_name] = tf.strided_slice(input_0,
-                                             tf.concat([start_vec], axis=0),
-                                             tf.concat([end_vec], axis=0),
-                                             tf.concat([step_vec], axis=0))
+        try:
+            layers[node_name] = tf.strided_slice(input_0,
+                                                 tf.concat([start_vec], axis=0),
+                                                 tf.concat([end_vec], axis=0),
+                                                 tf.concat([step_vec], axis=0))
+        except Exception as e:
+            print(1)
 
 
 def convert_squeeze(node, params, layers, lambda_func, node_name, keras_name):

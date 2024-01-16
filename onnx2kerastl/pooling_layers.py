@@ -6,6 +6,7 @@ import string
 import random
 import tensorflow as tf
 
+
 def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert MaxPooling layer
@@ -28,8 +29,8 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
     pad = 'valid'
 
     if all([shape % 2 == 1 for shape in kernel_shape]) and \
-       all([kernel_shape[i] // 2 == pads[i] for i in range(len(kernel_shape))]) and \
-       all([shape == 1 for shape in stride_shape]):
+            all([kernel_shape[i] // 2 == pads[i] for i in range(len(kernel_shape))]) and \
+            all([shape == 1 for shape in stride_shape]):
         pad = 'same'
         logger.debug('Use `same` padding parameters.')
     else:
@@ -115,8 +116,8 @@ def convert_avgpool(node, params, layers, lambda_func, node_name, keras_name):
         pad = 'valid'
 
     elif all([shape % 2 == 1 for shape in kernel_shape]) and \
-       all([kernel_shape[i] // 2 == pads[i] for i in range(len(kernel_shape))]) and \
-       all([shape == 1 for shape in stride_shape]):
+            all([kernel_shape[i] // 2 == pads[i] for i in range(len(kernel_shape))]) and \
+            all([shape == 1 for shape in stride_shape]):
         pad = 'same'
         logger.debug('Use `same` padding parameters.')
     else:
@@ -186,7 +187,7 @@ def convert_global_avg_pool(node, params, layers, lambda_func, node_name, keras_
     input_0 = global_pool(input_0)
     new_shape = input_0.shape.as_list()
     new_shape = new_shape[1:]
-    new_shape.extend([1]*(tensor_dim-2))
+    new_shape.extend([1] * (tensor_dim - 2))
     reshape_layer = keras.layers.Reshape(new_shape)
     input_0 = reshape_layer(input_0)
 
@@ -214,33 +215,129 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
     else:
         in_tensor = x
 
-    def target_layer(in_tensor,k=k, to_sort=to_sort, axis=axis):
+    def target_layer(in_tensor, k=k, to_sort=to_sort, axis=axis):
         rank = len(in_tensor.shape)
-        if axis >= rank-1 or axis == -1:
+        if axis >= rank - 1 or axis == -1:
             permuted = in_tensor
         else:
             ord_permute = np.arange(rank)
-            ord_permute[axis] = rank-1
+            ord_permute[axis] = rank - 1
             ord_permute[-1] = axis
             permuted = tf.transpose(in_tensor, ord_permute)
-        topk_res = tf.math.top_k(permuted, k=k, sorted=to_sort)
+        if isinstance(k, tf.Tensor) and k.dtype != tf.int32:  # otherwise top_k raise error
+            casted_k = tf.cast(k, tf.int32)
+        else:
+            casted_k = k
+        topk_res = tf.math.top_k(permuted, k=casted_k, sorted=to_sort)
         values_pre_permute = topk_res[0]
         indices_pre_permute = topk_res[1]
         topk_concat = tf.stack([values_pre_permute, tf.cast(indices_pre_permute, tf.float32)])
         if axis >= rank - 1 or axis == -1:
             out = topk_concat
         else:
-            ord_permute = [0] + (ord_permute+1).tolist()
+            ord_permute = [0] + (ord_permute + 1).tolist()
             out = tf.transpose(topk_concat, ord_permute)
         return out
 
-    lambda_layer = keras.layers.Lambda(target_layer)
-    result = lambda_layer(in_tensor)
+    try:
+        lambda_layer = keras.layers.Lambda(target_layer)
+        result = lambda_layer(in_tensor)
+    except Exception as e:
+        print(1)
     values = result[0]
     indices = tf.cast(result[1], tf.int32)
     if not largest:
         out_tensor = -values
     else:
         out_tensor = values
-    layers[keras_name[0]] = out_tensor
-    layers[keras_name[1]] = indices
+    layers[params['_outputs'][0]] = out_tensor
+    layers[params['_outputs'][1]] = indices
+
+
+def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
+    # extract params
+    output_height = params.get('output_height', 1)
+    output_width = params.get('output_width', 1)
+    sampling_ratio = params.get('sampling_ratio', 0)
+    spatial_scale = params.get('spatial_scale', 1.0)
+    mode = params.get('mode', 'avg')
+
+    feature_map = layers[node.input[0]]
+    rois = layers[node.input[1]]
+    batch_indices = layers[node.input[2]]
+
+    adaptive_ratio = False
+    if sampling_ratio <= 0:
+        sampling_ratio = int((output_height + output_width) / 2)
+        adaptive_ratio = True
+
+    rois = rois * spatial_scale
+    box_ind = tf.cast(batch_indices, tf.int32)
+
+    fm_shape = tf.shape(feature_map)[1:3]
+    # extract inputs
+    x0, y0, x1, y1 = tf.split(rois, 4, axis=1)
+    if not adaptive_ratio:
+        crop_shape = (
+            output_height * sampling_ratio,
+            output_width * sampling_ratio,
+        )
+        spacing_w = (x1 - x0) / tf.cast(crop_shape[1], dtype=tf.float32)
+        spacing_h = (y1 - y0) / tf.cast(crop_shape[0], dtype=tf.float32)
+        nx0 = (x0 + spacing_w / 2) / tf.cast(fm_shape[1] - 1, dtype=tf.float32)
+        ny0 = (y0 + spacing_h / 2) / tf.cast(fm_shape[0] - 1, dtype=tf.float32)
+
+        nw = spacing_w * tf.cast(
+            crop_shape[1] - 1,
+            dtype=tf.float32,
+        ) / tf.cast(
+            fm_shape[1] - 1,
+            dtype=tf.float32,
+        )
+        nh = spacing_h * tf.cast(
+            crop_shape[0] - 1,
+            dtype=tf.float32,
+        ) / tf.cast(
+            fm_shape[0] - 1,
+            dtype=tf.float32,
+        )
+    else:
+        roi_width = x1 - x0
+        roi_height = y1 - y0
+        nx0 = x0 / tf.cast(fm_shape[1] - 1, dtype=tf.float32)
+        ny0 = y0 / tf.cast(fm_shape[0] - 1, dtype=tf.float32)
+        nw = (roi_width - 1) / tf.cast(fm_shape[1] - 1, dtype=tf.float32)
+        nh = (roi_height - 1) / tf.cast(fm_shape[0] - 1, dtype=tf.float32)
+
+    boxes = tf.concat([ny0, nx0, ny0 + nh, nx0 + nw], axis=1)
+
+    permuted_features = keras.layers.Permute([2, 3, 1])(feature_map) # move to channels last
+    cropped_tensor = tf.image.crop_and_resize(
+        permuted_features,
+        boxes,
+        tf.cast(box_ind, dtype=tf.int32),
+        crop_size=(
+            output_height * sampling_ratio,
+            output_width * sampling_ratio,
+        ),
+        method='bilinear'
+    )
+
+    pooled_tensor = None
+    if mode.lower() == 'avg':
+        pooled_tensor = tf.nn.avg_pool(
+            input=cropped_tensor,
+            ksize=[1, sampling_ratio, sampling_ratio, 1],
+            strides=[1, sampling_ratio, sampling_ratio, 1],
+            padding='SAME',
+            name=node_name,
+        )
+    elif mode.lower() == 'max':
+        pooled_tensor = tf.nn.max_pool(
+            input=cropped_tensor,
+            ksize=[1, sampling_ratio, sampling_ratio, 1],
+            strides=[1, sampling_ratio, sampling_ratio, 1],
+            padding='SAME',
+            name=node_name,
+        )
+    layers[node_name] = keras.layers.Permute([3, 1, 2])(pooled_tensor) # move to channels first
