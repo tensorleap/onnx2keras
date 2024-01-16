@@ -167,73 +167,6 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
         node_names = []
         embedding_weights_mapping = {}
         for node_index, node in enumerate(onnx_nodes):
-            # if node.op_type == 'If':
-            #     from .utils import is_numpy
-            #     import numpy as np
-            #     if len(layers[node.input[0]].shape) == 0:
-            #         cond = layers[node.input[0]]
-            #     else:
-            #         cond = layers[node.input[0]][0]
-            #     outputs = [layers[node.attribute[i].g.output[0].name] for i in range(2)]
-            #     outputs_dtypes = [output.dtype for output in outputs]
-            #     outputs_numpy_dtypes = [outputs_dtypes[i] if is_numpy(outputs[i]) else outputs_dtypes[i].as_numpy_dtype for i in range(2)]
-            #     if outputs_numpy_dtypes[0] != outputs_numpy_dtypes[1]:
-            #         smallest_idx = np.argmin([np.iinfo[outputs_numpy_dtypes[i]].max()])
-            #     if is_numpy(outputs[smallest_idx]):
-            #         outputs[smallest_idx] = outputs[smallest_idx].astype(outputs_numpy_dtypes[1-smallest_idx])
-            #     else:
-            #             outputs[smallest_idx] = tf.cast(outputs[smallest_idx], tf.as_dtype(outputs_dtypes[1-smallest_idx]))
-            #     tf.keras.backend.switch(cond, outputs[0], outputs[1])
-            #     if not isinstance(cond, bool) and not isinstance(cond, tf.Tensor) and keras.backend.is_keras_tensor(
-            #             cond):
-
-                #     # the condition in If is a KerasTensor and needs to be evlauated.
-                #     inpt_sample = [tf.ones(inpt.shape) for inpt in keras_inputs]
-                #
-                #     else_inputs = set()
-                #     for g_node in node.attribute[1].g.node:
-                #         for inpt in g_node.input:
-                #             if inpt in layers:
-                #                 else_inputs.add(inpt)
-                #     else_inputs = sorted(list(else_inputs))
-                #
-                #     import onnx
-                #     from onnx import helper
-                #     import numpy as np
-                #     else_onnx_graph = onnx.GraphProto()
-                #     else_onnx_graph.CopyFrom(node.attribute[1].g)
-                #
-                #     # else_onnx_model = helper.make_model(node.attribute[1].g)
-                #     input_types = [onnx.TensorProto.FLOAT, onnx.TensorProto.FLOAT, onnx.TensorProto.INT64]
-                #
-                #     # Create new input value infos without specifying shapes
-                #     input_value_infos = [helper.make_tensor_value_info(name, type, np.array(layers[name].shape)) for name, type in
-                #                          zip(else_inputs, input_types)]
-                #
-                #     # Update the existing graph with new inputs
-                #     else_onnx_graph.input.extend(input_value_infos)
-                #     else_model = onnx_to_keras(helper.make_model(else_onnx_graph), else_inputs, name_policy='attach_weights_name',
-                #                                input_types=[tf.float32, tf.float32, tf.int64])
-                #     # Optional: Print the updated graph for inspection
-                #     # print(existing_graph)
-                #     fixed_inputs = []
-                #     for inpt in else_inputs:
-                #         if len(layers[inpt].shape) <= 1:
-                #             fixed_inputs.append(tf.expand_dims(layers[inpt], 1))
-                #         else:
-                #             fixed_inputs.append(layers[inpt])
-                #     else_output = else_model.converted_model(fixed_inputs)
-                #     cond = keras.models.Model(keras_inputs, cond)(inpt_sample)
-                # if cond:
-                #     replace_node = node.attribute[0].g.node
-                # else:
-                #     replace_node = node.attribute[1].g.node
-                # replace_node = extract_op_node(replace_node, layers, lambda_funcs, keras_names, change_ordering,
-                #                                name_policy)
-                # replace_node.output.pop()
-                # for i in range(len(node.output)):
-                #     replace_node.output.append(node.output[i])
-                # node = replace_node
             node_type = node.op_type
             node_params = onnx_node_attributes_to_dict(node.attribute)
             # Add global converter info:
@@ -367,12 +300,7 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
             if layer in layers:
                 keras_outputs.append(layers[layer])
 
-        # Create model
-        import numpy as np
-        inpt = np.random.uniform(0, 1, (1, 3, 800, 800))
-        model = keras.models.Model(inputs=keras_inputs, outputs=keras_outputs[:-1])
-        #len(tf.keras.Model(inputs=keras_inputs, outputs=layers[onnx_nodes[1000].output[0]]).layers)
-        tf.keras.Model(inputs=keras_inputs, outputs=model.layers[921].output)(inpt)
+        model = keras.models.Model(inputs=keras_inputs, outputs=keras_outputs)
     except Exception as e:
         if len(keras_middle_outputs) == 0:
             raise e
