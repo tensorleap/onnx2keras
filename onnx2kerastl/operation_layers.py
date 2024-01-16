@@ -800,5 +800,18 @@ def convert_if(node, params, layers, lambda_func, node_name, keras_name):
             outputs[smallest_idx] = outputs[smallest_idx].astype(outputs_numpy_dtypes[1 - smallest_idx])
         else:
             outputs[smallest_idx] = tf.cast(outputs[smallest_idx], tf.as_dtype(outputs_dtypes[1 - smallest_idx]))
-    layers[node_name] = tf.keras.backend.switch(cond, outputs[0], outputs[1])
-    print(1)
+    in_vec = outputs[0]
+    if is_numpy(in_vec): #if this is a constant it would not be serialized well. connect it to input
+        # f_then = lambda x: in_vec
+        dtype = in_vec.dtype
+        if len(in_vec) == 0: # empty arrays does not serialize well in lambdas.
+            then_lambda = lambda x: np.array([], dtype=dtype)
+        else:
+            then_lambda = lambda x: in_vec
+        lambda_layer = tf.keras.layers.Lambda(then_lambda)
+        if not K.is_keras_tensor(cond):
+            raise NotImplementedError("We do not support an if where both the then branch and the in-vector are constants")
+        then_output = lambda_layer(cond) # this assumes
+    else:
+        then_output = outputs[0]
+    layers[node_name] = tf.keras.backend.switch(cond, then_output, outputs[1])
