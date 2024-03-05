@@ -1,5 +1,8 @@
 import keras
 import logging
+
+from .customonnxlayer.onnxisdynamic import IsDynamicLayer
+from .customonnxlayer.onnxtopk import CustomTopKLayer
 from .utils import ensure_tf_type, is_numpy
 import numpy as np
 import string
@@ -30,8 +33,8 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
     pad = 'valid'
 
     if all([shape % 2 == 1 for shape in kernel_shape]) and \
-       all([kernel_shape[i] // 2 == pads[i] for i in range(len(kernel_shape))]) and \
-       all([shape == 1 for shape in stride_shape]):
+            all([kernel_shape[i] // 2 == pads[i] for i in range(len(kernel_shape))]) and \
+            all([shape == 1 for shape in stride_shape]):
         pad = 'same'
         logger.debug('Use `same` padding parameters.')
     else:
@@ -117,8 +120,8 @@ def convert_avgpool(node, params, layers, lambda_func, node_name, keras_name):
         pad = 'valid'
 
     elif all([shape % 2 == 1 for shape in kernel_shape]) and \
-       all([kernel_shape[i] // 2 == pads[i] for i in range(len(kernel_shape))]) and \
-       all([shape == 1 for shape in stride_shape]):
+            all([kernel_shape[i] // 2 == pads[i] for i in range(len(kernel_shape))]) and \
+            all([shape == 1 for shape in stride_shape]):
         pad = 'same'
         logger.debug('Use `same` padding parameters.')
     else:
@@ -211,15 +214,19 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
     to_sort = bool(params.get('sorted', 1))
     x = layers[node.input[0]]
     k = layers[node.input[1]][0]
-    if not is_numpy(k) and not K.is_keras_tensor(k): # Eager tensor does not serialize well
+    if not is_numpy(k) and not K.is_keras_tensor(k):  # Eager tensor does not serialize well
         k = k.numpy().astype(np.int32)
     if not largest:
         in_tensor = -x
     else:
         in_tensor = x
 
-    def target_layer(in_tensor, k=k, to_sort=to_sort, axis=axis):
+    def target_layer(composed_input, to_sort=to_sort, axis=axis):
+        in_tensor = composed_input[..., :-1]
+        k = composed_input[..., -1]
+        k = tf.cast(tf.reshape(k, [1])[0], tf.int32)
         rank = len(in_tensor.shape)
+
         if axis >= rank - 1 or axis == -1:
             permuted = in_tensor
         else:
@@ -227,7 +234,10 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
             ord_permute[axis] = rank - 1
             ord_permute[-1] = axis
             permuted = tf.transpose(in_tensor, ord_permute)
-        if (isinstance(k, tf.Tensor) or (not isinstance(k, (np.ndarray, np.generic)) and not isinstance(k, int) and tf.keras.backend.is_keras_tensor(k)))\
+
+        if (isinstance(k, tf.Tensor) or (not isinstance(k, (np.ndarray, np.generic)) and not isinstance(k,
+                                                                                                        int) and tf.keras.backend.is_keras_tensor(
+            k))) \
                 and k.dtype != tf.int32:  # otherwise top_k raise error
             casted_k = tf.cast(k, tf.int32)
         else:
@@ -243,8 +253,10 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
             out = tf.transpose(topk_concat, ord_permute)
         return out
 
+    k_reshaped = tf.cast(tf.reshape(k, tf.ones((tf.rank(in_tensor)._inferred_value), dtype=tf.int32)), tf.float32)
+    composed_input = tf.concat([in_tensor, k_reshaped], axis=-1)
     lambda_layer = keras.layers.Lambda(target_layer)
-    result = lambda_layer(in_tensor)
+    result = lambda_layer(composed_input)
     values = result[0]
     indices = tf.cast(result[1], tf.int32)
     if not largest:
@@ -253,6 +265,95 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
         out_tensor = values
     layers[params['_outputs'][0]] = out_tensor
     layers[params['_outputs'][1]] = indices
+#
+
+# def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
+#     """
+#     Convert topk layer
+#     :param node: current operation node
+#     :param params: operation attributes
+#     :param layers: available keras layers
+#     :param lambda_func: function for keras Lambda layer
+#     :param node_name: internal converter name
+#     :param keras_name: resulting layer name
+#     :return: None
+#     """
+#     axis = params.get('axis', -1)
+#     largest = bool(params.get('largest', 1))
+#     to_sort = bool(params.get('sorted', 1))
+#     x = layers[node.input[0]]
+#     k = layers[node.input[1]][0]
+#     if not is_numpy(k) and not K.is_keras_tensor(k):  # Eager tensor does not serialize well
+#         k = k.numpy().astype(np.int32)
+#     if not largest:
+#         in_tensor = -x
+#     else:
+#         in_tensor = x
+#
+#     def target_layer(in_tensor, k=k, to_sort=to_sort, axis=axis):
+#         rank = len(in_tensor.shape)
+#         to_transpose = axis >= rank - 1 or axis == -1
+#         is_dynamic_layer = IsDynamicLayer()
+#         is_k_dynamic = is_dynamic_layer(k)
+#
+#         def dynamic_branch():
+#             if to_transpose:
+#                 permuted = in_tensor
+#             else:
+#                 ord_permute = np.arange(rank)
+#                 ord_permute[axis] = rank - 1
+#                 ord_permute[-1] = axis
+#                 permuted = tf.transpose(in_tensor, ord_permute)
+#             topk_res = tf.math.top_k(permuted, k=tf.shape(permuted)[-1], sorted=to_sort)
+#             values_pre_permute = topk_res[0]
+#             indices_pre_permute = topk_res[1]
+#             topk_concat = tf.stack([values_pre_permute, tf.cast(indices_pre_permute, tf.float32)])
+#             if axis >= rank - 1 or axis == -1:
+#                 out = topk_concat
+#             else:
+#                 ord_permute = [0] + (ord_permute + 1).tolist()
+#                 out = tf.transpose(topk_concat, ord_permute)
+#             return out
+#
+#         def static_branch():
+#             if to_transpose:
+#                 permuted = in_tensor
+#             else:
+#                 ord_permute = np.arange(rank)
+#                 ord_permute[axis] = rank - 1
+#                 ord_permute[-1] = axis
+#                 permuted = tf.transpose(in_tensor, ord_permute)
+#
+#             if (isinstance(k, tf.Tensor) or (not isinstance(k, (np.ndarray, np.generic)) and not isinstance(k,
+#                                                                                                             int) and tf.keras.backend.is_keras_tensor(
+#                 k))) \
+#                     and k.dtype != tf.int32:  # otherwise top_k raise error
+#                 casted_k = tf.cast(k, tf.int32)
+#             else:
+#                 casted_k = k
+#             topk_res = tf.math.top_k(permuted, k=casted_k, sorted=to_sort)
+#             values_pre_permute = topk_res[0]
+#             indices_pre_permute = topk_res[1]
+#             topk_concat = tf.stack([values_pre_permute, tf.cast(indices_pre_permute, tf.float32)])
+#             if axis >= rank - 1 or axis == -1:
+#                 out = topk_concat
+#             else:
+#                 ord_permute = [0] + (ord_permute + 1).tolist()
+#                 out = tf.transpose(topk_concat, ord_permute)
+#             return out
+#
+#         return tf.cond(is_k_dynamic, true_fn=dynamic_branch, false_fn=static_branch)
+#
+#     lambda_layer = keras.layers.Lambda(target_layer)
+#     result = lambda_layer(in_tensor)
+#     values = result[0]
+#     indices = tf.cast(result[1], tf.int32)
+#     if not largest:
+#         out_tensor = -values
+#     else:
+#         out_tensor = values
+#     layers[params['_outputs'][0]] = out_tensor
+#     layers[params['_outputs'][1]] = indices
 
 
 def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
@@ -262,6 +363,8 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
     sampling_ratio = params.get('sampling_ratio', 0)
     spatial_scale = params.get('spatial_scale', 1.0)
     mode = params.get('mode', 'avg')
+    if isinstance(mode, bytes):
+        mode = mode.decode('utf-8')
 
     feature_map = layers[node.input[0]]
     rois = layers[node.input[1]]
@@ -275,7 +378,7 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
     rois = rois * spatial_scale
     box_ind = tf.cast(batch_indices, tf.int32)
     if keras.backend.image_data_format() == 'channels_first':
-        fm_shape = tf.shape(feature_map)[2:] # H, W
+        fm_shape = tf.shape(feature_map)[2:]  # H, W
     else:
         raise NotImplementedError("To support channels_last in RoiAlign - need to remove permutes")
     # extract inputs
@@ -317,7 +420,7 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
 
     boxes = tf.concat([ny0, nx0, ny0 + nh, nx0 + nw], axis=1)
 
-    permuted_features = keras.layers.Permute([2, 3, 1])(feature_map) # move to channels last
+    permuted_features = keras.layers.Permute([2, 3, 1])(feature_map)  # move to channels last
     cropped_tensor = tf.image.crop_and_resize(
         permuted_features,
         boxes,
@@ -348,4 +451,6 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
             name=node_name,
             data_format='NHWC'
         )
+    else:
+        raise ValueError(f"Unknown pooling mode: {mode}")
     layers[node_name] = keras.layers.Permute([3, 1, 2])(pooled_tensor)

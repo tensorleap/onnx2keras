@@ -6,7 +6,7 @@ import tensorflow as tf
 from keras import backend as K
 
 from .exceptions import UnsupportedLayer
-from .utils import is_numpy, ensure_tf_type
+from .utils import is_numpy, ensure_tf_type, match_dtype_for_dynamic_input_tensors
 
 # Handle python 2.7 import error
 try:
@@ -525,7 +525,9 @@ def convert_not(node, params, layers, lambda_func, node_name, keras_name):
 
 
 def convert_less(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = tf.math.less(layers[node.input[0]], layers[node.input[1]])
+    layer_input = [layers[node.input[0]], layers[node.input[1]]]
+    layer_input = match_dtype_for_dynamic_input_tensors(layer_input)
+    layers[node_name] = tf.math.less(*layer_input)
 
 
 def convert_sign(node, params, layers, lambda_func, node_name, keras_name):
@@ -740,15 +742,18 @@ def pseudo_gathernd(input_tensor, indices_tensor):
 
 
 def convert_nms(node, params, layers, lambda_func, node_name, keras_name):
-    batch_size = layers[node.input[0]].shape[0]
+    boxes = tf.reshape(layers[node.input[0]], (1, -1, 4))
+    scores = layers[node.input[1]]
+    scores = tf.reshape(scores, (1, scores.shape[1], -1))
+    batch_size = boxes.shape[0]
+
     if batch_size is None:
         raise AttributeError("Onnx2kerras: NMS conversion does not support dynamic batch."
                              "Please change batch to static or remove NMS from model")
     center_point_box = params.get("center_point_box", 0)
     if center_point_box != 0:
         raise AttributeError("Onnx2kerras: We do not support the center_point_box parameter")
-    boxes = layers[node.input[0]]
-    scores = layers[node.input[1]]
+
     iou_threshold = 0
     score_threshold = float('-inf')
     max_output_size = [2 ** 30]
@@ -766,7 +771,7 @@ def convert_nms(node, params, layers, lambda_func, node_name, keras_name):
                                                    scores=scores[batch, c_class],
                                                    max_output_size=tf.cast(max_output_size[0], tf.int32),
                                                    iou_threshold=iou_threshold[0],
-                                                   score_threshold=score_threshold)
+                                                   score_threshold=score_threshold[0])
             class_tensor = c_class * tf.ones_like(indices)
             batch_tensor = batch * tf.ones_like(indices)
             res = tf.stack([batch_tensor, class_tensor, indices], axis=-1)
