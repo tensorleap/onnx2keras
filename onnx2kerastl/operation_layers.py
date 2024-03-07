@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 from keras import backend as K
 
+from .customonnxlayer.onnxless import OnnxLess
 from .exceptions import UnsupportedLayer
 from .utils import is_numpy, ensure_tf_type, match_dtype_for_dynamic_input_tensors
 
@@ -242,14 +243,13 @@ def convert_reduce_prod(node, params, layers, lambda_func, node_name, keras_name
     elif len(node.input) == 2:
         axes = layers.get(node.input[1])
     else:
-        axes = None #default is to reduce over all dimensions
+        axes = None  # default is to reduce over all dimensions
     noop_with_empty_axes = bool(params.get("noop_with_empty_axes", False))
     keepdims = bool(params.get("keepdims", True))
     if noop_with_empty_axes and params.get("axes") is None:
         layers[node_name] = layers[node.input[0]]
     else:
         layers[node_name] = tf.math.reduce_prod(layers[node.input[0]], axis=axes, keepdims=keepdims)
-
 
 
 def convert_pow(node, params, layers, lambda_func, node_name, keras_name):
@@ -320,7 +320,7 @@ def convert_split(node, params, layers, lambda_func, node_name, keras_names):
     cur = 0
     for i, split in enumerate(splits):
         if len(splits) > 1:
-         node_name = params['_outputs'][i]
+            node_name = params['_outputs'][i]
 
         def target_layer(x, axis=axis, start_i=cur, end_i=cur + split):
             slices = [slice(None, None)] * len(K.int_shape(x))
@@ -524,10 +524,15 @@ def convert_not(node, params, layers, lambda_func, node_name, keras_name):
     layers[node_name] = tf.logical_not(input_0)
 
 
+# def convert_less(node, params, layers, lambda_func, node_name, keras_name):
+#     layers[node_name] = tf.math.less(layers[node.input[0]], layers[node.input[1]])
 def convert_less(node, params, layers, lambda_func, node_name, keras_name):
-    layer_input = [layers[node.input[0]], layers[node.input[1]]]
-    layer_input = match_dtype_for_dynamic_input_tensors(layer_input)
-    layers[node_name] = tf.math.less(*layer_input)
+    # Assuming the parameter x is obtained from node.input[0] and y is the input tensor
+    x_param = layers[node.input[0]]  # Retrieve the parameter value for x
+    y_input = layers[node.input[1]]  # Retrieve the input tensor for y
+
+    # Instantiate the custom layer with x as a parameter
+    layers[node_name] = OnnxLess(x=x_param)(y_input)
 
 
 def convert_sign(node, params, layers, lambda_func, node_name, keras_name):
@@ -744,7 +749,9 @@ def pseudo_gathernd(input_tensor, indices_tensor):
 def convert_nms(node, params, layers, lambda_func, node_name, keras_name):
     boxes = tf.reshape(layers[node.input[0]], (1, -1, 4))
     scores = layers[node.input[1]]
+    # scores = tf.reshape(scores, (1, tf.shape(scores)[1], -1))
     scores = tf.reshape(scores, (1, scores.shape[1], -1))
+
     batch_size = boxes.shape[0]
 
     if batch_size is None:
@@ -763,6 +770,8 @@ def convert_nms(node, params, layers, lambda_func, node_name, keras_name):
         iou_threshold = layers.get(node.input[3], [0])
     if len(node.input) > 4:
         score_threshold = layers.get(node.input[4], float('-inf'))
+        if isinstance(score_threshold, np.ndarray):
+            score_threshold = score_threshold[0]
     num_classes = scores.shape[1]
     all_results = []
     for batch in range(batch_size):
@@ -771,12 +780,12 @@ def convert_nms(node, params, layers, lambda_func, node_name, keras_name):
                                                    scores=scores[batch, c_class],
                                                    max_output_size=tf.cast(max_output_size[0], tf.int32),
                                                    iou_threshold=iou_threshold[0],
-                                                   score_threshold=score_threshold[0])
+                                                   score_threshold=score_threshold)
             class_tensor = c_class * tf.ones_like(indices)
             batch_tensor = batch * tf.ones_like(indices)
             res = tf.stack([batch_tensor, class_tensor, indices], axis=-1)
             all_results.append(res)
-    layers[node_name] = tf.concat(all_results, axis=0)
+    layers[node_name] = tf.cast(tf.concat(all_results, axis=0), dtype=tf.int64)
 
 
 def convert_if(node, params, layers, lambda_func, node_name, keras_name):
@@ -795,7 +804,7 @@ def convert_if(node, params, layers, lambda_func, node_name, keras_name):
         else:
             outputs[smallest_idx] = tf.cast(outputs[smallest_idx], tf.as_dtype(outputs_dtypes[1 - smallest_idx]))
     in_vec = outputs[0]
-    if is_numpy(in_vec): #if this is a constant it would not be serialized well. connect it to input
+    if is_numpy(in_vec):  # if this is a constant it would not be serialized well. connect it to input
         # f_then = lambda x: in_vec
         new_dtype = in_vec.dtype.type
 
@@ -803,14 +812,15 @@ def convert_if(node, params, layers, lambda_func, node_name, keras_name):
         def get_empty_array(x, dtype=new_dtype, keras_name=keras_name):
             return tf.convert_to_tensor(np.array([]), dtype=new_dtype, name=f'{keras_name}_output')
 
-        if len(in_vec) == 0: # empty arrays does not serialize well in lambdas.
+        if len(in_vec) == 0:  # empty arrays does not serialize well in lambdas.
             then_lambda = get_empty_array
         else:
             then_lambda = lambda x: in_vec
         lambda_layer = tf.keras.layers.Lambda(then_lambda, name=keras_name)
         if not K.is_keras_tensor(cond):
-            raise NotImplementedError("We do not support an if where both the then branch and the in-vector are constants")
-        then_output = lambda_layer(cond) # this assumes
+            raise NotImplementedError(
+                "We do not support an if where both the then branch and the in-vector are constants")
+        then_output = lambda_layer(cond)  # this assumes
     else:
         then_output = outputs[0]
     layers[node_name] = tf.keras.backend.switch(cond, then_output, outputs[1])

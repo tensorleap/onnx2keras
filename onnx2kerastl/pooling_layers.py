@@ -1,8 +1,6 @@
 import keras
 import logging
 
-from .customonnxlayer.onnxisdynamic import IsDynamicLayer
-from .customonnxlayer.onnxtopk import CustomTopKLayer
 from .utils import ensure_tf_type, is_numpy
 import numpy as np
 import string
@@ -265,95 +263,9 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
         out_tensor = values
     layers[params['_outputs'][0]] = out_tensor
     layers[params['_outputs'][1]] = indices
-#
 
-# def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
-#     """
-#     Convert topk layer
-#     :param node: current operation node
-#     :param params: operation attributes
-#     :param layers: available keras layers
-#     :param lambda_func: function for keras Lambda layer
-#     :param node_name: internal converter name
-#     :param keras_name: resulting layer name
-#     :return: None
-#     """
-#     axis = params.get('axis', -1)
-#     largest = bool(params.get('largest', 1))
-#     to_sort = bool(params.get('sorted', 1))
-#     x = layers[node.input[0]]
-#     k = layers[node.input[1]][0]
-#     if not is_numpy(k) and not K.is_keras_tensor(k):  # Eager tensor does not serialize well
-#         k = k.numpy().astype(np.int32)
-#     if not largest:
-#         in_tensor = -x
-#     else:
-#         in_tensor = x
+
 #
-#     def target_layer(in_tensor, k=k, to_sort=to_sort, axis=axis):
-#         rank = len(in_tensor.shape)
-#         to_transpose = axis >= rank - 1 or axis == -1
-#         is_dynamic_layer = IsDynamicLayer()
-#         is_k_dynamic = is_dynamic_layer(k)
-#
-#         def dynamic_branch():
-#             if to_transpose:
-#                 permuted = in_tensor
-#             else:
-#                 ord_permute = np.arange(rank)
-#                 ord_permute[axis] = rank - 1
-#                 ord_permute[-1] = axis
-#                 permuted = tf.transpose(in_tensor, ord_permute)
-#             topk_res = tf.math.top_k(permuted, k=tf.shape(permuted)[-1], sorted=to_sort)
-#             values_pre_permute = topk_res[0]
-#             indices_pre_permute = topk_res[1]
-#             topk_concat = tf.stack([values_pre_permute, tf.cast(indices_pre_permute, tf.float32)])
-#             if axis >= rank - 1 or axis == -1:
-#                 out = topk_concat
-#             else:
-#                 ord_permute = [0] + (ord_permute + 1).tolist()
-#                 out = tf.transpose(topk_concat, ord_permute)
-#             return out
-#
-#         def static_branch():
-#             if to_transpose:
-#                 permuted = in_tensor
-#             else:
-#                 ord_permute = np.arange(rank)
-#                 ord_permute[axis] = rank - 1
-#                 ord_permute[-1] = axis
-#                 permuted = tf.transpose(in_tensor, ord_permute)
-#
-#             if (isinstance(k, tf.Tensor) or (not isinstance(k, (np.ndarray, np.generic)) and not isinstance(k,
-#                                                                                                             int) and tf.keras.backend.is_keras_tensor(
-#                 k))) \
-#                     and k.dtype != tf.int32:  # otherwise top_k raise error
-#                 casted_k = tf.cast(k, tf.int32)
-#             else:
-#                 casted_k = k
-#             topk_res = tf.math.top_k(permuted, k=casted_k, sorted=to_sort)
-#             values_pre_permute = topk_res[0]
-#             indices_pre_permute = topk_res[1]
-#             topk_concat = tf.stack([values_pre_permute, tf.cast(indices_pre_permute, tf.float32)])
-#             if axis >= rank - 1 or axis == -1:
-#                 out = topk_concat
-#             else:
-#                 ord_permute = [0] + (ord_permute + 1).tolist()
-#                 out = tf.transpose(topk_concat, ord_permute)
-#             return out
-#
-#         return tf.cond(is_k_dynamic, true_fn=dynamic_branch, false_fn=static_branch)
-#
-#     lambda_layer = keras.layers.Lambda(target_layer)
-#     result = lambda_layer(in_tensor)
-#     values = result[0]
-#     indices = tf.cast(result[1], tf.int32)
-#     if not largest:
-#         out_tensor = -values
-#     else:
-#         out_tensor = values
-#     layers[params['_outputs'][0]] = out_tensor
-#     layers[params['_outputs'][1]] = indices
 
 
 def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):

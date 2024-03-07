@@ -70,12 +70,12 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
     if len(node.input) != 2:
         raise AttributeError('Number of inputs is not equal 2 for element-wise layer')
 
-    # input_0 = layers[node.input[0]]
-    # input_1 = layers[node.input[1]]
+    input_0 = layers[node.input[0]]
+    input_1 = layers[node.input[1]]
 
-    layer_input = [layers[node.input[0]], layers[node.input[1]]]
-    layer_input = match_dtype_for_dynamic_input_tensors(layer_input)
-    input_0, input_1 = layer_input
+    # layer_input = [layers[node.input[0]], layers[node.input[1]]]
+    # layer_input = match_dtype_for_dynamic_input_tensors(layer_input)
+    # input_0, input_1 = layer_input
 
     input_0_is_non_keras = is_numpy(input_0) or isinstance(input_0, EagerTensor)
     input_1_is_non_keras = is_numpy(input_1) or isinstance(input_1, EagerTensor)
@@ -112,12 +112,13 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
     if len(node.input) != 2:
         raise AttributeError('Number of inputs is not equal 2 for element-wise layer')
 
-    # input_0 = layers[node.input[0]]
-    # input_1 = layers[node.input[1]]
+    input_0 = layers[node.input[0]]
+    input_1 = layers[node.input[1]]
 
-    layer_input = [layers[node.input[0]], layers[node.input[1]]]
-    layer_input = match_dtype_for_dynamic_input_tensors(layer_input)
-    input_0, input_1 = layer_input
+    # layer_input = [layers[node.input[0]], layers[node.input[1]]]
+    # layer_input = match_dtype_for_dynamic_input_tensors(layer_input)
+    # input_0, input_1 = layer_input
+
     input_0_is_constant = is_numpy(input_0) or isinstance(input_0, EagerTensor)
     input_1_is_constant = is_numpy(input_1) or isinstance(input_1, EagerTensor)
     try:
