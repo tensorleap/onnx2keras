@@ -237,7 +237,8 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                 else:
                     layers[node_name] = input_0
 
-                reshape = keras.layers.Reshape(np.int32(input_1[1:]), name=keras_name)
+                reshape = keras.layers.Reshape(np.int32(input_1[1:]),
+                                               name=keras_name)  # keras reshape ignores batch dimension but onnx axis do not
                 layers[node_name] = reshape(layers[node_name])
 
             else:
@@ -266,7 +267,7 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                         if input_0.shape.rank == 1:
                             input_0 = tf.expand_dims(input_0, 0)
                         logger.debug('The first argument is Keras/tf layer. Apply keras.Flatten.')
-                        flatten = keras.layers.Flatten(name=keras_name)
+                        flatten = keras.layers.Reshape(target_shape=input_1[1:], name=keras_name)
                         layers[node_name] = flatten(input_0)
                     else:
                         if len(input_0.shape) == 0 or input_0.shape[0] != input_1[0]:  # keras reshape don't work
