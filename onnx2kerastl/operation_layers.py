@@ -7,7 +7,7 @@ from keras import backend as K
 
 from .customonnxlayer.onnxless import OnnxLess
 from .exceptions import UnsupportedLayer
-from .utils import is_numpy, ensure_tf_type, match_dtype_for_dynamic_input_tensors
+from .utils import is_numpy, ensure_tf_type
 
 # Handle python 2.7 import error
 try:

@@ -6,7 +6,7 @@ import tensorflow as tf
 from keras import backend as K
 from keras.layers import SlicingOpLambda, Lambda
 
-from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one, match_dtype_for_dynamic_input_tensors
+from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
 
 
 def convert_transpose(node, params, layers, lambda_func, node_name, keras_name):
@@ -150,7 +150,6 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
     logger = logging.getLogger('onnx2keras.concat')
 
     layer_input = [layers[node.input[i]] for i in range(len(node.input))]
-    # layer_input = match_dtype_for_dynamic_input_tensors(layer_input)
 
     if all([is_numpy(layers[node.input[i]]) for i in range(len(node.input))]):
         logger.debug('Concat numpy arrays.')

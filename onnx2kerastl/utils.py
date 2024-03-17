@@ -177,17 +177,3 @@ def unsqueeze_tensors_of_rank_one(tensor_list, axis: int):
             unsqueezed_tensors.append(tensor)
 
     return unsqueezed_tensors
-
-
-def match_dtype_for_dynamic_input_tensors(input_tensors) -> List[Union[np.ndarray, tf.Tensor, KerasTensor]]:
-    input_dtypes = [inp.dtype for inp in input_tensors]
-
-    inferred_values = [getattr(inp, '_inferred_value', 0) for inp in input_tensors]
-    dynamic_tensors_idx = [idx for idx, inferred_value in enumerate(inferred_values) if
-                           (isinstance(inferred_value, list) and None in inferred_value) or
-                           (None in input_tensors[idx].shape)]
-    if len(dynamic_tensors_idx) > 0:
-        dynamic_tensors_dtypes = [input_dtypes[idx] for idx in dynamic_tensors_idx]
-        return [tf.cast(inp, dynamic_tensors_dtypes[0]) for inp in input_tensors]
-    else:
-        return input_tensors
