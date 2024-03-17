@@ -747,10 +747,8 @@ def pseudo_gathernd(input_tensor, indices_tensor):
 
 
 def convert_nms(node, params, layers, lambda_func, node_name, keras_name):
-    boxes = tf.reshape(layers[node.input[0]], (1, -1, 4))
     scores = layers[node.input[1]]
-    # scores = tf.reshape(scores, (1, tf.shape(scores)[1], -1))
-    scores = tf.reshape(scores, (1, scores.shape[1], -1))
+    boxes = layers[node.input[0]]
 
     batch_size = boxes.shape[0]
 
