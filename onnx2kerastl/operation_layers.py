@@ -524,15 +524,17 @@ def convert_not(node, params, layers, lambda_func, node_name, keras_name):
     layers[node_name] = tf.logical_not(input_0)
 
 
-# def convert_less(node, params, layers, lambda_func, node_name, keras_name):
-#     layers[node_name] = tf.math.less(layers[node.input[0]], layers[node.input[1]])
 def convert_less(node, params, layers, lambda_func, node_name, keras_name):
-    # Assuming the parameter x is obtained from node.input[0] and y is the input tensor
-    x_param = layers[node.input[0]]  # Retrieve the parameter value for x
-    y_input = layers[node.input[1]]  # Retrieve the input tensor for y
+    input_0 = layers[node.input[0]]
+    input_1 = layers[node.input[1]]
 
-    # Instantiate the custom layer with x as a parameter
-    layers[node_name] = OnnxLess(x=x_param)(y_input)
+    def target_layer(y, x=input_0):
+        x = tf.cast(x, y.dtype)
+        return tf.math.less(x, y)
+
+    lambda_less = keras.layers.Lambda(target_layer, name=keras_name)
+    less_output = lambda_less(input_1)
+    layers[node_name] = less_output
 
 
 def convert_sign(node, params, layers, lambda_func, node_name, keras_name):
