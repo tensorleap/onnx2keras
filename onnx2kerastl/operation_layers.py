@@ -5,7 +5,6 @@ import numpy as np
 import tensorflow as tf
 from keras import backend as K
 
-from .customonnxlayer.onnxless import OnnxLess
 from .exceptions import UnsupportedLayer
 from .utils import is_numpy, ensure_tf_type
 
