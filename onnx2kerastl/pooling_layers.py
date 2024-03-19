@@ -258,9 +258,6 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
     layers[params['_outputs'][1]] = indices
 
 
-#
-
-
 def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
     # extract params
     output_height = params.get('output_height', 1)
