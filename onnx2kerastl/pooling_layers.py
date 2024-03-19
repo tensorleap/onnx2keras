@@ -233,14 +233,7 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
             ord_permute[-1] = axis
             permuted = tf.transpose(in_tensor, ord_permute)
 
-        if (isinstance(k, tf.Tensor) or (not isinstance(k, (np.ndarray, np.generic)) and not isinstance(k,
-                                                                                                        int) and tf.keras.backend.is_keras_tensor(
-            k))) \
-                and k.dtype != tf.int32:  # otherwise top_k raise error
-            casted_k = tf.cast(k, tf.int32)
-        else:
-            casted_k = k
-        topk_res = tf.math.top_k(permuted, k=casted_k, sorted=to_sort)
+        topk_res = tf.math.top_k(permuted, k=k, sorted=to_sort)
         values_pre_permute = topk_res[0]
         indices_pre_permute = topk_res[1]
         topk_concat = tf.stack([values_pre_permute, tf.cast(indices_pre_permute, tf.float32)])
