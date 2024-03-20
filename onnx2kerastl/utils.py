@@ -44,7 +44,9 @@ def ensure_tf_type(obj, name="Const"):
     :param fake_input_layer: fake input layer to add constant
     :return: tf type
     """
-    if is_numpy(obj):
+    if is_numpy(obj): # TF < v1.16 assumes all ints are int32 and all floats are float32
+        if obj.dtype == np.int64:
+            obj = np.int32(obj)
         return tf.constant(obj, name=name)
     else:
         return obj
