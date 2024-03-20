@@ -45,9 +45,6 @@ def ensure_tf_type(obj, name="Const"):
     :return: tf type
     """
     if is_numpy(obj):
-        if obj.dtype == np.int64:
-            obj = np.int32(obj)
-
         return tf.constant(obj, name=name)
     else:
         return obj
