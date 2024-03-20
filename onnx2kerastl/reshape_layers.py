@@ -523,7 +523,11 @@ def convert_expand(node, params, layers, lambda_func, node_name, keras_name):
     input_1 = layers[node.input[1]]
     if input_0.dtype.is_bool:
         input_0 = tf.cast(input_0, dtype='int32')
-    layers[node_name] = input_0 * tf.ones(shape=input_1, dtype=input_0.dtype)
+    multiply_res = input_0 * tf.ones(shape=input_1, dtype=input_0.dtype)
+    # input_0.dtype == np.int32 since we can't serialize constants as int64, need to cast to true type
+    if layers[node.input[0]].dtype == np.int64:
+        multiply_res = tf.cast(multiply_res, tf.int64)
+    layers[node_name] = multiply_res
 
 
 def convert_tile(node, params, layers, lambda_func, node_name, keras_name):
