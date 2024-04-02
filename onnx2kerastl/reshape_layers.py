@@ -492,21 +492,21 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     # Validate axes
     rank = input_tensor.shape.rank
     axes = [a if a >= 0 else a + rank for a in axes]  # Convert negative axes to positive
-    if any(a < 0 or a >= rank for a in axes):
+    if any(a < 0 or a >= rank for a in axes):  # check that all axes values are within input rank
         raise ValueError("Invalid axes value")
 
     to_channel_last = keras.layers.Permute((2, 3, 1))(input_tensor)  # (B, W, H, C)
     shape = tf.cast(tf.shape(to_channel_last), tf.int32)
-    tf_resize_shapes = [shape[i] for i in range(1, rank - 1)]
+    tf_resize_shapes = [shape[i] for i in range(2)]  # (W, H)
 
     if len(scales) > 0:
         for i, axis in enumerate(axes):
             if scales[i] != 1:
-                tf_resize_shapes[i] = tf.cast(scales[i] * shape[i], tf.int32)
+                tf_resize_shapes[axis - 2] = tf.cast(scales[i] * shape[axis - 1], tf.int32)
     else:
         for i, axis in enumerate(axes):
             if sizes[i] != input_tensor.shape[axis]:
-                tf_resize_shapes[i] = tf.cast((sizes[i]), tf.int32)
+                tf_resize_shapes[axis - 2] = int(sizes[i])
 
     resized = tf.image.resize(to_channel_last,
                               size=tf.stack(tf_resize_shapes, axis=0),
