@@ -497,7 +497,7 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
 
     to_channel_last = keras.layers.Permute((2, 3, 1))(input_tensor)  # (B, W, H, C)
     shape = tf.cast(tf.shape(to_channel_last), tf.int32)
-    tf_resize_shapes = [shape[i] for i in range(2)]  # (W, H)
+    tf_resize_shapes = [shape[i] for i in range(1, 3)]  # (W, H)
 
     if len(scales) > 0:
         for i, axis in enumerate(axes):
