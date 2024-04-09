@@ -823,3 +823,9 @@ def convert_if(node, params, layers, lambda_func, node_name, keras_name):
     else:
         then_output = outputs[0]
     layers[node_name] = tf.keras.backend.switch(cond, then_output, outputs[1])
+
+
+def convert_einsum(node, params, layers, lambda_func, node_name, keras_name):
+    input_tensors = [layers[node.input[i]] for i in range(len(node.input))]
+    equation = params['equation']
+    layers[node_name] = tf.einsum(equation.decode('utf-8'), *input_tensors)
