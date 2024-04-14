@@ -22,7 +22,6 @@ def convert_gridsample(node, params, layers, lambda_func, node_name, keras_name)
     """
     assert params['mode'].decode('ascii') == 'bilinear'
     assert params['padding_mode'].decode('ascii') == 'zeros'
-    assert params['align_corners'] == 1
     params['mode'] = params['mode'].decode('ascii')
     params['padding_mode'] = params['padding_mode'].decode('ascii')
     img = layers[node.input[0]]
@@ -31,8 +30,15 @@ def convert_gridsample(node, params, layers, lambda_func, node_name, keras_name)
     max_xy = tf.expand_dims(
         tf.expand_dims(tf.expand_dims(tf.convert_to_tensor([torch_shape[3] - 1, torch_shape[2] - 1]), 0), 0), 0)
     max_xy = tf.cast(max_xy, tf.float32)
-    grid_index_coords = 0.5 * (sample_grid + 1.) * max_xy  # transform from [-1,1] to [0,H-1]/[0,W-1]
-    grid_index_coords = grid_index_coords + 1  # fix locs considering we add padding
+
+    if params['align_corners'] == 1:
+        # Case when align_corners is 1
+        grid_index_coords = 0.5 * (sample_grid + 1.) * max_xy
+        grid_index_coords = grid_index_coords + 1
+    else:
+        # Case when align_corners is 0
+        grid_index_coords = ((sample_grid + 1.) * max_xy - 1) / 2
+
     orig_query_shape = tf.shape(grid_index_coords)
     query_points = tf.reshape(grid_index_coords, [orig_query_shape[0], -1, 2])
     padded_img = tf.keras.layers.ZeroPadding2D(padding=(1, 1), data_format="channels_first")(img)
@@ -140,19 +146,21 @@ def convert_unique(node, params, layers, lambda_func, node_name, keras_name):
             res_sorted = tf.scatter_nd(tf.expand_dims(argsorted, -1), res, tf.shape(res))
             count_sorted = tf.scatter_nd(tf.expand_dims(argsorted, -1), count, tf.shape(res))
             idx_sorted = tf.scatter_nd(tf.expand_dims(argsorted, -1), idx, tf.shape(res))
-            return tf.concat([tf.cast(rev_idx_sorted, tf.float32), res_sorted, tf.cast(idx_sorted, tf.float32), tf.cast(count_sorted, tf.float32)],
-                      axis=0)
+            return tf.concat([tf.cast(rev_idx_sorted, tf.float32), res_sorted, tf.cast(idx_sorted, tf.float32),
+                              tf.cast(count_sorted, tf.float32)],
+                             axis=0)
         else:
             return tf.concat([tf.cast(rev_idx, tf.float32), res, tf.cast(idx, tf.float32), tf.cast(count, tf.float32)],
                              axis=0)
+
     lambda_layer = keras.layers.Lambda(target_layer, name='lambda' + "_".join(keras_name))
     lambda_res = lambda_layer(lambda_input)
     rev_idx = lambda_res[:rev_idx_length]
     lambda_length = tf.size(lambda_res)
-    remainder = tf.cast((lambda_length-rev_idx_length)/3, tf.int32)          #not working need to fix
+    remainder = tf.cast((lambda_length - rev_idx_length) / 3, tf.int32)  # not working need to fix
     count = tf.cast(lambda_res[-remainder:], tf.int32)
-    idx = tf.cast(lambda_res[-2*remainder:-remainder], tf.int32)
-    res = tf.cast(lambda_res[-3*remainder:-2*remainder], tf.int32)
+    idx = tf.cast(lambda_res[-2 * remainder:-remainder], tf.int32)
+    res = tf.cast(lambda_res[-3 * remainder:-2 * remainder], tf.int32)
     layers[keras_name[0]] = res
     layers[keras_name[1]] = idx
     layers[keras_name[2]] = rev_idx
