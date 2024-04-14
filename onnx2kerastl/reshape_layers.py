@@ -273,7 +273,8 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                     elif len(input_1) == 1 and input_1[0] == -1:
                         layers[node_name] = tf.reshape(input_0, [-1])
                     else:
-                        if len(input_0.shape) == 0 or (input_0.shape[0] != input_1[0] and input_1[0] != 0):  # keras reshape don't work
+                        if len(input_0.shape) == 0 or (
+                                input_0.shape[0] != input_1[0] and input_1[0] != 0):  # keras reshape don't work
                             new_shape = input_1.copy()
                             if dims_to_set_as_zero is not None:
                                 new_shape[dims_to_set_as_zero] = 0
@@ -467,7 +468,6 @@ def convert_squeeze(node, params, layers, lambda_func, node_name, keras_name):
 
 def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     logger = logging.getLogger('onnx2keras.reshape')
-
     input_tensor = layers[node.input[0]]
     roi = None if len(node.input[1]) == 0 else layers[node.input[1]]
     scales = [] if len(node.input[2]) == 0 else layers[node.input[2]]
@@ -486,17 +486,26 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     else:
         raise Exception("unsupported resize method")
 
-    to_channel_last = keras.layers.Permute((2, 3, 1))(input_tensor)
+    axes = params.get('axes', list(range(input_tensor.shape.rank)))  # Default to resizing all axes
+
+    # Validate axes
+    rank = input_tensor.shape.rank
+    axes = [a if a >= 0 else a + rank for a in axes]  # Convert negative axes to positive
+    if any(a < 0 or a >= rank for a in axes):  # check that all axes values are within input rank
+        raise ValueError("Invalid axes value")
+
+    to_channel_last = keras.layers.Permute((2, 3, 1))(input_tensor)  # (B, W, H, C)
+    shape = tf.cast(tf.shape(to_channel_last), tf.int32)
+    tf_resize_shapes = [shape[i] for i in range(1, 3)]  # (W, H)
+
     if len(scales) > 0:
-        if scales[0] != 1 or scales[1] != 1:
-            raise Exception("Resize of channels or batch dim not suppported")
-        shape = tf.cast(tf.shape(to_channel_last), tf.float32)
-        tf_resize_shapes = [tf.cast(scales[2] * shape[1], tf.int32),
-                            tf.cast(scales[3] * shape[2], tf.int32)]
+        for i, axis in enumerate(axes):
+            if scales[i] != 1:
+                tf_resize_shapes[axis - 2] = tf.cast(scales[i] * tf_resize_shapes[axis - 2], tf.int32)
     else:
-        if sizes[0] != input_tensor.shape[0] or sizes[1] != input_tensor.shape[1]:
-            raise Exception("Resize of channels or batch dim not suppported")
-        tf_resize_shapes = [int(sizes[2]), int(sizes[3])]
+        for i, axis in enumerate(axes):
+            if sizes[i] != input_tensor.shape[axis]:
+                tf_resize_shapes[axis - 2] = int(sizes[i])
 
     resized = tf.image.resize(to_channel_last,
                               size=tf.stack(tf_resize_shapes, axis=0),
