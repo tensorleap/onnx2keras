@@ -2888,28 +2888,38 @@ files = [
 
 [[package]]
 name = "tensorflow-io-gcs-filesystem"
-version = "0.36.0"
+version = "0.30.0"
 description = "TensorFlow IO"
 optional = false
 python-versions = ">=3.7, <3.12"
 files = [
-    {file = "tensorflow_io_gcs_filesystem-0.36.0-cp310-cp310-macosx_10_14_x86_64.whl", hash = "sha256:702c6df62b38095ff613c433546d9424d4f33902a5ab26b00fd26457e27a99fa"},
-    {file = "tensorflow_io_gcs_filesystem-0.36.0-cp310-cp310-macosx_12_0_arm64.whl", hash = "sha256:e9b8aaca2789af356c42afda0f52380f82e5abb2f3c0b85087833fcfe03875d8"},
-    {file = "tensorflow_io_gcs_filesystem-0.36.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:be1ff92559dfa23048b01179a1827081947583f5c6f9986ccac471df8a29322a"},
-    {file = "tensorflow_io_gcs_filesystem-0.36.0-cp311-cp311-macosx_10_14_x86_64.whl", hash = "sha256:72c3ca4b8c0d8dbdd970699d05a100107cf200317ad8e6a8373e2c37225cd552"},
-    {file = "tensorflow_io_gcs_filesystem-0.36.0-cp311-cp311-macosx_12_0_arm64.whl", hash = "sha256:848e8e89a0f49258c7782189c938d8d1162d989da1a80c79f95c7af3ef6006c8"},
-    {file = "tensorflow_io_gcs_filesystem-0.36.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1bd4d946b5fa23220daa473a80e511a5fb27493d7e49d17dff0bb43bb0a31f32"},
-    {file = "tensorflow_io_gcs_filesystem-0.36.0-cp39-cp39-macosx_10_14_x86_64.whl", hash = "sha256:0a4437824424a4423cf86162cb8b21b1bec24698194332748b50bb952e62ab9f"},
-    {file = "tensorflow_io_gcs_filesystem-0.36.0-cp39-cp39-macosx_12_0_arm64.whl", hash = "sha256:31806bd7ac2db789161bc720747de22947063265561a4c17be54698fd9780b03"},
-    {file = "tensorflow_io_gcs_filesystem-0.36.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e97ff5c280eb10f699098ae21057be2b146d39e8a906cd5db91f2ea6c34e47d0"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp310-cp310-macosx_10_14_x86_64.whl", hash = "sha256:f5aa1aa0ec88b7d309ebf520c950ed12894ec1908c3d7335f080de9e16e88360"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp310-cp310-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:5093c9afd1e7e5a8d23f878b8074ee50d25d2fb66269a350542d6d92d643b608"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:95812ed532f7b9087eb0cb4597dcc8443708b2698ba1c07367333233e20074ea"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp310-cp310-win_amd64.whl", hash = "sha256:ab82d9a39dcdad2f525840c42387e2f064666e8d3e65c46d64873ad8eaa92742"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp311-cp311-macosx_10_14_x86_64.whl", hash = "sha256:e4cea42fe5ab47cc6af7e146935489620ce2c4606a9483090bc9cac8f32ef111"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp311-cp311-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:8d7d99a61d68d3ad750404b8f402fafceeae81bd6b8f14cb81a1313182411571"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:bd5ef0e38ed87696c2fbfbc9534a056484b6ee4ddd68967d644cc17e7d111018"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp311-cp311-win_amd64.whl", hash = "sha256:51f2ca3f4376b26d0e511c91a1468f089654a8736c76433404a8c4405c767d76"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp37-cp37m-macosx_10_14_x86_64.whl", hash = "sha256:65f9cefcf52ef04caea1481faa0c3553b3cfd8ee65a01bcf7d9baf617361aaca"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp37-cp37m-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:cf2940b843c6f4d91d4abb0df181af80b4cb8c680f34ebed61082c1e388157f3"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp37-cp37m-win_amd64.whl", hash = "sha256:c16dcee548a0aaff31793ac410a880a45a61401f1a1a8faee24f5ef506900796"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp38-cp38-macosx_10_14_x86_64.whl", hash = "sha256:e3bc68c76402b38a2486a0e2e710095c3eb6d6e84c131ad349f7ca034dfc345b"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp38-cp38-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:f3cfcdd94de2cd4adffcb5659b95b2e5714e280c617b922c134b9d61b7f20429"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:23eb36218b939e6a814cc4e4f4d9d4a8e2574d8589a5979e882f5f056a4264be"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp38-cp38-win_amd64.whl", hash = "sha256:86169a799752cf61c07d1a5a818e00d6233e3cb3ebe6bb144af5f0fed1dc2b89"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp39-cp39-macosx_10_14_x86_64.whl", hash = "sha256:649166ef120fa3af43e7550cb9f1c26ff54e41b0dcfc106ab13f92435fb9d21f"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp39-cp39-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:b2eb2a48f0d31359603f49b813453e4532958db3ef686e2738396cba54b7dc28"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:49264b8a7b04e18d516ad07c2f75e660d4d607a6320d3f4a16e00c2bbecf4db4"},
+    {file = "tensorflow_io_gcs_filesystem-0.30.0-cp39-cp39-win_amd64.whl", hash = "sha256:ed4244b6a2963972ca86bb2e1855b8b7dced99d12a60641221db4f0b8cd83e32"},
 ]
 
 [package.extras]
-tensorflow = ["tensorflow (>=2.15.0,<2.16.0)"]
-tensorflow-aarch64 = ["tensorflow-aarch64 (>=2.15.0,<2.16.0)"]
-tensorflow-cpu = ["tensorflow-cpu (>=2.15.0,<2.16.0)"]
-tensorflow-gpu = ["tensorflow-gpu (>=2.15.0,<2.16.0)"]
-tensorflow-rocm = ["tensorflow-rocm (>=2.15.0,<2.16.0)"]
+tensorflow = ["tensorflow (>=2.11.0,<2.12.0)"]
+tensorflow-aarch64 = ["tensorflow-aarch64 (>=2.11.0,<2.12.0)"]
+tensorflow-cpu = ["tensorflow-cpu (>=2.11.0,<2.12.0)"]
+tensorflow-gpu = ["tensorflow-gpu (>=2.11.0,<2.12.0)"]
+tensorflow-rocm = ["tensorflow-rocm (>=2.11.0,<2.12.0)"]
 
 [[package]]
 name = "tensorflow-macos"
@@ -3739,4 +3749,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8, <3.11"
-content-hash = "843f24a9fed8d16818e6ad1330a4df2efb5a168eb4fa9a7a4ddb86722b695608"
+content-hash = "e2f2422909aa5325b7bb2e3554fce55a6d3b0d346aa38354c9c7b0efc9c2227d"
