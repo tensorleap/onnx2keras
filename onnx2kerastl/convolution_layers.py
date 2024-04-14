@@ -30,7 +30,7 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
             channels_idx = 1
         else:
             channels_idx = -1
-        if conv_input.shape[channels_idx] is None: # This will not serialize well unless we reshape input
+        if conv_input.shape[channels_idx] is None:  # This will not serialize well unless we reshape input
             conv_input_shape = tf.shape(conv_input)
             conv_input = tf.reshape(conv_input, [*conv_input_shape[:channels_idx], conv_channels,
                                                  *conv_input_shape[channels_idx + 1:]])
@@ -71,6 +71,7 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     is_constant = is_numpy(input_0) or isinstance(input_0, EagerTensor)
+    is_W_constant = is_numpy(W) or isinstance(W, EagerTensor)
     n_groups = params['group'] if 'group' in params else 1
     dilation = params['dilations'][0] if 'dilations' in params else 1
     pads = params['pads'] if 'pads' in params else [0, 0, 0]
@@ -125,26 +126,37 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
             )
             layers[padding_name] = input_0 = padding_layer(input_0)
 
-        W = W.transpose(2, 3, 1, 0)
+        W = W.transpose(2, 3, 1, 0) if is_W_constant else tf.transpose(W, [2, 3, 1, 0])
         height, width, channels_per_group, out_channels = W.shape
 
         if has_bias:
             weights = [W, bias]
         else:
             weights = [W]
+        if is_W_constant:
+            conv_args = {"filters": out_channels,
+                         "kernel_size": (height, width),
+                         "strides": (strides[0], strides[1]),
+                         "padding": 'valid',
+                         "weights": weights,
+                         "use_bias": has_bias,
+                         "activation": None,
+                         "dilation_rate": dilation,
+                         "name": keras_name,
+                         "groups": n_groups}
 
-        conv_args = {"filters": out_channels,
-                     "kernel_size": (height, width),
-                     "strides": (strides[0], strides[1]),
-                     "padding": 'valid',
-                     "weights": weights,
-                     "use_bias": has_bias,
-                     "activation": None,
-                     "dilation_rate": dilation,
-                     "name": keras_name,
-                     "groups": n_groups}
-        partial_conv = partial(keras.layers.Conv2D, **conv_args)
-        layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2])
+            partial_conv = partial(keras.layers.Conv2D, **conv_args)
+            layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2])
+        else:
+            input_0_nhwc = tf.transpose(input_0, [0, 2, 3, 1])
+
+            # Perform the convolution in NHWC format
+            conv_nhwc = tf.nn.conv2d(input_0_nhwc, weights[0], strides=(strides[0], strides[1]),
+                                     dilations=dilation,
+                                     padding='VALID', data_format='NHWC')
+
+            # Permute the result back to NCHW format
+            layers[node_name] = tf.transpose(conv_nhwc, [0, 3, 1, 2])
     else:
         # 1D conv
         W = W.transpose(2, 1, 0)
@@ -218,6 +230,7 @@ def convert_convtranspose(node, params, layers,
         raise NotImplementedError('Not implemented')
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
+    is_W_constant = is_numpy(W) or isinstance(W, EagerTensor)
     n_groups = params['group'] if 'group' in params else 1
     dilation = params['dilations'][0] if 'dilations' in params else 1
     pads = params['pads'] if 'pads' in params else [0, 0]
@@ -276,7 +289,7 @@ def convert_convtranspose(node, params, layers,
             layers[node_name] = crop(input_0)
 
     elif len(W.shape) == 4:  # 2D conv
-        W = W.transpose(2, 3, 1, 0)
+        W = W.transpose(2, 3, 1, 0) if is_W_constant else tf.transpose(W, [2, 3, 1, 0])
         height, width, n_filters, channels = W.shape
 
         if has_bias:
@@ -289,26 +302,39 @@ def convert_convtranspose(node, params, layers,
 
         if dilation > 1:
             raise AttributeError('Cannot convert ConvTranspose2d with dilation_rate != 1')
+        if is_W_constant:
+            conv = keras.layers.Conv2DTranspose(
+                filters=n_filters,
+                kernel_size=(height, width),
+                strides=strides,
+                padding='valid',
+                output_padding=0,
+                weights=weights,
+                use_bias=has_bias,
+                activation=None,
+                dilation_rate=dilation,
+                name=keras_name
+            )
 
-        conv = keras.layers.Conv2DTranspose(
-            filters=n_filters,
-            kernel_size=(height, width),
-            strides=strides,
-            padding='valid',
-            output_padding=0,
-            weights=weights,
-            use_bias=has_bias,
-            activation=None,
-            dilation_rate=dilation,
-            name=keras_name
-        )
-
-        if 'output_shape' in params and 'pads' not in params:
-            logger.debug('!!!!! Paddings will be calculated automatically !!!!!')
-            pads = [strides[0] * (int(input_0.shape[2]) - 1) + 0 + (height - 1) * dilation - params['output_shape'][0],
+            if 'output_shape' in params and 'pads' not in params:
+                logger.debug('!!!!! Paddings will be calculated automatically !!!!!')
+                pads = [
+                    strides[0] * (int(input_0.shape[2]) - 1) + 0 + (height - 1) * dilation - params['output_shape'][0],
                     strides[1] * (int(input_0.shape[3]) - 1) + 0 + (height - 1) * dilation - params['output_shape'][1]]
 
-        layers[node_name] = input_0 = conv(input_0)
+            layers[node_name] = input_0 = conv(input_0)
+        else:
+            input_0_nhwc = tf.transpose(input_0, [0, 2, 3, 1])
+
+            output_shape = infer_output_shape(input_shape=tf.shape(input_0_nhwc), filter_shape=tf.shape(W),
+                                              strides=strides,
+                                              padding='VALID')
+            conv_transpose_nhwc = tf.nn.conv2d_transpose(input_0_nhwc, weights[0], output_shape=output_shape,
+                                                         strides=(strides[0], strides[1]), dilations=dilation, padding='VALID',
+                                                         data_format='NHWC')
+
+            # Permute the result back to NCHW format
+            layers[node_name] = tf.transpose(conv_transpose_nhwc, [0, 3, 1, 2])
 
         # Magic ad-hoc.
         # See the Keras issue: https://github.com/keras-team/keras/issues/6777
@@ -328,3 +354,23 @@ def convert_convtranspose(node, params, layers,
             layers[node_name] = crop(input_0)
     else:
         raise AttributeError('Layer is not supported for now')
+
+
+def infer_output_shape(input_shape, filter_shape, strides, padding):
+    input_size_h, input_size_w = input_shape[1:3]
+    filter_size_h, filter_size_w = filter_shape[0:2]
+
+    if padding == 'SAME':
+        pad_h = max((input_size_h - 1) * strides[0] + filter_size_h - input_size_h, 0) // 2
+        pad_w = max((input_size_w - 1) * strides[1] + filter_size_w - input_size_w, 0) // 2
+    elif padding == 'VALID':
+        pad_h = 0
+        pad_w = 0
+    else:
+        raise ValueError("Padding must be 'SAME' or 'VALID'")
+
+    output_size_h = (input_size_h - 1) * strides[0] + filter_size_h - 2 * pad_h
+    output_size_w = (input_size_w - 1) * strides[1] + filter_size_w - 2 * pad_w
+
+    return [input_shape[0], output_size_h,
+            output_size_w, filter_shape[2]]  # [batch_size, output_channels, output_height, output_width]
