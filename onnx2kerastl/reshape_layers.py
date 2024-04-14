@@ -468,8 +468,6 @@ def convert_squeeze(node, params, layers, lambda_func, node_name, keras_name):
 
 def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     logger = logging.getLogger('onnx2keras.reshape')
-    if K.image_data_format() == 'channels_first':
-        raise NotImplementedError("Resize layer is not supported with channels_first data format")
     input_tensor = layers[node.input[0]]
     roi = None if len(node.input[1]) == 0 else layers[node.input[1]]
     scales = [] if len(node.input[2]) == 0 else layers[node.input[2]]
