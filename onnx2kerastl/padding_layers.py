@@ -46,6 +46,23 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
                     padding=((pads[2], pads[6]), (pads[3], pads[7])),
                     name=keras_name
                 )
+            elif pads.shape[0] == 12:  # Check for rank 6 input
+                padding_layer = keras.layers.Lambda(
+                    lambda x: tf.pad(
+                        x,
+                        [
+                            [0, 0],  # Batch dimension
+                            [0, 0],  # Channels dimension
+                            [pads[2], pads[8]],  # d1 dimension
+                            [pads[3], pads[9]],  # d2 dimension
+                            [pads[4], pads[10]],  # d3 dimension
+                            [pads[5], pads[11]],  # d4 dimension
+                        ],
+                        mode='CONSTANT'
+                    ),
+                    name=keras_name
+                )
+                layers[node_name] = padding_layer(input_0)
             else:
                 logger.warning("Caution - no test yet")
                 padding_layer = keras.layers.ZeroPadding3D(
