@@ -501,7 +501,7 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     if len(scales) > 0:
         for i, axis in enumerate(axes):
             if scales[i] != 1:
-                tf_resize_shapes[axis - 2] = tf.cast(scales[i] * tf_resize_shapes[axis - 2], tf.int32)
+                tf_resize_shapes[axis - 2] = tf.cast(scales[i] * tf.cast(tf_resize_shapes[axis - 2], tf.float32), tf.int32)
     else:
         for i, axis in enumerate(axes):
             if sizes[i] != input_tensor.shape[axis]:
