@@ -486,10 +486,10 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     else:
         raise Exception("unsupported resize method")
 
-    axes = params.get('axes', list(range(input_tensor.shape.rank)))  # Default to resizing all axes
+    rank = len(input_tensor.shape)
+    axes = params.get('axes', list(range(rank)))  # Default to resizing all axes
 
     # Validate axes
-    rank = input_tensor.shape.rank
     axes = [a if a >= 0 else a + rank for a in axes]  # Convert negative axes to positive
     if any(a < 0 or a >= rank for a in axes):  # check that all axes values are within input rank
         raise ValueError("Invalid axes value")
