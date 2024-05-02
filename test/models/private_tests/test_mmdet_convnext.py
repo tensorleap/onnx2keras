@@ -4,11 +4,13 @@ from onnx2kerastl import onnx_to_keras
 import tensorflow as tf
 from keras_data_format_converter import convert_channels_first_to_last
 from onnx2kerastl.customonnxlayer import onnx_custom_objects_map
+import pytest
 
 
-def test_mmdet_convnext():
-    onnx_model_path = f'models/plus-one-robotics/simplified_por_convnext.onnx'
-    save_model_path = f'models/plus-one-robotics/simplified_por_convnext.h5'
+@pytest.mark.parametrize('aws_s3_download', [["mmdet_convnext/", "mmdet_convnext/", False]], indirect=True)
+def test_mmdet_convnext(aws_s3_download):
+    onnx_model_path = f'{aws_s3_download}/simplified_por_convnext.onnx'
+    save_model_path = f'{aws_s3_download}/simplified_por_convnext.h5'
 
     input_data = np.random.uniform(0, 1, (1, 480, 640, 3)).astype(np.float32)
     # load onnx model
