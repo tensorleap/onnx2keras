@@ -764,7 +764,7 @@ def convert_nms(node, params, layers, lambda_func, node_name, keras_name):
     score_threshold = float('-inf')
     max_output_size = [2 ** 30]
     if len(node.input) > 2:
-        max_output_size = [min(layers.get(node.input[2], [2 ** 30])[0], 2 ** 30)]
+        max_output_size = [min(np.squeeze(layers.get(node.input[2], [2 ** 30])), 2 ** 30)]
     if len(node.input) > 3:
         iou_threshold = layers.get(node.input[3], [0])
     if len(node.input) > 4:
