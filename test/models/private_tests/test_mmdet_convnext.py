@@ -5,6 +5,7 @@ import tensorflow as tf
 from keras_data_format_converter import convert_channels_first_to_last
 from onnx2kerastl.customonnxlayer import onnx_custom_objects_map
 import pytest
+from test.models.private_tests.aws_utils import aws_s3_download
 
 
 @pytest.mark.parametrize('aws_s3_download', [["mmdet_convnext/", "mmdet_convnext/", False]], indirect=True)
