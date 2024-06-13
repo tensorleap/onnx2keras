@@ -211,6 +211,7 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
                 node_names.append(keras_names)
 
             logger.debug('######')
+            logger.debug(f"{node_index/len(onnx_nodes):.1%} completed")
             logger.debug('...')
             logger.debug('Converting ONNX operation')
             logger.debug('type: %s', node_type)
