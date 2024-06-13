@@ -79,3 +79,49 @@ def convert_lstm(node, params, layers, lambda_func, node_name, keras_name):
     lstm_tensor_in_onnx_order = tf.transpose(lstm_tensor, perm=[1, 0, 2])
     lstm_tensor_in_onnx_order = tf.expand_dims(lstm_tensor_in_onnx_order, axis=1)
     layers[node_name] = lstm_tensor_in_onnx_order
+
+def convert_gru(node, params, layers, lambda_func, node_name, keras_name):
+    logger = logging.getLogger('onnx2keras.convert_gru')
+    if len(params["_outputs"]) > 1:
+        logger.warning("The GRU return hidden state is currently not supported. Accessing in deeper layers will raise Exception")
+    if params.get('activation_alpha') or params.get('activation_beta') or params.get('activations'):
+        raise NotImplementedError('Custom Activations in GRU not implemented')
+    if params.get('clip'):
+        raise NotImplementedError('Clip in GRU not implemented')
+    if params.get('direction'):  #After implementation - verify weights reshaping, and h default_size for all directions
+        raise NotImplementedError('direction in  GRU not implemented')
+    else:
+        num_directions = 1
+    if params.get('layout'):
+        raise NotImplementedError('GRU layout not supported (currently supporting opset 7)')
+    else:
+        layout = 0
+    if node.input[4] != "":
+        raise NotImplementedError('GRU sequence_lens is not yet implemented')
+    hidden_size = params.get('hidden_size')
+    linear_before_reset = bool(params.get('linear_before_reset', 0))
+    x = layers[node.input[0]] # [seq_length, batch_size, input_size] iff layout = 0
+    w = layers[node.input[1]]
+    r = layers[node.input[2]]
+    b = layers.get(node.input[3], np.zeros((num_directions, 6*hidden_size), dtype=np.float32))
+    h = layers.get(node.input[5], np.zeros((1, x.shape[1], hidden_size), dtype=np.float32))
+    if isinstance(h, np.ndarray):
+        tensor_h = tf.convert_to_tensor(h)
+    else:
+        tensor_h = h
+    tf.keras.backend.set_image_data_format("channels_last")
+    gru_layer = tf.keras.layers.GRU(units=hidden_size,
+                        reset_after=linear_before_reset,
+                        return_sequences=True)
+    if layout == 0:
+        batch_first_x = tf.transpose(x, [1, 0, 2])
+    res = gru_layer(batch_first_x, initial_state=tf.convert_to_tensor(tensor_h[0]))
+    # gru_layer.build(tf.shape(batch_first_x))
+    gru_layer.set_weights([w[0].swapaxes(0, 1), r[0].swapaxes(0, 1), b[0].reshape(-1, 3*hidden_size)])
+    # res = gru_layer(batch_first_x, initial_state=tf.convert_to_tensor(tensor_h[0]))
+    if num_directions == 1:
+        reshaped_res = tf.expand_dims(tf.transpose(res, [1, 0, 2]), axis=1)
+    else:
+        raise NotImplementedError("GRU bidirectional output reshaping is not implemented")
+    layers[node_name] = reshaped_res
+    tf.keras.backend.set_image_data_format("channels_first")
