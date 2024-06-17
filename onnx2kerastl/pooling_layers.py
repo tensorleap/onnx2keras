@@ -20,42 +20,46 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
     :param keras_name: resulting layer name
     :return: None
     """
-    logger = logging.getLogger('onnx2keras.maxpool')
+    logger = logging.getLogger("onnx2keras.maxpool")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-    kernel_shape = params['kernel_shape']
-    stride_shape = params['strides']
+    kernel_shape = params["kernel_shape"]
+    stride_shape = params["strides"]
 
-    pads = params['pads'] if 'pads' in params else [0, 0, 0, 0, 0, 0]
-    pad = 'valid'
+    pads = params["pads"] if "pads" in params else [0, 0, 0, 0, 0, 0]
+    pad = "valid"
 
-    if all([shape % 2 == 1 for shape in kernel_shape]) and \
-            all([kernel_shape[i] // 2 == pads[i] for i in range(len(kernel_shape))]) and \
-            all([shape == 1 for shape in stride_shape]):
-        pad = 'same'
-        logger.debug('Use `same` padding parameters.')
+    if (
+        all([shape % 2 == 1 for shape in kernel_shape])
+        and all([kernel_shape[i] // 2 == pads[i] for i in range(len(kernel_shape))])
+        and all([shape == 1 for shape in stride_shape])
+    ):
+        pad = "same"
+        logger.debug("Use `same` padding parameters.")
     else:
-        logger.warning('Unable to use `same` padding. Add ZeroPadding2D layer to fix shapes.')
-        padding_name = keras_name + '_pad'
+        logger.warning(
+            "Unable to use `same` padding. Add ZeroPadding2D layer to fix shapes."
+        )
+        padding_name = keras_name + "_pad"
         if len(kernel_shape) == 2:
             padding = None
 
             if len(pads) == 2 and (pads[0] > 0 or pads[1] > 0):
                 padding = (pads[0], pads[1])
-            elif len(pads) == 4 and (pads[0] > 0 or pads[1] > 0 or pads[2] > 0 or pads[3] > 0):
+            elif len(pads) == 4 and (
+                pads[0] > 0 or pads[1] > 0 or pads[2] > 0 or pads[3] > 0
+            ):
                 padding = ((pads[0], pads[2]), (pads[1], pads[3]))
 
             if padding is not None:
                 padding_layer = keras.layers.ZeroPadding2D(
-                    padding=padding,
-                    name=padding_name
+                    padding=padding, name=padding_name
                 )
                 layers[padding_name] = input_0 = padding_layer(input_0)
         else:  # 3D padding
             padding_layer = keras.layers.ZeroPadding3D(
-                padding=pads[:len(stride_shape)],
-                name=padding_name
+                padding=pads[: len(stride_shape)], name=padding_name
             )
             layers[padding_name] = input_0 = padding_layer(input_0)
     if len(kernel_shape) == 2:
@@ -64,7 +68,7 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
             strides=stride_shape,
             padding=pad,
             name=keras_name,
-            data_format='channels_first'
+            data_format="channels_first",
         )
     else:
         pooling = keras.layers.MaxPooling3D(
@@ -72,24 +76,41 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
             strides=stride_shape,
             padding=pad,
             name=keras_name,
-            data_format='channels_first'
+            data_format="channels_first",
         )
-    ceil_mode = params.get('ceil_mode', False)
+    ceil_mode = params.get("ceil_mode", False)
     if ceil_mode:
-        if pad == 'valid':
-            output_shape = ((np.array(input_0.shape[-len(kernel_shape):]) - np.array(kernel_shape)) / np.array(
-                stride_shape)) + 1
+        if pad == "valid":
+            output_shape = (
+                (np.array(input_0.shape[-len(kernel_shape) :]) - np.array(kernel_shape))
+                / np.array(stride_shape)
+            ) + 1
         else:
-            output_shape = np.floor((np.array(input_0.shape[-len(kernel_shape):]) - 1) / np.array(stride_shape)) + 1
-        if not np.array([output_shape[i].is_integer() for i in range(len(output_shape))]).all():
-            padding = [0 if output_shape[i].is_integer() else stride_shape[i] for i in range(len(kernel_shape))]
-            rand_string = ''.join(random.choices(string.ascii_uppercase + string.digits, k=3))
+            output_shape = (
+                np.floor(
+                    (np.array(input_0.shape[-len(kernel_shape) :]) - 1)
+                    / np.array(stride_shape)
+                )
+                + 1
+            )
+        if not np.array(
+            [output_shape[i].is_integer() for i in range(len(output_shape))]
+        ).all():
+            padding = [
+                0 if output_shape[i].is_integer() else stride_shape[i]
+                for i in range(len(kernel_shape))
+            ]
+            rand_string = "".join(
+                random.choices(string.ascii_uppercase + string.digits, k=3)
+            )
             if len(kernel_shape) == 2:
                 layers[node_name + "_pre_" + rand_string] = keras.layers.ZeroPadding2D(
-                    ((0, padding[0]), (0, padding[1])))(input_0)
+                    ((0, padding[0]), (0, padding[1]))
+                )(input_0)
             else:
                 layers[node_name + "_pre_" + rand_string] = keras.layers.ZeroPadding3D(
-                    ((0, padding[0]), (0, padding[1]), (0, padding[2])))(input_0)
+                    ((0, padding[0]), (0, padding[1]), (0, padding[2]))
+                )(input_0)
             input_0 = layers[node_name + "_pre_" + rand_string]
     layers[node_name] = pooling(input_0)
 
@@ -105,36 +126,38 @@ def convert_avgpool(node, params, layers, lambda_func, node_name, keras_name):
     :param keras_name: resulting layer name
     :return: None
     """
-    logger = logging.getLogger('onnx2keras.avgpool')
+    logger = logging.getLogger("onnx2keras.avgpool")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-    kernel_shape = params['kernel_shape']
-    stride_shape = params['strides']
+    kernel_shape = params["kernel_shape"]
+    stride_shape = params["strides"]
 
-    pads = params['pads'] if 'pads' in params else [0, 0, 0, 0, 0, 0]
+    pads = params["pads"] if "pads" in params else [0, 0, 0, 0, 0, 0]
 
     if not any(pads):
-        pad = 'valid'
+        pad = "valid"
 
-    elif all([shape % 2 == 1 for shape in kernel_shape]) and \
-            all([kernel_shape[i] // 2 == pads[i] for i in range(len(kernel_shape))]) and \
-            all([shape == 1 for shape in stride_shape]):
-        pad = 'same'
-        logger.debug('Use `same` padding parameters.')
+    elif (
+        all([shape % 2 == 1 for shape in kernel_shape])
+        and all([kernel_shape[i] // 2 == pads[i] for i in range(len(kernel_shape))])
+        and all([shape == 1 for shape in stride_shape])
+    ):
+        pad = "same"
+        logger.debug("Use `same` padding parameters.")
     else:
-        pad = 'valid'
-        logger.warning('Unable to use `same` padding. Add ZeroPadding2D layer to fix shapes.')
-        padding_name = keras_name + '_pad'
+        pad = "valid"
+        logger.warning(
+            "Unable to use `same` padding. Add ZeroPadding2D layer to fix shapes."
+        )
+        padding_name = keras_name + "_pad"
         if len(kernel_shape) == 2:
             padding_layer = keras.layers.ZeroPadding2D(
-                padding=pads[:len(stride_shape)],
-                name=padding_name
+                padding=pads[: len(stride_shape)], name=padding_name
             )
         else:  # 3D padding
             padding_layer = keras.layers.ZeroPadding3D(
-                padding=pads[:len(stride_shape)],
-                name=padding_name
+                padding=pads[: len(stride_shape)], name=padding_name
             )
         layers[padding_name] = input_0 = padding_layer(input_0)
 
@@ -144,7 +167,7 @@ def convert_avgpool(node, params, layers, lambda_func, node_name, keras_name):
             strides=stride_shape,
             padding=pad,
             name=keras_name,
-            data_format='channels_first'
+            data_format="channels_first",
         )
     elif len(kernel_shape) == 1:
         pooling = keras.layers.AveragePooling1D(
@@ -152,7 +175,7 @@ def convert_avgpool(node, params, layers, lambda_func, node_name, keras_name):
             strides=stride_shape,
             padding=pad,
             name=keras_name,
-            data_format='channels_first'
+            data_format="channels_first",
         )
     else:
         pooling = keras.layers.AveragePooling3D(
@@ -160,7 +183,7 @@ def convert_avgpool(node, params, layers, lambda_func, node_name, keras_name):
             strides=stride_shape,
             padding=pad,
             name=keras_name,
-            data_format='channels_first'
+            data_format="channels_first",
         )
     layers[node_name] = pooling(input_0)
 
@@ -179,13 +202,21 @@ def convert_global_avg_pool(node, params, layers, lambda_func, node_name, keras_
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     tensor_dim = len(input_0.shape)
     if tensor_dim == 3:
-        global_pool = keras.layers.GlobalAveragePooling1D(data_format='channels_first', name=keras_name)
+        global_pool = keras.layers.GlobalAveragePooling1D(
+            data_format="channels_first", name=keras_name
+        )
     elif tensor_dim == 4:
-        global_pool = keras.layers.GlobalAveragePooling2D(data_format='channels_first', name=keras_name)
+        global_pool = keras.layers.GlobalAveragePooling2D(
+            data_format="channels_first", name=keras_name
+        )
     elif tensor_dim == 5:
-        global_pool = keras.layers.GlobalAveragePooling3D(data_format='channels_first', name=keras_name)
+        global_pool = keras.layers.GlobalAveragePooling3D(
+            data_format="channels_first", name=keras_name
+        )
     else:
-        raise NotImplementedError("Global average pooling of dims < 3 or dims > 5 is not supported")
+        raise NotImplementedError(
+            "Global average pooling of dims < 3 or dims > 5 is not supported"
+        )
     input_0 = global_pool(input_0)
     new_shape = input_0.shape.as_list()
     new_shape = new_shape[1:]
@@ -194,6 +225,46 @@ def convert_global_avg_pool(node, params, layers, lambda_func, node_name, keras_
     input_0 = reshape_layer(input_0)
 
     layers[node_name] = input_0
+
+
+# def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
+#     """
+#     Convert topk layer
+#     :param node: current operation node
+#     :param params: operation attributes
+#     :param layers: available keras layers
+#     :param lambda_func: function for keras Lambda layer
+#     :param node_name: internal converter name
+#     :param keras_name: resulting layer name
+#     :return: None
+#     """
+#     axis = params.get("axis", -1)
+#     largest = bool(params.get("largest", 1))
+#     to_sort = bool(params.get("sorted", 1))
+#     x = layers[node.input[0]]
+#     k = layers[node.input[1]][0]
+
+#     if not is_numpy(k) and not K.is_keras_tensor(
+#         k
+#     ):  # Eager tensor does not serialize well
+#         k = k.numpy().astype(np.int32)
+
+#     def topk_layer(inputs):
+#         data, k = inputs
+#         k = tf.cast(tf.reshape(k, []), tf.int32)
+#         if not largest:
+#             data = -data
+#         values, indices = tf.math.top_k(data, k=k, sorted=to_sort)
+#         if not largest:
+#             values = -values
+#         return values, indices
+
+#     lambda_layer = keras.layers.Lambda(topk_layer)
+#     values, indices = lambda_layer([x, k])
+#     layers[node_name + "_values"] = values
+#     layers[node_name + "_indices"] = indices
+#     layers[params["_outputs"][0]] = values
+#     layers[params["_outputs"][1]] = indices
 
 
 def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
@@ -207,12 +278,14 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
     :param keras_name: resulting layer name
     :return: None
     """
-    axis = params.get('axis', -1)
-    largest = bool(params.get('largest', 1))
-    to_sort = bool(params.get('sorted', 1))
+    axis = params.get("axis", -1)
+    largest = bool(params.get("largest", 1))
+    to_sort = bool(params.get("sorted", 1))
     x = layers[node.input[0]]
     k = layers[node.input[1]][0]
-    if not is_numpy(k) and not K.is_keras_tensor(k):  # Eager tensor does not serialize well
+    if not is_numpy(k) and not K.is_keras_tensor(
+        k
+    ):  # Eager tensor does not serialize well
         k = k.numpy().astype(np.int32)
     if not largest:
         in_tensor = -x
@@ -236,7 +309,9 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
         topk_res = tf.math.top_k(permuted, k=k, sorted=to_sort)
         values_pre_permute = topk_res[0]
         indices_pre_permute = topk_res[1]
-        topk_concat = tf.stack([values_pre_permute, tf.cast(indices_pre_permute, tf.float32)])
+        topk_concat = tf.stack(
+            [values_pre_permute, tf.cast(indices_pre_permute, tf.float32)]
+        )
         if axis >= rank - 1 or axis == -1:
             out = topk_concat
         else:
@@ -244,29 +319,32 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
             out = tf.transpose(topk_concat, ord_permute)
         return out
 
-    k_reshaped = tf.cast(tf.reshape(k, tf.ones((tf.rank(in_tensor)._inferred_value), dtype=tf.int32)), tf.float32)
+    k_reshaped = tf.cast(
+        tf.reshape(k, tf.ones((tf.rank(in_tensor)._inferred_value), dtype=tf.int32)),
+        tf.float32,
+    )
     composed_input = tf.concat([in_tensor, k_reshaped], axis=-1)
     lambda_layer = keras.layers.Lambda(target_layer)
     result = lambda_layer(composed_input)
-    values = result[0]
-    indices = tf.cast(result[1], tf.int32)
+    values = tf.reshape(result[0], (k,))
+    indices = tf.reshape(tf.cast(result[1], tf.int32), (k,))
     if not largest:
         out_tensor = -values
     else:
         out_tensor = values
-    layers[params['_outputs'][0]] = out_tensor
-    layers[params['_outputs'][1]] = indices
+    layers[params["_outputs"][0]] = out_tensor
+    layers[params["_outputs"][1]] = indices
 
 
 def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
     # extract params
-    output_height = params.get('output_height', 1)
-    output_width = params.get('output_width', 1)
-    sampling_ratio = params.get('sampling_ratio', 0)
-    spatial_scale = params.get('spatial_scale', 1.0)
-    mode = params.get('mode', 'avg')
+    output_height = params.get("output_height", 1)
+    output_width = params.get("output_width", 1)
+    sampling_ratio = params.get("sampling_ratio", 0)
+    spatial_scale = params.get("spatial_scale", 1.0)
+    mode = params.get("mode", "avg")
     if isinstance(mode, bytes):
-        mode = mode.decode('utf-8')
+        mode = mode.decode("utf-8")
 
     feature_map = layers[node.input[0]]
     rois = layers[node.input[1]]
@@ -279,10 +357,12 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
 
     rois = rois * spatial_scale
     box_ind = tf.cast(batch_indices, tf.int32)
-    if keras.backend.image_data_format() == 'channels_first':
+    if keras.backend.image_data_format() == "channels_first":
         fm_shape = tf.shape(feature_map)[2:]  # H, W
     else:
-        raise NotImplementedError("To support channels_last in RoiAlign - need to remove permutes")
+        raise NotImplementedError(
+            "To support channels_last in RoiAlign - need to remove permutes"
+        )
     # extract inputs
     x0 = rois[:, 0:1]
     y0 = rois[:, 1:2]
@@ -298,19 +378,27 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
         nx0 = (x0 + spacing_w / 2) / tf.cast(fm_shape[1] - 1, dtype=tf.float32)
         ny0 = (y0 + spacing_h / 2) / tf.cast(fm_shape[0] - 1, dtype=tf.float32)
 
-        nw = spacing_w * tf.cast(
-            crop_shape[1] - 1,
-            dtype=tf.float32,
-        ) / tf.cast(
-            fm_shape[1] - 1,
-            dtype=tf.float32,
+        nw = (
+            spacing_w
+            * tf.cast(
+                crop_shape[1] - 1,
+                dtype=tf.float32,
+            )
+            / tf.cast(
+                fm_shape[1] - 1,
+                dtype=tf.float32,
+            )
         )
-        nh = spacing_h * tf.cast(
-            crop_shape[0] - 1,
-            dtype=tf.float32,
-        ) / tf.cast(
-            fm_shape[0] - 1,
-            dtype=tf.float32,
+        nh = (
+            spacing_h
+            * tf.cast(
+                crop_shape[0] - 1,
+                dtype=tf.float32,
+            )
+            / tf.cast(
+                fm_shape[0] - 1,
+                dtype=tf.float32,
+            )
         )
     else:
         roi_width = x1 - x0
@@ -322,7 +410,9 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
 
     boxes = tf.concat([ny0, nx0, ny0 + nh, nx0 + nw], axis=1)
 
-    permuted_features = keras.layers.Permute([2, 3, 1])(feature_map)  # move to channels last
+    permuted_features = keras.layers.Permute([2, 3, 1])(
+        feature_map
+    )  # move to channels last
     cropped_tensor = tf.image.crop_and_resize(
         permuted_features,
         boxes,
@@ -331,27 +421,27 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
             output_height * sampling_ratio,
             output_width * sampling_ratio,
         ),
-        method='bilinear'
+        method="bilinear",
     )
 
     pooled_tensor = None
-    if mode.lower() == 'avg':
+    if mode.lower() == "avg":
         pooled_tensor = tf.nn.avg_pool(
             input=cropped_tensor,
             ksize=[1, sampling_ratio, sampling_ratio, 1],
             strides=[1, sampling_ratio, sampling_ratio, 1],
-            padding='SAME',
+            padding="SAME",
             name=node_name,
-            data_format='NHWC'
+            data_format="NHWC",
         )
-    elif mode.lower() == 'max':
+    elif mode.lower() == "max":
         pooled_tensor = tf.nn.max_pool(
             input=cropped_tensor,
             ksize=[1, sampling_ratio, sampling_ratio, 1],
             strides=[1, sampling_ratio, sampling_ratio, 1],
-            padding='SAME',
+            padding="SAME",
             name=node_name,
-            data_format='NHWC'
+            data_format="NHWC",
         )
     else:
         raise ValueError(f"Unknown pooling mode: {mode}")
