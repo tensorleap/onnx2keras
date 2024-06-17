@@ -227,46 +227,6 @@ def convert_global_avg_pool(node, params, layers, lambda_func, node_name, keras_
     layers[node_name] = input_0
 
 
-# def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
-#     """
-#     Convert topk layer
-#     :param node: current operation node
-#     :param params: operation attributes
-#     :param layers: available keras layers
-#     :param lambda_func: function for keras Lambda layer
-#     :param node_name: internal converter name
-#     :param keras_name: resulting layer name
-#     :return: None
-#     """
-#     axis = params.get("axis", -1)
-#     largest = bool(params.get("largest", 1))
-#     to_sort = bool(params.get("sorted", 1))
-#     x = layers[node.input[0]]
-#     k = layers[node.input[1]][0]
-
-#     if not is_numpy(k) and not K.is_keras_tensor(
-#         k
-#     ):  # Eager tensor does not serialize well
-#         k = k.numpy().astype(np.int32)
-
-#     def topk_layer(inputs):
-#         data, k = inputs
-#         k = tf.cast(tf.reshape(k, []), tf.int32)
-#         if not largest:
-#             data = -data
-#         values, indices = tf.math.top_k(data, k=k, sorted=to_sort)
-#         if not largest:
-#             values = -values
-#         return values, indices
-
-#     lambda_layer = keras.layers.Lambda(topk_layer)
-#     values, indices = lambda_layer([x, k])
-#     layers[node_name + "_values"] = values
-#     layers[node_name + "_indices"] = indices
-#     layers[params["_outputs"][0]] = values
-#     layers[params["_outputs"][1]] = indices
-
-
 def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert topk layer
