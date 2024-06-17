@@ -6,7 +6,7 @@ import tensorflow as tf
 from keras import backend as K
 
 from .exceptions import UnsupportedLayer
-from .utils import is_numpy, ensure_tf_type
+from .utils import ensure_float, is_numpy, ensure_tf_type
 
 # Handle python 2.7 import error
 try:
@@ -26,24 +26,24 @@ def convert_clip(node, params, layers, lambda_func, node_name, keras_name):
     :param keras_name: resulting layer name
     :return: None
     """
-    logger = logging.getLogger('onnx2keras.clip')
+    logger = logging.getLogger("onnx2keras.clip")
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for clip layer.')
+        assert AttributeError("More than 1 input for clip layer.")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-    clip_min = params.get('min')
-    clip_max = params.get('max')
+    clip_min = params.get("min")
+    clip_max = params.get("max")
     if clip_min is None or clip_max is None:
         if len(node.input) == 1:
-            raise UnsupportedLayer('Clip without max or min params')
-        if len(node.input) > 1 and node.input[1] != '':
+            raise UnsupportedLayer("Clip without max or min params")
+        if len(node.input) > 1 and node.input[1] != "":
             clip_min = float(layers[node.input[1]])
-        if len(node.input) == 3 and node.input[2] != '':
+        if len(node.input) == 3 and node.input[2] != "":
             clip_max = float(layers[node.input[2]])
 
     if clip_min is None and clip_max is None:
-        raise UnsupportedLayer('Clip without max or min params')
+        raise UnsupportedLayer("Clip without max or min params")
 
     if clip_min is None:
         clip_min = tf.float32.min
@@ -66,12 +66,13 @@ def convert_log(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for log layer.')
+        assert AttributeError("More than 1 input for log layer.")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
     def target_layer(x):
         import keras.backend as K
+
         return K.log(x)
 
     lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
@@ -90,7 +91,7 @@ def convert_neg(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for log layer.')
+        assert AttributeError("More than 1 input for log layer.")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
@@ -108,12 +109,13 @@ def convert_exp(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for log layer.')
+        assert AttributeError("More than 1 input for log layer.")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
     def target_layer(x):
         import keras.backend as K
+
         return K.exp(x)
 
     lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
@@ -133,21 +135,22 @@ def convert_reduce_sum(node, params, layers, lambda_func, node_name, keras_name)
     :return: None
     """
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for reduce sum layer.')
+        assert AttributeError("More than 1 input for reduce sum layer.")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-    if 'axes' not in params:
+    if "axes" not in params:
         axis = layers[node.input[1]]
     else:
-        axis = params['axes']
+        axis = params["axes"]
 
     keep_dims = True
-    if 'keepdims' in params:
-        if params['keepdims'] == 0:
+    if "keepdims" in params:
+        if params["keepdims"] == 0:
             keep_dims = False
 
     def target_layer(x, axis=axis, keep_dims=keep_dims):
         import keras.backend as K
+
         return K.sum(x, keepdims=keep_dims, axis=axis)
 
     lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
@@ -168,13 +171,13 @@ def convert_reduce_mean(node, params, layers, lambda_func, node_name, keras_name
     :return: None
     """
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for reduce mean layer.')
+        assert AttributeError("More than 1 input for reduce mean layer.")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-    param_keepdims = params.get('keepdims', 1)
+    param_keepdims = params.get("keepdims", 1)
     keepdims = param_keepdims == 1
-    axes = params['axes']
+    axes = params["axes"]
     layers[node_name] = K.mean(input_0, keepdims=keepdims, axis=axes)
 
 
@@ -190,11 +193,12 @@ def convert_reduce_max(node, params, layers, lambda_func, node_name, keras_name)
     :return: None
     """
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for reduce max layer.')
+        assert AttributeError("More than 1 input for reduce max layer.")
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-    def target_layer(x, axis=params.get('axes'), keepdims=params['keepdims']):
+    def target_layer(x, axis=params.get("axes"), keepdims=params["keepdims"]):
         import keras.backend as K
+
         return K.max(x, keepdims=(keepdims == 1), axis=axis)
 
     lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
@@ -223,7 +227,9 @@ def convert_reduce_min(node, params, layers, lambda_func, node_name, keras_name)
     if noop_with_empty_axes and params.get("axes") is None:
         layers[node_name] = layers[node.input[0]]
     else:
-        layers[node_name] = tf.math.reduce_min(layers[node.input[0]], axis=axes, keepdims=keepdims)
+        layers[node_name] = tf.math.reduce_min(
+            layers[node.input[0]], axis=axes, keepdims=keepdims
+        )
 
 
 def convert_reduce_prod(node, params, layers, lambda_func, node_name, keras_name):
@@ -248,7 +254,9 @@ def convert_reduce_prod(node, params, layers, lambda_func, node_name, keras_name
     if noop_with_empty_axes and params.get("axes") is None:
         layers[node_name] = layers[node.input[0]]
     else:
-        layers[node_name] = tf.math.reduce_prod(layers[node.input[0]], axis=axes, keepdims=keepdims)
+        layers[node_name] = tf.math.reduce_prod(
+            layers[node.input[0]], axis=axes, keepdims=keepdims
+        )
 
 
 def convert_pow(node, params, layers, lambda_func, node_name, keras_name):
@@ -263,7 +271,7 @@ def convert_pow(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     if len(node.input) != 2:
-        assert AttributeError('More than 2 inputs for pow layer.')
+        assert AttributeError("More than 2 inputs for pow layer.")
     layers[node_name] = tf.math.pow(layers[node.input[0]], layers[node.input[1]])
 
 
@@ -279,7 +287,7 @@ def convert_sqrt(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for sqrt layer.')
+        assert AttributeError("More than 1 input for sqrt layer.")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     layers[node_name] = tf.math.sqrt(input_0)
@@ -297,7 +305,7 @@ def convert_split(node, params, layers, lambda_func, node_name, keras_names):
     :return: None
     """
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for split layer.')
+        assert AttributeError("More than 1 input for split layer.")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_names[0])
     axis = params.get("axis", 0)
@@ -308,7 +316,9 @@ def convert_split(node, params, layers, lambda_func, node_name, keras_names):
             splits = layers[node.input[1]]
         else:
             if layers[node.input[0]].shape[axis] % 2 != 0:
-                raise AttributeError("No splits supplied to the split block but there are uneven number of channels")
+                raise AttributeError(
+                    "No splits supplied to the split block but there are uneven number of channels"
+                )
             else:
                 splits = [layers[node.input[0]].shape[axis] // 2] * 2
     if not isinstance(splits, Iterable):
@@ -319,7 +329,7 @@ def convert_split(node, params, layers, lambda_func, node_name, keras_names):
     cur = 0
     for i, split in enumerate(splits):
         if len(splits) > 1:
-            node_name = params['_outputs'][i]
+            node_name = params["_outputs"][i]
 
         def target_layer(x, axis=axis, start_i=cur, end_i=cur + split):
             slices = [slice(None, None)] * len(K.int_shape(x))
@@ -341,13 +351,13 @@ def convert_cast(node, params, layers, lambda_func, node_name, keras_name):
     :param keras_name: resulting layer name
     :return: None
     """
-    logger = logging.getLogger('onnx2keras.cast')
+    logger = logging.getLogger("onnx2keras.cast")
 
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for cast layer.')
+        assert AttributeError("More than 1 input for cast layer.")
 
     if is_numpy(layers[node.input[0]]):
-        logger.debug('Cast numpy array')
+        logger.debug("Cast numpy array")
 
         cast_map = {
             1: np.float32,
@@ -361,17 +371,18 @@ def convert_cast(node, params, layers, lambda_func, node_name, keras_name):
             11: np.double,
         }
         cast_result = layers[node.input[0]]
-        result = (layers[node.input[0]] == None)
+        result = layers[node.input[0]] == None
         if isinstance(result, (bool, np.bool_)) and not result:
-            cast_result = cast_map[params['to']](layers[node.input[0]])
+            cast_result = cast_map[params["to"]](layers[node.input[0]])
         elif not isinstance(result, (bool, np.bool_)) and not np.any(result):
-            cast_result = cast_map[params['to']](layers[node.input[0]])
+            cast_result = cast_map[params["to"]](layers[node.input[0]])
         layers[node_name] = cast_result
     else:
         input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-        def target_layer(x, dtype=params['to']):
+        def target_layer(x, dtype=params["to"]):
             import tensorflow as tf
+
             cast_map = {
                 1: tf.float32,
                 2: tf.uint8,
@@ -400,13 +411,14 @@ def convert_floor(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for floor layer.')
+        assert AttributeError("More than 1 input for floor layer.")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
     def target_layer(x):
         # Floor is absent in keras.backend
         import tensorflow as tf
+
         return tf.floor(x)
 
     lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
@@ -431,7 +443,7 @@ def convert_identity(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for itentity layer.')
+        assert AttributeError("More than 1 input for itentity layer.")
 
     layers[node_name] = layers[node.input[0]]
 
@@ -448,7 +460,7 @@ def convert_argmax(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for argmax layer.')
+        assert AttributeError("More than 1 input for argmax layer.")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     axis = params.get("axis", -1)
@@ -472,7 +484,7 @@ def convert_argmin(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for argmax layer.')
+        assert AttributeError("More than 1 input for argmax layer.")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     axis = params.get("axis", -1)
@@ -496,7 +508,7 @@ def convert_reduce_l2(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     if len(node.input) != 1:
-        assert AttributeError('More than 1 input for reduce_l2 layer.')
+        assert AttributeError("More than 1 input for reduce_l2 layer.")
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     axis = params.get("axes", [-1])
@@ -504,6 +516,7 @@ def convert_reduce_l2(node, params, layers, lambda_func, node_name, keras_name):
 
     def target_layer(x, axis=axis, keepdims=keepdims):
         import tensorflow as tf
+
         if isinstance(axis, list) and len(axis) == 1:
             axis = axis[0]
         return tf.norm(x, axis=axis, keepdims=keepdims == 1)
@@ -593,15 +606,21 @@ def convert_bitwise_not(node, params, layers, lambda_func, node_name, keras_name
 
 
 def convert_bitwise_and(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = tf.bitwise.bitwise_and(layers[node.input[0]], layers[node.input[1]])
+    layers[node_name] = tf.bitwise.bitwise_and(
+        layers[node.input[0]], layers[node.input[1]]
+    )
 
 
 def convert_bitwise_or(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = tf.bitwise.bitwise_or(layers[node.input[0]], layers[node.input[1]])
+    layers[node_name] = tf.bitwise.bitwise_or(
+        layers[node.input[0]], layers[node.input[1]]
+    )
 
 
 def convert_bitwise_xor(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = tf.bitwise.bitwise_xor(layers[node.input[0]], layers[node.input[1]])
+    layers[node_name] = tf.bitwise.bitwise_xor(
+        layers[node.input[0]], layers[node.input[1]]
+    )
 
 
 def convert_cosine(node, params, layers, lambda_func, node_name, keras_name):
@@ -614,7 +633,9 @@ def convert_greater(node, params, layers, lambda_func, node_name, keras_name):
 
 
 def convert_greater_equal(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = tf.math.greater_equal(layers[node.input[0]], layers[node.input[1]])
+    layers[node_name] = tf.math.greater_equal(
+        layers[node.input[0]], layers[node.input[1]]
+    )
 
 
 def convert_and(node, params, layers, lambda_func, node_name, keras_name):
@@ -622,7 +643,9 @@ def convert_and(node, params, layers, lambda_func, node_name, keras_name):
 
 
 def convert_xor(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = tf.math.logical_xor(layers[node.input[0]], layers[node.input[1]])
+    layers[node_name] = tf.math.logical_xor(
+        layers[node.input[0]], layers[node.input[1]]
+    )
 
 
 def convert_or(node, params, layers, lambda_func, node_name, keras_name):
@@ -646,13 +669,22 @@ def convert_trilu(node, params, layers, lambda_func, node_name, keras_name):
 def convert_cumsum(node, params, layers, lambda_func, node_name, keras_name):
     exclusive = bool(params.get("exclusive", 0))
     reverse = bool(params.get("reverse", 0))
-    layers[node_name] = tf.math.cumsum(layers[node.input[0]], layers[node.input[1]],
-                                       exclusive=exclusive, reverse=reverse)
+    layers[node_name] = tf.math.cumsum(
+        layers[node.input[0]],
+        layers[node.input[1]],
+        exclusive=exclusive,
+        reverse=reverse,
+    )
 
 
 def convert_is_inf(node, params, layers, lambda_func, node_name, keras_name):
-    if params.get("detect_negative") is not None or params.get("detect_negative") is not None:
-        raise AttributeError("Unsupported params detected in isInf conversion: detect_negative/detect_positive")
+    if (
+        params.get("detect_negative") is not None
+        or params.get("detect_negative") is not None
+    ):
+        raise AttributeError(
+            "Unsupported params detected in isInf conversion: detect_negative/detect_positive"
+        )
     layers[node_name] = tf.math.is_inf(layers[node.input[0]])
 
 
@@ -703,29 +735,29 @@ def pseudo_gathernd(input_tensor, indices_tensor):
     )
 
     NUMPY_DTYPES_TO_TF_DTYPES = {
-        np.dtype('float16'): tf.float16,
-        np.dtype('float32'): tf.float32,
-        np.dtype('float64'): tf.float64,
-
-        np.dtype('uint8'): tf.uint8,
-        np.dtype('uint16'): tf.uint16,
-        np.dtype('uint32'): tf.uint32,
-        np.dtype('uint64'): tf.uint64,
-
-        np.dtype('int8'): tf.int8,
-        np.dtype('int16'): tf.int16,
-        np.dtype('int32'): tf.int32,
-        np.dtype('int64'): tf.int64,
-
-        np.dtype('bool_'): tf.bool,
+        np.dtype("float16"): tf.float16,
+        np.dtype("float32"): tf.float32,
+        np.dtype("float64"): tf.float64,
+        np.dtype("uint8"): tf.uint8,
+        np.dtype("uint16"): tf.uint16,
+        np.dtype("uint32"): tf.uint32,
+        np.dtype("uint64"): tf.uint64,
+        np.dtype("int8"): tf.int8,
+        np.dtype("int16"): tf.int16,
+        np.dtype("int32"): tf.int32,
+        np.dtype("int64"): tf.int64,
+        np.dtype("bool_"): tf.bool,
     }
 
     mul = tf.math.multiply(
         indices_tensor,
         tf.cast(
             axis_step,
-            dtype=NUMPY_DTYPES_TO_TF_DTYPES[indices_tensor.dtype] \
-                if isinstance(indices_tensor.dtype, np.dtype) else indices_tensor.dtype,
+            dtype=(
+                NUMPY_DTYPES_TO_TF_DTYPES[indices_tensor.dtype]
+                if isinstance(indices_tensor.dtype, np.dtype)
+                else indices_tensor.dtype
+            ),
         ),
     )
     indices_flat = tf.reduce_sum(
@@ -754,32 +786,38 @@ def convert_nms(node, params, layers, lambda_func, node_name, keras_name):
     batch_size = boxes.shape[0]
 
     if batch_size is None:
-        raise AttributeError("Onnx2kerras: NMS conversion does not support dynamic batch."
-                             "Please change batch to static or remove NMS from model")
+        raise AttributeError(
+            "Onnx2kerras: NMS conversion does not support dynamic batch."
+            "Please change batch to static or remove NMS from model"
+        )
     center_point_box = params.get("center_point_box", 0)
     if center_point_box != 0:
-        raise AttributeError("Onnx2kerras: We do not support the center_point_box parameter")
+        raise AttributeError(
+            "Onnx2kerras: We do not support the center_point_box parameter"
+        )
 
     iou_threshold = 0
-    score_threshold = float('-inf')
-    max_output_size = [2 ** 30]
+    score_threshold = float("-inf")
+    max_output_size = [2**30]
     if len(node.input) > 2:
-        max_output_size = [min(np.squeeze(layers.get(node.input[2], [2 ** 30])), 2 ** 30)]
+        max_output_size = [min(np.squeeze(layers.get(node.input[2], [2**30])), 2**30)]
     if len(node.input) > 3:
         iou_threshold = layers.get(node.input[3], [0])
     if len(node.input) > 4:
-        score_threshold = layers.get(node.input[4], float('-inf'))
+        score_threshold = ensure_float(layers.get(node.input[4], float("-inf")))
         if isinstance(score_threshold, np.ndarray):
             score_threshold = score_threshold[0]
     num_classes = scores.shape[1]
     all_results = []
     for batch in range(batch_size):
         for c_class in range(num_classes):
-            indices = tf.image.non_max_suppression(boxes=boxes[batch],
-                                                   scores=scores[batch, c_class],
-                                                   max_output_size=tf.cast(max_output_size[0], tf.int32),
-                                                   iou_threshold=iou_threshold[0],
-                                                   score_threshold=score_threshold)
+            indices = tf.image.non_max_suppression(
+                boxes=boxes[batch],
+                scores=scores[batch, c_class],
+                max_output_size=tf.cast(max_output_size[0], tf.int32),
+                iou_threshold=iou_threshold,
+                score_threshold=score_threshold,
+            )
             class_tensor = c_class * tf.ones_like(indices)
             batch_tensor = batch * tf.ones_like(indices)
             res = tf.stack([batch_tensor, class_tensor, indices], axis=-1)
@@ -794,22 +832,34 @@ def convert_if(node, params, layers, lambda_func, node_name, keras_name):
         cond = layers[node.input[0]][0]
     outputs = [layers[node.attribute[i].g.output[0].name] for i in range(2)]
     outputs_dtypes = [output.dtype for output in outputs]
-    outputs_numpy_dtypes = [outputs_dtypes[i] if is_numpy(outputs[i]) else outputs_dtypes[i].as_numpy_dtype for i in
-                            range(2)]
+    outputs_numpy_dtypes = [
+        outputs_dtypes[i] if is_numpy(outputs[i]) else outputs_dtypes[i].as_numpy_dtype
+        for i in range(2)
+    ]
     if outputs_numpy_dtypes[0] != outputs_numpy_dtypes[1]:
-        smallest_idx = np.argmin([np.iinfo(outputs_numpy_dtypes[i]).max for i in range(2)])
+        smallest_idx = np.argmin(
+            [np.iinfo(outputs_numpy_dtypes[i]).max for i in range(2)]
+        )
         if is_numpy(outputs[smallest_idx]):
-            outputs[smallest_idx] = outputs[smallest_idx].astype(outputs_numpy_dtypes[1 - smallest_idx])
+            outputs[smallest_idx] = outputs[smallest_idx].astype(
+                outputs_numpy_dtypes[1 - smallest_idx]
+            )
         else:
-            outputs[smallest_idx] = tf.cast(outputs[smallest_idx], tf.as_dtype(outputs_dtypes[1 - smallest_idx]))
+            outputs[smallest_idx] = tf.cast(
+                outputs[smallest_idx], tf.as_dtype(outputs_dtypes[1 - smallest_idx])
+            )
     in_vec = outputs[0]
-    if is_numpy(in_vec):  # if this is a constant it would not be serialized well. connect it to input
+    if is_numpy(
+        in_vec
+    ):  # if this is a constant it would not be serialized well. connect it to input
         # f_then = lambda x: in_vec
         new_dtype = in_vec.dtype.type
 
         # The Tf conversion is required to pass args serialization in leap-model-parser
         def get_empty_array(x, dtype=new_dtype, keras_name=keras_name):
-            return tf.convert_to_tensor(np.array([]), dtype=new_dtype, name=f'{keras_name}_output')
+            return tf.convert_to_tensor(
+                np.array([]), dtype=new_dtype, name=f"{keras_name}_output"
+            )
 
         if len(in_vec) == 0:  # empty arrays does not serialize well in lambdas.
             then_lambda = get_empty_array
@@ -818,7 +868,8 @@ def convert_if(node, params, layers, lambda_func, node_name, keras_name):
         lambda_layer = tf.keras.layers.Lambda(then_lambda, name=keras_name)
         if not K.is_keras_tensor(cond):
             raise NotImplementedError(
-                "We do not support an if where both the then branch and the in-vector are constants")
+                "We do not support an if where both the then branch and the in-vector are constants"
+            )
         then_output = lambda_layer(cond)  # this assumes
     else:
         then_output = outputs[0]

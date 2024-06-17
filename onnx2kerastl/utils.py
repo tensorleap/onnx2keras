@@ -22,7 +22,7 @@ ONNX_ELEM_TO_TF_TYPE = {
     13: tf.uint64,
     14: tf.complex64,
     15: tf.complex128,
-    16: tf.bfloat16
+    16: tf.bfloat16,
 }
 
 
@@ -38,13 +38,16 @@ def is_numpy(obj):
 def ensure_tf_type(obj, name="Const"):
     import numpy as np
     import tensorflow as tf
+
     """
     Convert to Keras Constant if needed
     :param obj: numpy / tf type
     :param fake_input_layer: fake input layer to add constant
     :return: tf type
     """
-    if is_numpy(obj): # TF < v1.16 assumes all ints are int32 and all floats are float32
+    if is_numpy(
+        obj
+    ):  # TF < v1.16 assumes all ints are int32 and all floats are float32
         if obj.dtype == np.int64:
             obj = np.int32(obj)
         return tf.constant(obj, name=name)
@@ -52,8 +55,23 @@ def ensure_tf_type(obj, name="Const"):
         return obj
 
 
-def check_torch_keras_error(model, k_model, input_np, epsilon=1e-5, change_ordering=False,
-                            should_transform_inputs=False):
+def ensure_float(value):
+    if isinstance(value, (list, np.ndarray)):
+        return float(value[0])
+    elif isinstance(value, tf.Tensor):
+        return float(value.numpy().item())
+    else:
+        return float(value)
+
+
+def check_torch_keras_error(
+    model,
+    k_model,
+    input_np,
+    epsilon=1e-5,
+    change_ordering=False,
+    should_transform_inputs=False,
+):
     """
     Check difference between Torch and Keras models
     :param model: torch model
@@ -161,8 +179,11 @@ def unsqueeze_tensors_of_rank_one(tensor_list, axis: int):
     if len(set(ranks)) == 1:
         return tensor_list
     elif len(set(ranks)) > 2:
-        raise ValueError(f"More than 2 different ranks detected, broadcasting is ambiguous.\n"
-                         f"Check the outputs of layers: \n" + '\n'.join([tensor.name for tensor in tensor_list]))
+        raise ValueError(
+            f"More than 2 different ranks detected, broadcasting is ambiguous.\n"
+            f"Check the outputs of layers: \n"
+            + "\n".join([tensor.name for tensor in tensor_list])
+        )
 
     unsqueezed_tensors = []
     for tensor in tensor_list:
