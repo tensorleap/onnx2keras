@@ -248,8 +248,8 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
     composed_input = tf.concat([in_tensor, k_reshaped], axis=-1)
     lambda_layer = keras.layers.Lambda(target_layer)
     result = lambda_layer(composed_input)
-    values = result[0]
-    indices = tf.cast(result[1], tf.int32)
+    values = tf.reshape(result[0], tf.concat([tf.shape(in_tensor)[:-1], [k]], axis=0))
+    indices = tf.reshape(tf.cast(result[1], tf.int32), tf.concat([tf.shape(in_tensor)[:-1], [k]], axis=0))
     if not largest:
         out_tensor = -values
     else:
