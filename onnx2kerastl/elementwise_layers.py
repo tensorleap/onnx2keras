@@ -173,13 +173,25 @@ def convert_min(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     if len(node.input) < 2:
-        assert AttributeError('Less than 2 inputs for min layer.')
+        raise AttributeError('Less than 2 inputs for min layer.')
 
-    inputs = list()
-    for i, inp in enumerate(node.input):
-        input_ = ensure_tf_type(layers[inp], layers[list(layers)[0]], name="%s_const%i" % (keras_name, i + 1))
-        inputs.append(input_)
-    layers[node_name] = keras.layers.Minimum(name=keras_name)(inputs)
+    inputs = [
+        ensure_tf_type(layers[inp], name="%s_const%i" % (keras_name, i + 1))
+        for i, inp in enumerate(node.input)
+    ]
+
+    # Broadcast the inputs to the same shape
+    input1, input2 = inputs
+
+    # Broadcasting to the same shape
+    broadcast_shape = tf.broadcast_static_shape(input1.shape, input2.shape)
+    input1 = tf.broadcast_to(input1, broadcast_shape)
+    input2 = tf.broadcast_to(input2, broadcast_shape)
+
+    # Applying the minimum operation
+    min_output = tf.minimum(input1, input2)
+
+    layers[node_name] = min_output
 
 
 def convert_max(node, params, layers, lambda_func, node_name, keras_name):
@@ -194,13 +206,27 @@ def convert_max(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     if len(node.input) < 2:
-        assert AttributeError('Less than 2 inputs for max layer.')
+        raise AttributeError('Less than 2 inputs for max layer.')
 
-    inputs = list()
-    for i, inp in enumerate(node.input):
-        input_ = ensure_tf_type(layers[inp], layers[list(layers)[0]], name="%s_const%i" % (keras_name, i + 1))
-        inputs.append(input_)
-    layers[node_name] = keras.layers.Maximum(name=keras_name)(inputs)
+    inputs = [
+        ensure_tf_type(layers[inp], name="%s_const%i" % (keras_name, i + 1))
+        for i, inp in enumerate(node.input)
+    ]
+
+    # Broadcast the inputs to the same shape
+    input1, input2 = inputs
+    input1 = tf.convert_to_tensor(input1)
+    input2 = tf.convert_to_tensor(input2)
+
+    # Broadcasting to the same shape
+    broadcast_shape = tf.broadcast_static_shape(input1.shape, input2.shape)
+    input1 = tf.broadcast_to(input1, broadcast_shape)
+    input2 = tf.broadcast_to(input2, broadcast_shape)
+
+    # Applying the maximum operation
+    max_output = tf.maximum(input1, input2)
+
+    layers[node_name] = max_output
 
 
 def convert_mean(node, params, layers, lambda_func, node_name, keras_name):
