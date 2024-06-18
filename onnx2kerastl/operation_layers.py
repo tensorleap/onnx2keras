@@ -6,7 +6,7 @@ import tensorflow as tf
 from keras import backend as K
 
 from .exceptions import UnsupportedLayer
-from .utils import is_numpy, ensure_tf_type
+from .utils import is_numpy, ensure_tf_type, ensure_float
 
 # Handle python 2.7 import error
 try:
@@ -768,7 +768,7 @@ def convert_nms(node, params, layers, lambda_func, node_name, keras_name):
     if len(node.input) > 3:
         iou_threshold = layers.get(node.input[3], [0])
     if len(node.input) > 4:
-        score_threshold = layers.get(node.input[4], float('-inf'))
+        score_threshold = ensure_float(layers.get(node.input[4], float('-inf')))
         if isinstance(score_threshold, np.ndarray):
             score_threshold = score_threshold[0]
     num_classes = scores.shape[1]

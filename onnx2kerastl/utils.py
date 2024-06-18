@@ -176,3 +176,13 @@ def unsqueeze_tensors_of_rank_one(tensor_list, axis: int):
             unsqueezed_tensors.append(tensor)
 
     return unsqueezed_tensors
+
+
+def ensure_float(value):
+    if isinstance(value, (list, np.ndarray)):
+        return float(value[0])
+    elif isinstance(value, tf.Tensor):
+        return float(value.numpy().item())
+    else:
+        return float(value)
+    
