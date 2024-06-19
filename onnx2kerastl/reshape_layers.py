@@ -6,7 +6,7 @@ import tensorflow as tf
 from keras import backend as K
 from keras.layers import SlicingOpLambda, Lambda
 from typing import Union
-
+from tensorflow.python.ops.image_ops import resize_nearest_neighbor
 from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
 
 
@@ -516,6 +516,7 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     roi = None if len(node.input[1]) == 0 else layers[node.input[1]]
     scales = [] if len(node.input[2]) == 0 else layers[node.input[2]]
     sizes = None
+    nearest_mode = params.get('nearest_mode', b'round_prefer_floor')
     if len(node.input) == 4:
         sizes = layers[node.input[3]]
     if roi:
@@ -550,10 +551,25 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
         for i, axis in enumerate(axes):
             if sizes[i] != input_tensor.shape[axis]:
                 tf_resize_shapes[axis - 2] = int(sizes[i])
+    resize_size = tf.stack(tf_resize_shapes, axis=0)
+    if resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR and\
+        isinstance(resize_size, keras.engine.keras_tensor.KerasTensor)\
+        and nearest_mode.decode() == 'floor':
+        logger.warning('floor nearest mode will result in faulty conversion')
 
-    resized = tf.image.resize(to_channel_last,
-                              size=tf.stack(tf_resize_shapes, axis=0),
-                              method=resize_method)
+    if resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR and nearest_mode.decode() == 'floor'\
+        and not isinstance(resize_size, keras.engine.keras_tensor.KerasTensor):
+        if not isinstance(resize_size, np.ndarray) :
+            resize_size = np.array(resize_size)
+
+        def target_layer(x, resize_size=resize_size):
+            return resize_nearest_neighbor(x, resize_size, half_pixel_centers=False)
+        lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
+        resized = lambda_layer(to_channel_last)
+    else:
+        resized = tf.image.resize(to_channel_last,
+                                  size=resize_size,
+                                  method=resize_method)
     to_channel_first = keras.layers.Permute((3, 1, 2))(resized)
     layers[node_name] = to_channel_first
 
