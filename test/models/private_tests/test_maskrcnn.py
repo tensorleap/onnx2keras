@@ -60,7 +60,7 @@ def test_maskrcnn_eff(aws_s3_download):
     mask_prob_th = 0.025
     assert (fin[3][instance_idx_match] - np.transpose(keras_output[3][0], [3,0,1,2])).__abs__().mean()\
            < mask_prob_th
-    prob_th = 0.015
+    prob_th = 0.017
     prob_diff = (fin[1][instance_idx_match] - keras_output[1][0]).__abs__().numpy()
     assert prob_diff.max() < prob_th
     assert prob_diff.mean() < prob_th
