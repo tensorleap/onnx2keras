@@ -317,8 +317,8 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
         roi_height = y1 - y0
         nx0 = x0 / tf.cast(fm_shape[1] - 1, dtype=tf.float32)
         ny0 = y0 / tf.cast(fm_shape[0] - 1, dtype=tf.float32)
-        nw = (roi_width - 1) / tf.cast(fm_shape[1] - 1, dtype=tf.float32)
-        nh = (roi_height - 1) / tf.cast(fm_shape[0] - 1, dtype=tf.float32)
+        nw = roi_width / tf.cast(fm_shape[1] - 1, dtype=tf.float32)
+        nh = roi_height / tf.cast(fm_shape[0] - 1, dtype=tf.float32)
 
     boxes = tf.concat([ny0, nx0, ny0 + nh, nx0 + nw], axis=1)
 
