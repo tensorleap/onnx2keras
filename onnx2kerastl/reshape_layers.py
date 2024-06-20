@@ -90,13 +90,14 @@ def optimize_constant_array_for_serialization(params: tf.Tensor, indices: Union[
         range_inp = tf.range(min_inp, max_inp + 1, dtype=params.dtype)
         reshape_columns = tf.reshape(params, [-1, max_inp + 1])
         if tf.reduce_sum(tf.abs((reshape_columns - range_inp[None, :]))) == 0:
-            # [0,1,2,3,0,1,2,3]
+            # This tests for a long constant array that has a repeating series like [0,1,2,3,0,1,2,3]
             logger.debug('onnx2keras.gather - Shortening sequence - columns')
             indices = indices % (max_inp + 1)
             params = range_inp
         else:
             repetition_len = np.argmin(params == params[0])
             if repetition_len > 0 and len(params) % repetition_len == 0:
+                # This tests for a long constant array that has a repeating series like [0,0,0,1,1,1,2,2,2]
                 reshaped_rows = tf.reshape(params, [-1, repetition_len])
                 first_row = reshaped_rows[:, 0]
                 if tf.reduce_sum(tf.abs(reshaped_rows - first_row[:, None])) == 0:
