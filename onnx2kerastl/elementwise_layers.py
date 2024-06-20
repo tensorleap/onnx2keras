@@ -185,6 +185,10 @@ def convert_min(node, params, layers, lambda_func, node_name, keras_name):
 
     # Broadcasting to the same shape
     broadcast_shape = tf.broadcast_static_shape(input1.shape, input2.shape)
+    # a dynamic shape will fail here
+    assert np.all([broadcast_shape[i] != None for i in range(len(broadcast_shape))])
+    broadcast_shape = np.array(broadcast_shape) # leap-model-parser does not handle Tensorshape as call-arg
+
     input1 = tf.broadcast_to(input1, broadcast_shape)
     input2 = tf.broadcast_to(input2, broadcast_shape)
 
@@ -220,6 +224,9 @@ def convert_max(node, params, layers, lambda_func, node_name, keras_name):
 
     # Broadcasting to the same shape
     broadcast_shape = tf.broadcast_static_shape(input1.shape, input2.shape)
+    # a dynamic shape will fail here
+    assert np.all([broadcast_shape[i] != None for i in range(len(broadcast_shape))])
+    broadcast_shape = np.array(broadcast_shape) # leap-model-parser does not handle Tensorshape as call-arg
     input1 = tf.broadcast_to(input1, broadcast_shape)
     input2 = tf.broadcast_to(input2, broadcast_shape)
 
