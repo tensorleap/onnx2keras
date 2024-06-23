@@ -6,7 +6,6 @@ import tensorflow as tf
 from keras import backend as K
 from keras.layers import SlicingOpLambda, Lambda
 from typing import Union
-from tensorflow.python.ops.image_ops import resize_nearest_neighbor
 from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
 
 
@@ -564,6 +563,8 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
             resize_size = np.array(resize_size)
 
         def target_layer(x, resize_size=resize_size):
+            from tensorflow.python.ops.image_ops import resize_nearest_neighbor
+            
             return resize_nearest_neighbor(x, resize_size, half_pixel_centers=False)
         lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
         resized = lambda_layer(to_channel_last)
