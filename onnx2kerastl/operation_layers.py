@@ -370,7 +370,7 @@ def convert_cast(node, params, layers, lambda_func, node_name, keras_name):
     else:
         input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-        def target_layer(x, dtype=params['to']):
+        def target_layer(x, dtype=params['to'], k_name=keras_name):
             import tensorflow as tf
             cast_map = {
                 1: tf.float32,
@@ -383,7 +383,7 @@ def convert_cast(node, params, layers, lambda_func, node_name, keras_name):
                 10: tf.float16,
                 11: tf.double,
             }
-            return tf.cast(x, cast_map[dtype])
+            return tf.cast(x, cast_map[dtype], name=f'{k_name}_cast')
 
         layers[node_name] = target_layer(input_0)
 
