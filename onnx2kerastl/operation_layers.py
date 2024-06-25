@@ -549,6 +549,12 @@ def convert_less(node, params, layers, lambda_func, node_name, keras_name):
     input_0 = layers[node.input[0]]
     input_1 = layers[node.input[1]]
 
+    if input_1.dtype == input_0.dtype and not isinstance(input_0, (tf.Tensor, np.ndarray)):
+        if input_0.dtype != tf.double:
+            # To see why this is needed, see inline comments on convert_cast
+            input_0 = tf.cast(input_0, dtype=tf.double, name=f"{keras_name}_upcast")
+        else:
+            raise NotImplementedError("Casting a tensor to itself is not supported")
     def target_layer(y, x=input_0):
         x = tf.cast(x, y.dtype)
         return tf.math.less(x, y)
