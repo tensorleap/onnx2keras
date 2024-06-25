@@ -6,17 +6,20 @@ import tempfile
 
 BUCKET_NAME = 'tensorleap-engine-tests-dev'
 PREFIX = 'onnx2keras'
-s3 = boto3.client(
-    's3',
-    aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
-    aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
-    aws_session_token=os.environ['AWS_SESSION_TOKEN'],
-    region_name='us-east-1'
-)
+if not 'LOCAL_TEST' in os.environ:
+    s3 = boto3.client(
+        's3',
+        aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+        aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+        aws_session_token=os.environ['AWS_SESSION_TOKEN'],
+        region_name='us-east-1'
+    )
 
 @pytest.fixture
 def aws_s3_download(request):
     def download_from_s3(aws_dir, dest_dir="", is_temp=False):
+        if 'LOCAL_TEST' in os.environ:
+            return dest_dir, is_temp
         real_dir = ""
         if not is_temp:
             real_dir = dest_dir
