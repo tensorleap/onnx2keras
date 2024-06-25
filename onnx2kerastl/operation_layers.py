@@ -369,8 +369,30 @@ def convert_cast(node, params, layers, lambda_func, node_name, keras_name):
         layers[node_name] = cast_result
     else:
         input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
+        check_cast_map = {
+                1: tf.float32,
+                2: tf.uint8,
+                3: tf.int8,
+                5: tf.int16,
+                6: tf.int32,
+                7: tf.int64,
+                9: tf.bool,
+                10: tf.float16,
+                11: tf.double,
+            }
+        if input_0.dtype == check_cast_map[params['to']] and not isinstance(input_0, (tf.Tensor, np.ndarray)):
+            # casting a tensor to the same dtype create placeholder:0 tensor which does not process well in engine
+            # trying to ignore the conversion (since its identity) might result in wrong types due to the way
+            # keras changes types on serialization and deserialization.
+            # So we up-cast to the most informative type then downcast.
+            # I'm Sorry.
+            if input_0.dtype != tf.double:
+                input_0 = tf.cast(input_0, tf.double, name=f'{keras_name}_precast')
+            else:
+                # We can add an If operation to the graph here if needed
+                raise NotImplementedError("Does not support tf.double casting into itself")
 
-        def target_layer(x, dtype=params['to']):
+        def target_layer(x, dtype=params['to'], k_name=keras_name):
             import tensorflow as tf
             cast_map = {
                 1: tf.float32,
