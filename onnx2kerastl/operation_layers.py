@@ -405,7 +405,7 @@ def convert_cast(node, params, layers, lambda_func, node_name, keras_name):
                 10: tf.float16,
                 11: tf.double,
             }
-            return tf.cast(x, cast_map[dtype])
+            return tf.cast(x, cast_map[dtype], name=f'{k_name}_cast')
 
         layers[node_name] = target_layer(input_0)
 
