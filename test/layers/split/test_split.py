@@ -21,7 +21,7 @@ def test_split_v8(opset_version):
     inpt = torch.ones([1, 10, 10])
     torch.onnx.export(model, inpt, 'split_model.onnx', opset_version=opset_version)
     onnx_model = onnx.load('split_model.onnx')
-    keras_model = onnx_to_keras(onnx_model, ['tensor'], name_policy='attach_weights_name')
+    keras_model = onnx_to_keras(onnx_model, ['tensor'], name_policy='attach_weights_name').converted_model
     final_model = convert_channels_first_to_last(keras_model, ['tensor'])
     assert final_model(inpt)[0].shape == final_model(inpt)[1].shape == [1, 5, 10]
     # assert np.abs(keras_preds-this_pred.detach().numpy()).max() < 1e-04

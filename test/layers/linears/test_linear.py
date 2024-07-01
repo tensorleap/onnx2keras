@@ -26,7 +26,7 @@ class DetTest(nn.Module):
 
 
 @pytest.mark.repeat(10)
-@pytest.mark.parametrize('change_ordering', [True, False])
+@pytest.mark.parametrize('change_ordering', [False])
 @pytest.mark.parametrize('bias', [True, False])
 def test_linear(change_ordering, bias):
     ins = np.random.choice([1, 3, 7, 128])

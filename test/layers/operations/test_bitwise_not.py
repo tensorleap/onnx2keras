@@ -32,7 +32,7 @@ class BitwiseNot():
 def test_bitwise_not():
     np_input = np.random.randint(low=1, high=2000, size=(1, 8, 3), dtype=np.int32) # onnx export only supports bool input
     onnx_bitwise = BitwiseNot().get_onnx()
-    keras_model = onnx_to_keras(onnx_bitwise, ['x'], name_policy='attach_weights_name')
+    keras_model = onnx_to_keras(onnx_bitwise, ['x'], name_policy='attach_weights_name').converted_model
     final_model = convert_channels_first_to_last(keras_model, should_transform_inputs_and_outputs=True)
     keras_res = final_model(np_input)
     assert (np.abs((np.bitwise_not(np_input) - keras_res).numpy()) < 1).all()
