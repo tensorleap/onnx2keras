@@ -38,7 +38,7 @@ def test_topk(return_sorted, largest, dim, k):
                       output_names=['test_out_1', 'test_out_2'])
     temp_f.seek(0)
     onnx_model = onnx.load(temp_f)
-    keras_model = onnx_to_keras(onnx_model, ['test_in'], name_policy='attach_weights_name')
+    keras_model = onnx_to_keras(onnx_model, ['test_in'], name_policy='attach_weights_name').converted_model
     final_model = convert_channels_first_to_last(keras_model, should_transform_inputs_and_outputs=True)
     keras_res = final_model(np.swapaxes(np_input, 1, 2))
     pt_res = pt_model(torch.from_numpy(np_input))

@@ -120,7 +120,9 @@ def check_torch_keras_error(model, k_model, input_np, epsilon=1e-5, change_order
             input_np = _input_np
 
         k_model = convert_channels_first_to_last(k_model, inputs_to_transpose)
-        keras_output = k_model(*input_np)
+        if len(input_np) == 1:
+            input_np = input_np[0]
+        keras_output = k_model(input_np)
         if not isinstance(keras_output, list):
             keras_output = [keras_output]
 

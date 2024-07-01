@@ -10,7 +10,7 @@ def test_nms():
         "https://storage.googleapis.com/example-datasets-47ml982d/onnx2kerras/nms/nms_v2.onnx",
         "nms_v2.onnx")
     onnx_model = onnx.load('nms_v2.onnx')
-    keras_model = onnx_to_keras(onnx_model, ['boxes', 'scores'], name_policy='attach_weights_name')
+    keras_model = onnx_to_keras(onnx_model, ['boxes', 'scores'], name_policy='attach_weights_name').converted_model
     final_model = convert_channels_first_to_last(keras_model, should_transform_inputs_and_outputs=True)
     urllib.request.urlretrieve(
         "https://storage.googleapis.com/example-datasets-47ml982d/onnx2kerras/nms/nms_in_boxes.npy",

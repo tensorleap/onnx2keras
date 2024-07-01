@@ -33,7 +33,7 @@ class OnnxSize():
 def test_size():
     np_input = np.random.random((1, 8, 3)) # onnx export only supports bool input
     onnx_size = OnnxSize().get_onnx()
-    keras_model = onnx_to_keras(onnx_size, ['test_in'], name_policy='attach_weights_name')
+    keras_model = onnx_to_keras(onnx_size, ['test_in'], name_policy='attach_weights_name').converted_model
     final_model = convert_channels_first_to_last(keras_model, should_transform_inputs_and_outputs=True)
     keras_res = final_model(np_input)
     sess = rt.InferenceSession(onnx_size.SerializeToString())

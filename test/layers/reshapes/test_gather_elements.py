@@ -32,7 +32,7 @@ def test_gather_elements():
                       output_names=['test_out'])
     temp_f.seek(0)
     onnx_model = onnx.load(temp_f)
-    keras_model = onnx_to_keras(onnx_model, ['test_in_1', 'test_in_2'], name_policy='attach_weights_name')
+    keras_model = onnx_to_keras(onnx_model, ['test_in_1', 'test_in_2'], name_policy='attach_weights_name').converted_model
     final_model = convert_channels_first_to_last(keras_model, should_transform_inputs_and_outputs=True)
     assert (final_model([t.numpy(), np.array(idx_arr)])-pt_model(t, torch_idx_arr) < 1).numpy().all()
 
