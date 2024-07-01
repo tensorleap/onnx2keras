@@ -46,7 +46,7 @@ def test_unique(return_inverse, return_counts, to_sort):
                       output_names=output_names)
     temp_f.seek(0)
     onnx_model = onnx.load(temp_f)
-    keras_model = onnx_to_keras(onnx_model, ['x'], name_policy='attach_weights_name')
+    keras_model = onnx_to_keras(onnx_model, ['x'], name_policy='attach_weights_name').converted_model
     final_model = convert_channels_first_to_last(keras_model, should_transform_inputs_and_outputs=True)
     rotated_input = np.swapaxes(torch_input.numpy(), 1, 2)
     res_keras = final_model(rotated_input)

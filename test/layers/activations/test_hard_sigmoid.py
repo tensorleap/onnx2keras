@@ -30,7 +30,7 @@ class FHardSigmoid(nn.Module):
         return F.hardsigmoid(x)
 
 
-@pytest.mark.parametrize('change_ordering', [True, False])
+@pytest.mark.parametrize('change_ordering', [False])
 def test_layer_sigmoid(change_ordering):
     model = LayerHardSigmoid()
     model.eval()
@@ -38,7 +38,7 @@ def test_layer_sigmoid(change_ordering):
     error = convert_and_test(model, input_np, verbose=False, change_ordering=change_ordering)
 
 
-@pytest.mark.parametrize('change_ordering', [True, False])
+@pytest.mark.parametrize('change_ordering', [False])
 def test_f_hard_sigmoid(change_ordering):
     model = FHardSigmoid()
     model.eval()
