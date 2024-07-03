@@ -23,13 +23,9 @@ class TopK(torch.nn.Module):
 
 @pytest.mark.parametrize('return_sorted', [True, False])
 @pytest.mark.parametrize('largest', [True, False])
-@pytest.mark.parametrize('dim', [-1, 1])
+@pytest.mark.parametrize('dim', [2, 1])
 @pytest.mark.parametrize('k', [2])
 def test_topk(return_sorted, largest, dim, k):
-    k=2
-    dim=1
-    return_sorted=False
-    largest=True
     np_input = np.random.random((1, 3, 8))
     pt_model = TopK(k, dim, largest, return_sorted)
     temp_f = io.BytesIO()
@@ -43,12 +39,15 @@ def test_topk(return_sorted, largest, dim, k):
     keras_res = final_model(np.swapaxes(np_input, 1, 2))
     pt_res = pt_model(torch.from_numpy(np_input))
     if not return_sorted:
-        reshaped_pt_pred = np.array(pt_res[0].transpose(1,2)).reshape(-1,k)
-        reshaped_keras_pred = np.array(keras_res[0]).reshape(-1, k)
-        for i in range(reshaped_pt_pred.shape[0]):
+        reshaped_pt_pred = np.array(pt_res[0].transpose(1,2))[0]
+        reshaped_keras_pred = np.array(keras_res[0])[0]
+        if dim == 1:
+            reshaped_pt_pred = reshaped_pt_pred.transpose()
+            reshaped_keras_pred = reshaped_keras_pred.transpose()
+        for i in range(reshaped_pt_pred.shape[1]):
             has_valid_permute = False
-            pt_i_res = reshaped_pt_pred[i, :]
-            for permutation in itertools.permutations(reshaped_keras_pred[i,:]):
+            pt_i_res = reshaped_pt_pred[:, i]
+            for permutation in itertools.permutations(reshaped_keras_pred[:, i]):
                 if ((permutation - pt_i_res).__abs__() < 10**(-6)).all():
                     has_valid_permute = True
             if has_valid_permute is False:
