@@ -222,7 +222,9 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
     def target_layer(composed_input, to_sort=to_sort, axis=axis):
         in_tensor = composed_input[..., :-1]
         k = composed_input[..., -1]
-        k = tf.cast(tf.reshape(k, [1])[0], tf.int32)
+        for i in range(len(k.shape)):
+            k = k[0]
+        k = tf.cast(k, tf.int32)
         rank = len(in_tensor.shape)
 
         if axis >= rank - 1 or axis == -1:
@@ -243,13 +245,15 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
             ord_permute = [0] + (ord_permute + 1).tolist()
             out = tf.transpose(topk_concat, ord_permute)
         return out
-
-    k_reshaped = tf.cast(tf.reshape(k, tf.ones((tf.rank(in_tensor)._inferred_value), dtype=tf.int32)), tf.float32)
+    in_shape = tf.shape(in_tensor)
+    k_reshaped = tf.cast(tf.ones(tf.concat([(in_shape)[:-1],[1]], axis=-1)._inferred_value)*tf.cast(k, tf.float32), tf.float32)
     composed_input = tf.concat([in_tensor, k_reshaped], axis=-1)
     lambda_layer = keras.layers.Lambda(target_layer)
     result = lambda_layer(composed_input)
-    values = tf.reshape(result[0], tf.concat([tf.shape(in_tensor)[:-1], [k]], axis=0))
-    indices = tf.reshape(tf.cast(result[1], tf.int32), tf.concat([tf.shape(in_tensor)[:-1], [k]], axis=0))
+    pos_axis = axis if axis > 0 else in_shape.shape[0]-1
+    new_shape = tf.concat([in_shape[:pos_axis], [k], in_shape[pos_axis+1:]],axis=-1)
+    values = tf.reshape(result[0], new_shape)
+    indices = tf.reshape(tf.cast(result[1], tf.int32), new_shape)
     if not largest:
         out_tensor = -values
     else:
