@@ -49,13 +49,13 @@ def convert_batchnorm(node, params, layers, lambda_func, node_name, keras_name):
             axis=1, momentum=momentum, epsilon=eps,
             center=False, scale=False,
             weights=weights,
-            name=keras_name
+            name=f"{params['cleaned_name']}_bn"
         )
     else:
         bn = keras.layers.BatchNormalization(
             axis=1, momentum=momentum, epsilon=eps,
             weights=weights,
-            name=keras_name
+            name=f"{params['cleaned_name']}_bn"
         )
 
     layers[node_name] = bn(input_0)
@@ -115,7 +115,7 @@ def convert_dropout(node, params, layers, lambda_func, node_name, keras_name):
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
     ratio = params['ratio'] if 'ratio' in params else 0.0
-    lambda_layer = keras.layers.Dropout(ratio, name=keras_name)
+    lambda_layer = keras.layers.Dropout(ratio, name=f"{params['cleaned_name']}_dropout")
     layers[node_name] = lambda_layer(input_0)
 
 
@@ -152,6 +152,6 @@ def convert_lrn(node, params, layers, lambda_func, node_name, keras_name):
 
         return layer
 
-    lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
+    lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_lrn")
     layers[node_name] = lambda_layer(input_0)
     lambda_func[keras_name] = target_layer

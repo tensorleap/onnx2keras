@@ -39,7 +39,7 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
         logger.debug('Use `same` padding parameters.')
     else:
         logger.warning('Unable to use `same` padding. Add ZeroPadding2D layer to fix shapes.')
-        padding_name = keras_name + '_pad'
+        padding_name = f"{params['cleaned_name']}_maxpool" + '_pad'
         if len(kernel_shape) == 2:
             padding = None
 
@@ -65,7 +65,7 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
             pool_size=kernel_shape,
             strides=stride_shape,
             padding=pad,
-            name=keras_name,
+            name=f"{params['cleaned_name']}_maxpool",
             data_format='channels_first'
         )
     else:
@@ -73,7 +73,7 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
             pool_size=kernel_shape,
             strides=stride_shape,
             padding=pad,
-            name=keras_name,
+            name=f"{params['cleaned_name']}_maxpool",
             data_format='channels_first'
         )
     ceil_mode = params.get('ceil_mode', False)
@@ -127,7 +127,7 @@ def convert_avgpool(node, params, layers, lambda_func, node_name, keras_name):
     else:
         pad = 'valid'
         logger.warning('Unable to use `same` padding. Add ZeroPadding2D layer to fix shapes.')
-        padding_name = keras_name + '_pad'
+        padding_name = f"{params['cleaned_name']}_avgpool" + '_pad'
         if len(kernel_shape) == 2:
             padding_layer = keras.layers.ZeroPadding2D(
                 padding=pads[:len(stride_shape)],
@@ -145,7 +145,7 @@ def convert_avgpool(node, params, layers, lambda_func, node_name, keras_name):
             pool_size=kernel_shape,
             strides=stride_shape,
             padding=pad,
-            name=keras_name,
+            name=f"{params['cleaned_name']}_avgpool",
             data_format='channels_first'
         )
     elif len(kernel_shape) == 1:
@@ -153,7 +153,7 @@ def convert_avgpool(node, params, layers, lambda_func, node_name, keras_name):
             pool_size=kernel_shape,
             strides=stride_shape,
             padding=pad,
-            name=keras_name,
+            name=f"{params['cleaned_name']}_avgpool",
             data_format='channels_first'
         )
     else:
@@ -161,7 +161,7 @@ def convert_avgpool(node, params, layers, lambda_func, node_name, keras_name):
             pool_size=kernel_shape,
             strides=stride_shape,
             padding=pad,
-            name=keras_name,
+            name=f"{params['cleaned_name']}_avgpool",
             data_format='channels_first'
         )
     layers[node_name] = pooling(input_0)
@@ -181,18 +181,21 @@ def convert_global_avg_pool(node, params, layers, lambda_func, node_name, keras_
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     tensor_dim = len(input_0.shape)
     if tensor_dim == 3:
-        global_pool = keras.layers.GlobalAveragePooling1D(data_format='channels_first', name=keras_name)
+        global_pool = keras.layers.GlobalAveragePooling1D(data_format='channels_first',
+                                                          name=f"{params['cleaned_name']}_global_avg_pool_3")
     elif tensor_dim == 4:
-        global_pool = keras.layers.GlobalAveragePooling2D(data_format='channels_first', name=keras_name)
+        global_pool = keras.layers.GlobalAveragePooling2D(data_format='channels_first',
+                                                          name=f"{params['cleaned_name']}_global_avg_pool_4")
     elif tensor_dim == 5:
-        global_pool = keras.layers.GlobalAveragePooling3D(data_format='channels_first', name=keras_name)
+        global_pool = keras.layers.GlobalAveragePooling3D(data_format='channels_first',
+                                                          name=f"{params['cleaned_name']}_global_avg_pool_5")
     else:
         raise NotImplementedError("Global average pooling of dims < 3 or dims > 5 is not supported")
     input_0 = global_pool(input_0)
     new_shape = input_0.shape.as_list()
     new_shape = new_shape[1:]
     new_shape.extend([1] * (tensor_dim - 2))
-    reshape_layer = keras.layers.Reshape(new_shape, name=f"{params['cleaned_name']}_reshape")
+    reshape_layer = keras.layers.Reshape(new_shape, name=f"{params['cleaned_name']}_global_avg_pool_reshape")
     input_0 = reshape_layer(input_0)
 
     layers[node_name] = input_0

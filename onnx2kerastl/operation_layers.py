@@ -82,7 +82,7 @@ def convert_log(node, params, layers, lambda_func, node_name, keras_name):
         import keras.backend as K
         return K.log(x)
 
-    lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
+    lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_log")
     layers[node_name] = lambda_layer(input_0)
     lambda_func[keras_name] = target_layer
 
@@ -124,7 +124,7 @@ def convert_exp(node, params, layers, lambda_func, node_name, keras_name):
         import keras.backend as K
         return K.exp(x)
 
-    lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
+    lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_exp")
     layers[node_name] = lambda_layer(input_0)
     lambda_func[keras_name] = target_layer
 
@@ -158,7 +158,7 @@ def convert_reduce_sum(node, params, layers, lambda_func, node_name, keras_name)
         import keras.backend as K
         return K.sum(x, keepdims=keep_dims, axis=axis)
 
-    lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
+    lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_reduce_sum")
     layers[node_name] = lambda_layer(input_0)
     layers[node_name].set_shape(layers[node_name].shape)
     lambda_func[keras_name] = target_layer
@@ -205,7 +205,7 @@ def convert_reduce_max(node, params, layers, lambda_func, node_name, keras_name)
         import keras.backend as K
         return K.max(x, keepdims=(keepdims == 1), axis=axis)
 
-    lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
+    lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_reduce_max")
     layers[node_name] = lambda_layer(input_0)
     layers[node_name].set_shape(layers[node_name].shape)
     lambda_func[keras_name] = target_layer

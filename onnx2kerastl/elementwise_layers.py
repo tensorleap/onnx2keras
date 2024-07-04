@@ -85,7 +85,7 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
                 to_add = tf_repeat(tf_expand_dims(input_1, axis=-1, tf_name=f"{params['cleaned_name']}_expand"),
                                    input_0.shape[-1], axis=-1, tf_name=f"{params['cleaned_name']}_repeat")
 
-            layers[node_name] = keras.layers.Add(name=keras_name)([input_0, to_add])
+            layers[node_name] = keras.layers.Add(name=f"{params['cleaned_name']}_add")([input_0, to_add])
         else:
             raise ValueError('Operands are different.')
     except (IndexError, ValueError):

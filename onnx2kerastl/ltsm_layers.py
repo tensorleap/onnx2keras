@@ -31,23 +31,25 @@ def convert_lstm(node, params, layers, lambda_func, node_name, keras_name):
         if direction != 'forward':
             raise UnsupportedLayer(f"LSTM with {direction} direction")
     should_return_state = len(node.output) == 3
-    input_tensor = tf.transpose(ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name[0]), perm=[1, 0, 2])
+    input_tensor = tf_transpose(ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name[0]),
+                                perm=[1, 0, 2],
+                                tf_name=f"{params['cleaned_name']}_lstm_first_transpose")
     weights_w = layers[node.input[1]][0]
     weights_r = layers[node.input[2]][0]
     weights_b = layers[node.input[3]][0]
 
     initial_h_state = tf_cast(tf_squeeze(ensure_tf_type(layers[node.input[5]]),
                                          axis=0,
-                                         tf_name=f"{params['cleaned_name']}_squeeze_h"
+                                         tf_name=f"{params['cleaned_name']}_lstm_squeeze_h"
                                          ),
                               input_tensor.dtype,
-                              tf_name=f"{params['cleaned_name']}_cast_h")
+                              tf_name=f"{params['cleaned_name']}_lstm_cast_h")
     initial_c_state = tf_cast(
         tf_squeeze(
         ensure_tf_type(layers[node.input[6]]),
         axis=0,
-        tf_name=f"{params['cleaned_name']}_squeeze_c"), input_tensor.dtype,
-        tf_name=f"{params['cleaned_name']}_cast_c")
+        tf_name=f"{params['cleaned_name']}_lstm_squeeze_c"), input_tensor.dtype,
+        tf_name=f"{params['cleaned_name']}_lstm_cast_c")
 
     tf.keras.backend.set_image_data_format("channels_last")
     hidden_size = params['hidden_size']
@@ -87,9 +89,9 @@ def convert_lstm(node, params, layers, lambda_func, node_name, keras_name):
         layers[node.output[2]] = c_out
     else:
         lstm_tensor = res
-    lstm_tensor_in_onnx_order = tf_transpose(lstm_tensor, perm=[1, 0, 2], tf_name=f"{params['cleaned_name']}_transpose")
+    lstm_tensor_in_onnx_order = tf_transpose(lstm_tensor, perm=[1, 0, 2], tf_name=f"{params['cleaned_name']}_lstm_transpose")
     lstm_tensor_in_onnx_order = tf_expand_dims(lstm_tensor_in_onnx_order, axis=1,
-                                               tf_name=f"{params['cleaned_name']}_expand_dims")
+                                               tf_name=f"{params['cleaned_name']}_lstm_expand_dims")
     layers[node_name] = lstm_tensor_in_onnx_order
 
 def convert_gru(node, params, layers, lambda_func, node_name, keras_name):
