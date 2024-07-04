@@ -36,7 +36,7 @@ def convert_transpose(node, params, layers, lambda_func, node_name, keras_name):
             layers[node_name] = tf_transpose(layers[input_name], perm=params['perm'],
                                              tf_name=f"{params['cleaned_name']}_transpose")
     else:
-        permute = keras.layers.Permute(params['perm'][1:], name=keras_name)
+        permute = keras.layers.Permute(params['perm'][1:], name=f"{params['cleaned_name']}_transpose")
         layers[node_name] = permute(layers[input_name])
 
 
@@ -228,7 +228,7 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
                 layer_input = unsqueeze_tensors_of_rank_one(layer_input, axis=params['axis'], name=params['cleaned_name'])
                 layers[node_name] = keras.layers.concatenate(inputs=layer_input,
                                                              axis=params['axis'],
-                                                             name=keras_name)
+                                                             name=f"{params['cleaned_name']}_concat_2")
         else:
             layers[node_name] = layer_input[0]
 
@@ -290,7 +290,8 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                         x = tf.transpose(x, [0, 3, 1, 2])
                         return x
 
-                    lambda_layer = keras.layers.Lambda(target_layer, name="%s_CHW" % keras_name)
+                    lambda_layer = keras.layers.Lambda(target_layer,
+                                                       name="%s_CHW" % f"{params['cleaned_name']}_reshape_lambda")
                     layers[node_name] = lambda_layer(input_0)
                     lambda_func[keras_name] = target_layer
                 else:

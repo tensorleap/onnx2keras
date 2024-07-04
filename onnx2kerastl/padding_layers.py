@@ -46,7 +46,7 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
             if pads.shape[0] == 8:
                 padding_layer = keras.layers.ZeroPadding2D(
                     padding=((pads[2], pads[6]), (pads[3], pads[7])),
-                    name=keras_name
+                    name=f"{params['cleaned_name']}_pad_0"
                 )
             elif pads.shape[0] == 12:  # Check for rank 6 input
                 padding_layer = keras.layers.Lambda(
@@ -62,14 +62,14 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
                         ],
                         mode='CONSTANT'
                     ),
-                    name=keras_name
+                    name=f"{params['cleaned_name']}_pad_1"
                 )
                 layers[node_name] = padding_layer(input_0)
             else:
                 logger.warning("Caution - no test yet")
                 padding_layer = keras.layers.ZeroPadding3D(
                     padding=((pads[2], pads[7]), (pads[3], pads[8]), (pads[4], pads[9])),
-                    name=keras_name
+                    name=f"{params['cleaned_name']}_pad_2"
                 )
             layers[node_name] = padding_layer(input_0)
     elif params['mode'] == 'reflect':
@@ -82,7 +82,7 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
                 layer = tf.pad(x, [[0, 0], [0, 0], [pads[2], pads[7]], [pads[3], pads[8]], [pads[4], pads[9]]], 'REFLECT')
             return layer
 
-        lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
+        lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_pad_reflect")
         layers[node_name] = lambda_layer(input_0)
         lambda_func[keras_name] = target_layer
     elif params['mode'] == 'edge':
@@ -96,7 +96,7 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
                 layer = tf.pad(x, [[0, 0], [0, 0], [pads[2], pads[7]], [pads[3], pads[8]], [pads[4], pads[9]]], 'SYMMETRIC')
             return layer
 
-        lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
+        lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_pad_edge")
         layers[node_name] = lambda_layer(input_0)
         lambda_func[keras_name] = target_layer
 

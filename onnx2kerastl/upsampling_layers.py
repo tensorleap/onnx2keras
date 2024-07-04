@@ -38,6 +38,7 @@ def convert_upsample(node, params, layers, lambda_func, node_name, keras_name):
         logger.error(f'Cannot convert upsampling. interpolation mode: {interpolation_mode} is not supported')
         raise AssertionError(f'Cannot convert upsampling. interpolation mode: {interpolation_mode} is not supported')
 
-    upsampling = keras.layers.UpSampling2D(size=scale, name=keras_name, interpolation=interpolation)
+    upsampling = keras.layers.UpSampling2D(size=scale, name=f"{params['cleaned_name']}_upsample_2d",
+                                           interpolation=interpolation)
 
     layers[node_name] = upsampling(layers[node.input[0]])

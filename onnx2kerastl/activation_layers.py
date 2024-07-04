@@ -23,7 +23,7 @@ def convert_relu(node, params, layers, lambda_func, node_name, keras_name):
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-    relu = keras.layers.Activation('relu', name=keras_name)
+    relu = keras.layers.Activation('relu', name=f"{params['cleaned_name']}_reli")
     layers[node_name] = relu(input_0)
 
 
@@ -43,7 +43,7 @@ def convert_elu(node, params, layers, lambda_func, node_name, keras_name):
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     alpha = params.get('alpha', keras.layers.ELU.__init__.__defaults__[0])
-    elu = keras.layers.ELU(alpha=alpha, name=keras_name)
+    elu = keras.layers.ELU(alpha=alpha, name=f"{params['cleaned_name']}_elu")
     layers[node_name] = elu(input_0)
 
 
@@ -64,7 +64,7 @@ def convert_lrelu(node, params, layers, lambda_func, node_name, keras_name):
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
     alpha = params.get('alpha', keras.layers.LeakyReLU.__init__.__defaults__[0])
-    leakyrelu = keras.layers.LeakyReLU(alpha=alpha, name=keras_name)
+    leakyrelu = keras.layers.LeakyReLU(alpha=alpha, name=f"{params['cleaned_name']}_leakyrelu")
     layers[node_name] = leakyrelu(input_0)
 
 
@@ -84,7 +84,7 @@ def convert_sigmoid(node, params, layers, lambda_func, node_name, keras_name):
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-    sigmoid = keras.layers.Activation('sigmoid', name=keras_name)
+    sigmoid = keras.layers.Activation('sigmoid', name=f"{params['cleaned_name']}_sigmoid")
     layers[node_name] = sigmoid(input_0)
 
 
@@ -104,7 +104,7 @@ def convert_tanh(node, params, layers, lambda_func, node_name, keras_name):
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-    tanh = keras.layers.Activation('tanh', name=keras_name)
+    tanh = keras.layers.Activation('tanh', name=f"{params['cleaned_name']}_tanh")
     layers[node_name] = tanh(input_0)
 
 
@@ -124,7 +124,7 @@ def convert_selu(node, params, layers, lambda_func, node_name, keras_name):
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-    selu = keras.layers.Activation('selu', name=keras_name)
+    selu = keras.layers.Activation('selu', name=f"{params['cleaned_name']}_selu")
     layers[node_name] = selu(input_0)
 
 
