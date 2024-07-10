@@ -9,3 +9,5 @@ dist/
 *.DS_Store
 .python-version
 test/models/custom_conversion_tests
+
+.vscode/
