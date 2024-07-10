@@ -537,25 +537,39 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     # Validate axes
     axes = [a if a >= 0 else a + rank for a in axes]  # Convert negative axes to positive
     if any(a < 0 or a >= rank for a in axes):  # check that all axes values are within input rank
+    axes = [a if a >= 0 else a + rank for a in axes]  # Convert negative axes to positive
+    if any(a < 0 or a >= rank for a in axes):  # check that all axes values are within input rank
         raise ValueError("Invalid axes value")
 
     to_channel_last = keras.layers.Permute((2, 3, 1))(input_tensor)  # (B, W, H, C)
-    shape = tf.cast(tf.shape(to_channel_last), tf.int32)
-    tf_resize_shapes = [shape[i] for i in range(1, 3)]  # (W, H)
+    shape = tf.cast(tf.shape(input_tensor), tf.int32)
+    tf_resize_shapes = tf.zeros_like(shape)
 
     if len(scales) > 0:
         for i, axis in enumerate(axes):
-            if scales[i] != 1:
-                tf_resize_shapes[axis - 2] = tf.cast(scales[i] * tf.cast(tf_resize_shapes[axis - 2], tf.float32), tf.int32)
+            indices = tf.constant([[axis]])
+            update = tf.cast(tf.multiply(scales[i], tf.cast(shape[axis], tf.float32)), tf.int32)
+            updates = tf.reshape(update, (1,))
+            tf_resize_shapes = tf.tensor_scatter_nd_update(tf_resize_shapes, indices, updates)
+
     else:
         for i, axis in enumerate(axes):
-            if sizes[i] != input_tensor.shape[axis]:
-                tf_resize_shapes[axis - 2] = int(sizes[i])
-    resize_size = tf.stack(tf_resize_shapes, axis=0)
-    if resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR and\
-        isinstance(resize_size, keras.engine.keras_tensor.KerasTensor)\
-        and nearest_mode.decode() == 'floor':
-        logger.warning('floor nearest mode will result in faulty conversion')
+            indices = tf.constant([[axis]])
+
+            # The value to update at the specified index
+            update = tf.cast(sizes[i], tf.int32)
+            updates = tf.reshape(update, (1,))
+
+            # Apply the update using tf.scatter_nd  
+            tf_resize_shapes = tf.tensor_scatter_nd_update(tf_resize_shapes, indices, updates)
+    # tf_resize_shapes = tf.gather(tf_resize_shapes, [0, 2, 3, 1])
+    resize_size = tf.stack(tf.gather(tf_resize_shapes, [2, 3]), axis=0)
+    if (
+        resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR
+        and isinstance(resize_size, keras.engine.keras_tensor.KerasTensor)
+        and nearest_mode.decode() == "floor"
+    ):
+        logger.warning("floor nearest mode will result in faulty conversion")
 
     if resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR and nearest_mode.decode() == 'floor'\
         and not isinstance(resize_size, keras.engine.keras_tensor.KerasTensor):
