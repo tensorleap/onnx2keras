@@ -537,8 +537,6 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     # Validate axes
     axes = [a if a >= 0 else a + rank for a in axes]  # Convert negative axes to positive
     if any(a < 0 or a >= rank for a in axes):  # check that all axes values are within input rank
-    axes = [a if a >= 0 else a + rank for a in axes]  # Convert negative axes to positive
-    if any(a < 0 or a >= rank for a in axes):  # check that all axes values are within input rank
         raise ValueError("Invalid axes value")
 
     to_channel_last = keras.layers.Permute((2, 3, 1))(input_tensor)  # (B, W, H, C)
