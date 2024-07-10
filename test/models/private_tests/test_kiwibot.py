@@ -9,7 +9,7 @@ import pytest
 from test.models.private_tests.aws_utils import aws_s3_download
 
 @pytest.mark.parametrize('aws_s3_download', [["kiwibot/", "kiwibot/", False]], indirect=True)
-def test_mmdet_convnext(aws_s3_download):
+def test_kiwibot(aws_s3_download):
     onnx_model_path = f'{aws_s3_download}/model.onnx'
     save_model_path = f'{aws_s3_download}/model.h5'
 
