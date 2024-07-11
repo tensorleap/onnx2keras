@@ -29,29 +29,29 @@ def test_traffic_light(aws_s3_download):
 
     # These are really really close
 
-    # assert (res[0] - res_onnx[0]).__abs__().numpy().mean() < 2 * eps_mean
-    # assert (res[0] - res_onnx[0]).__abs__().numpy().max() < 7 * eps_max
-    # assert (res[1] - res_onnx[1]).__abs__().numpy().mean() < eps_mean
-    # assert (res[1] - res_onnx[1]).__abs__().numpy().max() < eps_mean
+    assert (res[0] - res_onnx[0]).__abs__().numpy().mean() < 2 * eps_mean
+    assert (res[0] - res_onnx[0]).__abs__().numpy().max() < 7 * eps_max
+    assert (res[1] - res_onnx[1]).__abs__().numpy().mean() < eps_mean
+    assert (res[1] - res_onnx[1]).__abs__().numpy().max() < eps_mean
 
-    # assert (res[2] - res_onnx[2]).__abs__().numpy().mean() < eps_mean
-    # assert (res[2] - res_onnx[2]).__abs__().numpy().max() < eps_max
-    # assert (res[3] - res_onnx[3]).__abs__().numpy().mean() < eps_mean
-    # assert (res[3] - res_onnx[3]).__abs__().numpy().max() < eps_max
+    assert (res[2] - res_onnx[2]).__abs__().numpy().mean() < eps_mean
+    assert (res[2] - res_onnx[2]).__abs__().numpy().max() < eps_max
+    assert (res[3] - res_onnx[3]).__abs__().numpy().mean() < eps_mean
+    assert (res[3] - res_onnx[3]).__abs__().numpy().max() < eps_max
 
-    # assert (res[4] - res_onnx[4]).__abs__().numpy().mean() < eps_mean
-    # assert (res[4] - res_onnx[4]).__abs__().numpy().max() < 7 * eps_max
+    assert (res[4] - res_onnx[4]).__abs__().numpy().mean() < eps_mean
+    assert (res[4] - res_onnx[4]).__abs__().numpy().max() < 7 * eps_max
 
-    # assert (res[5][:, 0] - res_onnx[5]).__abs__().numpy().mean() < eps_mean
-    # assert (res[5][:, 0] - res_onnx[5]).__abs__().numpy().max() < eps_max
+    assert (res[5][:, 0] - res_onnx[5]).__abs__().numpy().mean() < eps_mean
+    assert (res[5][:, 0] - res_onnx[5]).__abs__().numpy().max() < eps_max
 
-    # assert (res[6] - res_onnx[6]).__abs__().numpy().mean() < eps_mean
-    # assert (res[6] - res_onnx[6]).__abs__().numpy().max() < eps_max
+    assert (res[6] - res_onnx[6]).__abs__().numpy().mean() < eps_mean
+    assert (res[6] - res_onnx[6]).__abs__().numpy().max() < eps_max
 
-    # # These two have lower accuracy but are still acceptable
+    # These two have lower accuracy but are still acceptable
 
-    # (tf.nn.softmax(res[7][:4, :]) - tf.nn.softmax(res_onnx[7][:4, :])).numpy().__abs__().mean() < 5e-3
-    # (tf.nn.softmax(res[7][:4, :]) - tf.nn.softmax(res_onnx[7][:4, :])).numpy().__abs__().max() < 5e-2
+    (tf.nn.softmax(res[7][:4, :]) - tf.nn.softmax(res_onnx[7][:4, :])).numpy().__abs__().mean() < 5e-3
+    (tf.nn.softmax(res[7][:4, :]) - tf.nn.softmax(res_onnx[7][:4, :])).numpy().__abs__().max() < 5e-2
 
-    # (tf.nn.softmax(res[8][:4, :]) - tf.nn.softmax(res_onnx[8][:4, :])).numpy().__abs__().mean() < 5e-4
-    # (tf.nn.softmax(res[8][:4, :]) - tf.nn.softmax(res_onnx[8][:4, :])).numpy().__abs__().max() < 1e-2
+    (tf.nn.softmax(res[8][:4, :]) - tf.nn.softmax(res_onnx[8][:4, :])).numpy().__abs__().mean() < 5e-4
+    (tf.nn.softmax(res[8][:4, :]) - tf.nn.softmax(res_onnx[8][:4, :])).numpy().__abs__().max() < 1e-2
