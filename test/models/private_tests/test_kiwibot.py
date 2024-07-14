@@ -1,5 +1,6 @@
 import numpy as np
 import onnx
+import onnxruntime as ort
 from onnx2kerastl import onnx_to_keras
 import tensorflow as tf
 from keras_data_format_converter import convert_channels_first_to_last
@@ -29,3 +30,13 @@ def test_kiwibot(aws_s3_download):
 
     loaded_keras_model = tf.keras.models.load_model(save_model_path, custom_objects=onnx_custom_objects_map)
     keras_output = loaded_keras_model(input_data)
+    keras_output_np = [output.numpy().transpose((0, 2, 1)) for output in keras_output]
+
+    onnx_session = ort.InferenceSession(onnx_model_path)
+    onnx_output = onnx_session.run(None, {'input_0': input_data.transpose((0, 3, 1, 2))})
+
+    # masks after softmax
+    assert np.abs(keras_output_np[1] - onnx_output[1]).max() < 1e-1
+    assert np.abs(keras_output_np[2] - onnx_output[2]).max() < 1e-1
+    # mask after pixel class prediction
+    assert np.abs(keras_output_np[0] == onnx_output[0]).sum() / np.prod(keras_output_np[0].shape) > 0.99
