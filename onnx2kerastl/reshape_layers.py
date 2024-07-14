@@ -4,6 +4,7 @@ import keras
 import numpy as np
 import tensorflow as tf
 from keras import backend as K
+from keras.engine.keras_tensor import KerasTensor
 from keras.layers import SlicingOpLambda, Lambda
 from typing import Union
 from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
@@ -540,22 +541,46 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
         raise ValueError("Invalid axes value")
 
     to_channel_last = keras.layers.Permute((2, 3, 1))(input_tensor)  # (B, W, H, C)
-    shape = tf.cast(tf.shape(to_channel_last), tf.int32)
-    tf_resize_shapes = [shape[i] for i in range(1, 3)]  # (W, H)
+    shape = tf.cast(tf.shape(input_tensor), tf.int32)
+    if shape.shape != 4:
+      raise Exception("resize layer for input tensor with rank != 4 is not supported")
+    if isinstance(sizes, KerasTensor) or isinstance(scales, KerasTensor):
+        tf_resize_shapes = tf.zeros_like(shape)
 
-    if len(scales) > 0:
-        for i, axis in enumerate(axes):
-            if scales[i] != 1:
-                tf_resize_shapes[axis - 2] = tf.cast(scales[i] * tf.cast(tf_resize_shapes[axis - 2], tf.float32), tf.int32)
+        if len(scales) > 0:
+            for i, axis in enumerate(axes):
+                indices = tf.constant([[axis]])
+                update = tf.cast(tf.multiply(scales[i], tf.cast(shape[axis], tf.float32)), tf.int32)
+                updates = tf.reshape(update, (1,))
+                tf_resize_shapes = tf.tensor_scatter_nd_update(tf_resize_shapes, indices, updates)
+
+        else:
+            for i, axis in enumerate(axes):
+                indices = tf.constant([[axis]])
+                # The value to update at the specified index
+                update = tf.cast(sizes[i], tf.int32)
+                updates = tf.reshape(update, (1,))
+                # Apply the update using tf.scatter_nd  
+                tf_resize_shapes = tf.tensor_scatter_nd_update(tf_resize_shapes, indices, updates)
+        resize_size = tf.stack(tf.gather(tf_resize_shapes, [2, 3]), axis=0)
     else:
-        for i, axis in enumerate(axes):
-            if sizes[i] != input_tensor.shape[axis]:
-                tf_resize_shapes[axis - 2] = int(sizes[i])
-    resize_size = tf.stack(tf_resize_shapes, axis=0)
-    if resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR and\
-        isinstance(resize_size, keras.engine.keras_tensor.KerasTensor)\
-        and nearest_mode.decode() == 'floor':
-        logger.warning('floor nearest mode will result in faulty conversion')
+        tf_resize_shapes = [shape[i] for i in range(2, 4)] # (W, H) for input tensor of shape [B, C, W, H]
+        if len(scales) > 0:
+            for i, axis in enumerate(axes):
+                if scales[i] != 1:
+                    tf_resize_shapes[axis - 2] = tf.cast(scales[i] * tf.cast(tf_resize_shapes[axis - 2], tf.float32), tf.int32)
+        else:
+            for i, axis in enumerate(axes):
+                if sizes[i] != input_tensor.shape[axis]:
+                    tf_resize_shapes[axis - 2] = int(sizes[i])
+        resize_size = tf.stack(tf_resize_shapes, axis=0)
+    
+    if (
+        resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR
+        and isinstance(resize_size, keras.engine.keras_tensor.KerasTensor)
+        and nearest_mode.decode() == "floor"
+    ):
+        logger.warning("floor nearest mode will result in faulty conversion")
 
     if resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR and nearest_mode.decode() == 'floor'\
         and not isinstance(resize_size, keras.engine.keras_tensor.KerasTensor):
@@ -572,6 +597,7 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
         resized = tf.image.resize(to_channel_last,
                                   size=resize_size,
                                   method=resize_method)
+
     to_channel_first = keras.layers.Permute((3, 1, 2))(resized)
     layers[node_name] = to_channel_first
 
