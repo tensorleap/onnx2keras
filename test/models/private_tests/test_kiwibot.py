@@ -33,7 +33,7 @@ def test_kiwibot(aws_s3_download):
     keras_output_np = [output.numpy().transpose((0, 2, 1)) for output in keras_output]
 
     onnx_session = ort.InferenceSession(onnx_model_path)
-    onnx_output = onnx_session.run(None, {'input_0': input_data.transpose((0, 3, 1, 2))})
+    onnx_output = onnx_session.run(None, {'input_0': input_data.transpose((0, 3, 1, 2)).astype(np.float32)})
 
     # masks after softmax
     assert np.abs(keras_output_np[1] - onnx_output[1]).max() < 1e-1
