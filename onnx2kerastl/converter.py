@@ -209,7 +209,10 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
             else:
                 keras_names = keras_names[0]
                 node_names.append(keras_names)
-
+            cleaned_node_name = node.name.replace("#", "_").rstrip("/").lstrip("/").replace(":", "_")
+            if len(cleaned_node_name) == 0:
+                cleaned_node_name = f'{node_name.rstrip("/").lstrip("/").replace(":", "_")}'
+            node_params['cleaned_name'] = f'{cleaned_node_name}_tl'
             logger.debug('######')
             logger.debug(f"{node_index/len(onnx_nodes):.1%} completed")
             logger.debug('...')
