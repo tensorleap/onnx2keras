@@ -26,7 +26,6 @@ def test_traffic_light(aws_s3_download):
     )
     eps_mean = 1e-6
     eps_max = 1e-5
-
     # These are really really close
 
     assert (res[0] - res_onnx[0]).__abs__().numpy().mean() < 2 * eps_mean
