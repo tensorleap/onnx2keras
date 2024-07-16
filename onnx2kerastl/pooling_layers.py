@@ -2,6 +2,8 @@ import keras
 import logging
 
 from .utils import ensure_tf_type, is_numpy
+from .tfops_funcs import tf_reshape, tf_rank, tf_concat, tf_shape, tf_cast, tf_image_crop_and_resize, tf_ones, \
+    tf_nn_avg_pool, tf_nn_max_pool
 import numpy as np
 import string
 import random
@@ -86,10 +88,10 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
             rand_string = ''.join(random.choices(string.ascii_uppercase + string.digits, k=3))
             if len(kernel_shape) == 2:
                 layers[node_name + "_pre_" + rand_string] = keras.layers.ZeroPadding2D(
-                    ((0, padding[0]), (0, padding[1])))(input_0)
+                    ((0, padding[0]), (0, padding[1])), name=f"{params['cleaned_name']}_pre")(input_0)
             else:
                 layers[node_name + "_pre_" + rand_string] = keras.layers.ZeroPadding3D(
-                    ((0, padding[0]), (0, padding[1]), (0, padding[2])))(input_0)
+                    ((0, padding[0]), (0, padding[1]), (0, padding[2])), name=f"{params['cleaned_name']}_pre")(input_0)
             input_0 = layers[node_name + "_pre_" + rand_string]
     layers[node_name] = pooling(input_0)
 
@@ -190,7 +192,7 @@ def convert_global_avg_pool(node, params, layers, lambda_func, node_name, keras_
     new_shape = input_0.shape.as_list()
     new_shape = new_shape[1:]
     new_shape.extend([1] * (tensor_dim - 2))
-    reshape_layer = keras.layers.Reshape(new_shape)
+    reshape_layer = keras.layers.Reshape(new_shape, name=f"{params['cleaned_name']}_reshape")
     input_0 = reshape_layer(input_0)
 
     layers[node_name] = input_0
@@ -245,15 +247,26 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
             ord_permute = [0] + (ord_permute + 1).tolist()
             out = tf.transpose(topk_concat, ord_permute)
         return out
-    in_shape = tf.shape(in_tensor)
-    k_reshaped = tf.cast(tf.ones(tf.concat([(in_shape)[:-1],[1]], axis=-1)._inferred_value)*tf.cast(k, tf.float32), tf.float32)
-    composed_input = tf.concat([in_tensor, k_reshaped], axis=-1)
-    lambda_layer = keras.layers.Lambda(target_layer)
+    in_shape = tf_shape(in_tensor, tf_name=f"{params['cleaned_name']}_topk_in_shape")
+    k_needed_shape = tf_concat(
+        [(in_shape)[:-1],[1]], axis=-1,tf_name=f"{params['cleaned_name']}_topk_k_needed_shape")._inferred_value
+    k_unsqueezed = tf_ones(k_needed_shape, tf_name=f"{params['cleaned_name']}_topk_k_shape")*\
+                   tf_cast(k, tf.float32, tf_name=f"{params['cleaned_name']}_topk_k_cast")
+    k_reshaped = tf_cast(k_unsqueezed, tf.float32, tf_name=f"{params['cleaned_name']}_topk_k_reshaped")
+    composed_input = tf_concat([in_tensor, k_reshaped], axis=-1,
+                               tf_name=f"{params['cleaned_name']}_topk_k_concat")
+    lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_topk")
     result = lambda_layer(composed_input)
     pos_axis = axis if axis > 0 else in_shape.shape[0]-1
-    new_shape = tf.concat([in_shape[:pos_axis], [k], in_shape[pos_axis+1:]],axis=-1)
-    values = tf.reshape(result[0], new_shape)
-    indices = tf.reshape(tf.cast(result[1], tf.int32), new_shape)
+    new_shape = tf_concat([in_shape[:pos_axis], [k], in_shape[pos_axis+1:]], axis=-1,
+                          tf_name=f"{params['cleaned_name']}_topk_output_shape")
+    values = tf_reshape(result[0], new_shape,
+                        tf_name=f"{params['cleaned_name']}_topk_values_reshape")
+    indices = tf_reshape(tf_cast(result[1],
+                                 tf.int32,
+                                 tf_name=f"{params['cleaned_name']}_topk_indices_cast"),
+                         new_shape,
+                         tf_name=f"{params['cleaned_name']}_topk_indices_reshape")
     if not largest:
         out_tensor = -values
     else:
@@ -282,9 +295,9 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
         adaptive_ratio = True
 
     rois = rois * spatial_scale
-    box_ind = tf.cast(batch_indices, tf.int32)
+    box_ind = tf_cast(batch_indices, tf.int32, tf_name=f"{params['cleaned_name']}_roi_cast_batch")
     if keras.backend.image_data_format() == 'channels_first':
-        fm_shape = tf.shape(feature_map)[2:]  # H, W
+        fm_shape = tf_shape(feature_map, tf_name=f"{params['cleaned_name']}_roi_hw")[2:]  # H, W
     else:
         raise NotImplementedError("To support channels_last in RoiAlign - need to remove permutes")
     # extract inputs
@@ -297,37 +310,51 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
             output_height * sampling_ratio,
             output_width * sampling_ratio,
         )
-        spacing_w = (x1 - x0) / tf.cast(crop_shape[1], dtype=tf.float32)
-        spacing_h = (y1 - y0) / tf.cast(crop_shape[0], dtype=tf.float32)
-        nx0 = (x0 + spacing_w / 2) / tf.cast(fm_shape[1] - 1, dtype=tf.float32)
-        ny0 = (y0 + spacing_h / 2) / tf.cast(fm_shape[0] - 1, dtype=tf.float32)
+        spacing_w = (x1 - x0) / tf_cast(crop_shape[1], dtype=tf.float32,
+                                        tf_name=f"{params['cleaned_name']}_roi_cast_crop1")
+        spacing_h = (y1 - y0) / tf_cast(crop_shape[0], dtype=tf.float32,
+                                        tf_name=f"{params['cleaned_name']}_roi_cast_crop0")
+        nx0 = (x0 + spacing_w / 2) / tf_cast(fm_shape[1] - 1, dtype=tf.float32,
+                                             tf_name=f"{params['cleaned_name']}_roi_cast_fm_1")
+        ny0 = (y0 + spacing_h / 2) / tf_cast(fm_shape[0] - 1, dtype=tf.float32,
+                                             tf_name=f"{params['cleaned_name']}_roi_cast_fm_0")
 
-        nw = spacing_w * tf.cast(
+        nw = spacing_w * tf_cast(
             crop_shape[1] - 1,
             dtype=tf.float32,
-        ) / tf.cast(
+            tf_name=f"{params['cleaned_name']}_roi_cast_crop_2"
+        ) / tf_cast(
             fm_shape[1] - 1,
             dtype=tf.float32,
+            tf_name=f"{params['cleaned_name']}_roi_cast_crop_3"
         )
-        nh = spacing_h * tf.cast(
+        nh = spacing_h * tf_cast(
             crop_shape[0] - 1,
             dtype=tf.float32,
-        ) / tf.cast(
+            tf_name=f"{params['cleaned_name']}_roi_cast_crop_3"
+        ) / tf_cast(
             fm_shape[0] - 1,
             dtype=tf.float32,
+            tf_name=f"{params['cleaned_name']}_roi_cast_crop_4"
         )
     else:
         roi_width = x1 - x0
         roi_height = y1 - y0
-        nx0 = x0 / tf.cast(fm_shape[1] - 1, dtype=tf.float32)
-        ny0 = y0 / tf.cast(fm_shape[0] - 1, dtype=tf.float32)
-        nw = roi_width / tf.cast(fm_shape[1] - 1, dtype=tf.float32)
-        nh = roi_height / tf.cast(fm_shape[0] - 1, dtype=tf.float32)
+        fm_shape_1 = tf_cast(fm_shape[1] - 1, dtype=tf.float32, tf_name=f"{params['cleaned_name']}_roi_cast_fm_1")
+        fm_shape_0 = tf_cast(fm_shape[0] - 1, dtype=tf.float32, tf_name=f"{params['cleaned_name']}_roi_cast_fm_0")
+        nx0 = x0 / fm_shape_1
+        ny0 = y0 / fm_shape_0
+        nw = roi_width / fm_shape_1
+        nh = roi_height / fm_shape_0
 
-    boxes = tf.concat([ny0, nx0, ny0 + nh, nx0 + nw], axis=1)
+    boxes = tf_concat([ny0, nx0, ny0 + nh, nx0 + nw], axis=1,
+                      tf_name=f"{params['cleaned_name']}_roi_concat"
+                      )
 
-    permuted_features = keras.layers.Permute([2, 3, 1])(feature_map)  # move to channels last
-    cropped_tensor = tf.image.crop_and_resize(
+    permuted_features = keras.layers.Permute([2, 3, 1],
+                                             name=f"{params['cleaned_name']}_roi_channels_last"
+                                             )(feature_map)  # move to channels last
+    cropped_tensor = tf_image_crop_and_resize(
         permuted_features,
         boxes,
         tf.cast(box_ind, dtype=tf.int32),
@@ -335,28 +362,30 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
             output_height * sampling_ratio,
             output_width * sampling_ratio,
         ),
-        method='bilinear'
+        method='bilinear',
+        tf_name=f"{params['cleaned_name']}_roi_crop_resize"
     )
 
     pooled_tensor = None
     if mode.lower() == 'avg':
-        pooled_tensor = tf.nn.avg_pool(
+        pooled_tensor = tf_nn_avg_pool(
             input=cropped_tensor,
             ksize=[1, sampling_ratio, sampling_ratio, 1],
             strides=[1, sampling_ratio, sampling_ratio, 1],
             padding='SAME',
-            name=node_name,
+            tf_name=f"{params['cleaned_name']}_roi_avg_pool",
             data_format='NHWC'
         )
     elif mode.lower() == 'max':
-        pooled_tensor = tf.nn.max_pool(
+        pooled_tensor = tf_nn_max_pool(
             input=cropped_tensor,
             ksize=[1, sampling_ratio, sampling_ratio, 1],
             strides=[1, sampling_ratio, sampling_ratio, 1],
             padding='SAME',
-            name=node_name,
+            tf_name=f"{params['cleaned_name']}_roi_max_pool",
             data_format='NHWC'
         )
     else:
         raise ValueError(f"Unknown pooling mode: {mode}")
-    layers[node_name] = keras.layers.Permute([3, 1, 2])(pooled_tensor)
+    layers[node_name] = keras.layers.Permute([3, 1, 2],
+                                             name=f"{params['cleaned_name']}_roi_channels_first")(pooled_tensor)

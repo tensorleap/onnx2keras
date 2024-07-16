@@ -6,6 +6,7 @@ import tensorflow as tf
 from onnx2kerastl.customonnxlayer.onnxlstm import OnnxLSTM
 from .exceptions import UnsupportedLayer
 from .utils import ensure_tf_type
+from .tfops_funcs import tf_cast, tf_squeeze, tf_transpose, tf_expand_dims
 
 
 def convert_lstm(node, params, layers, lambda_func, node_name, keras_name):
@@ -35,8 +36,18 @@ def convert_lstm(node, params, layers, lambda_func, node_name, keras_name):
     weights_r = layers[node.input[2]][0]
     weights_b = layers[node.input[3]][0]
 
-    initial_h_state = tf.cast(tf.squeeze(ensure_tf_type(layers[node.input[5]]), axis=0), input_tensor.dtype)
-    initial_c_state = tf.cast(tf.squeeze(ensure_tf_type(layers[node.input[6]]), axis=0), input_tensor.dtype)
+    initial_h_state = tf_cast(tf_squeeze(ensure_tf_type(layers[node.input[5]]),
+                                         axis=0,
+                                         tf_name=f"{params['cleaned_name']}_squeeze_h"
+                                         ),
+                              input_tensor.dtype,
+                              tf_name=f"{params['cleaned_name']}_cast_h")
+    initial_c_state = tf_cast(
+        tf_squeeze(
+        ensure_tf_type(layers[node.input[6]]),
+        axis=0,
+        tf_name=f"{params['cleaned_name']}_squeeze_c"), input_tensor.dtype,
+        tf_name=f"{params['cleaned_name']}_cast_c")
 
     tf.keras.backend.set_image_data_format("channels_last")
     hidden_size = params['hidden_size']
@@ -76,8 +87,9 @@ def convert_lstm(node, params, layers, lambda_func, node_name, keras_name):
         layers[node.output[2]] = c_out
     else:
         lstm_tensor = res
-    lstm_tensor_in_onnx_order = tf.transpose(lstm_tensor, perm=[1, 0, 2])
-    lstm_tensor_in_onnx_order = tf.expand_dims(lstm_tensor_in_onnx_order, axis=1)
+    lstm_tensor_in_onnx_order = tf_transpose(lstm_tensor, perm=[1, 0, 2], tf_name=f"{params['cleaned_name']}_transpose")
+    lstm_tensor_in_onnx_order = tf_expand_dims(lstm_tensor_in_onnx_order, axis=1,
+                                               tf_name=f"{params['cleaned_name']}_expand_dims")
     layers[node_name] = lstm_tensor_in_onnx_order
 
 def convert_gru(node, params, layers, lambda_func, node_name, keras_name):
@@ -112,15 +124,20 @@ def convert_gru(node, params, layers, lambda_func, node_name, keras_name):
     tf.keras.backend.set_image_data_format("channels_last")
     gru_layer = tf.keras.layers.GRU(units=hidden_size,
                         reset_after=linear_before_reset,
-                        return_sequences=True)
+                        return_sequences=True,
+                        name=f"{params['cleaned_name']}_gru")
     if layout == 0:
-        batch_first_x = tf.transpose(x, [1, 0, 2])
+        batch_first_x = tf_transpose(x, [1, 0, 2], tf_name=f"{params['cleaned_name']}_gru_transpose")
     res = gru_layer(batch_first_x, initial_state=tf.convert_to_tensor(tensor_h[0]))
     # gru_layer.build(tf.shape(batch_first_x))
     gru_layer.set_weights([w[0].swapaxes(0, 1), r[0].swapaxes(0, 1), b[0].reshape(-1, 3*hidden_size)])
     # res = gru_layer(batch_first_x, initial_state=tf.convert_to_tensor(tensor_h[0]))
     if num_directions == 1:
-        reshaped_res = tf.expand_dims(tf.transpose(res, [1, 0, 2]), axis=1)
+        reshaped_res = tf_expand_dims(tf_transpose(res,
+                                                   [1, 0, 2],
+                                                   tf_name=f"{params['cleaned_name']}_gru_transpose"),
+                                      axis=1,
+                                      tf_name=f"{params['cleaned_name']}")
     else:
         raise NotImplementedError("GRU bidirectional output reshaping is not implemented")
     layers[node_name] = reshaped_res

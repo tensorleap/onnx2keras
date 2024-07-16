@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from .utils import is_numpy
+from .tfops_funcs import tf_cast, tf_one_hot
 from keras import backend as K
 
 def convert_constant(node, params, layers, lambda_func, node_name, keras_name):
@@ -31,10 +32,13 @@ def convert_constant_of_shape(node, params, layers, lambda_func, node_name, kera
 
 def convert_one_hot(node, params, layers, lambda_func, node_name, keras_name):
     axis = params.get('axis', -1)
-    layers[node_name] = tf.one_hot(indices=tf.cast(layers[node.input[0]],
-                                                   tf.int64),
-                                   depth=int(layers[node.input[1]]), off_value=layers[node.input[2]][0],
+    layers[node_name] = tf_one_hot(indices=tf_cast(layers[node.input[0]],
+                                                   tf.int64,
+                                                   tf_name=f"{params['cleaned_name']}_onehot_cast"),
+                                   depth=int(layers[node.input[1]]),
+                                   off_value=layers[node.input[2]][0],
                                    on_value=layers[node.input[2]][1],
-                                   axis=axis
+                                   axis=axis,
+                                   tf_name=f"{params['cleaned_name']}_onehot"
                                    )
 

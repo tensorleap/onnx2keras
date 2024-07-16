@@ -1,6 +1,7 @@
 import keras
 import logging
 from .utils import is_numpy
+from .tfops_funcs import tf_matmul, tf_shape, tf_concat, tf_reshape, tf_linalg_det
 import tensorflow as tf
 
 
@@ -38,7 +39,7 @@ def convert_gemm(node, params, layers, lambda_func, node_name, keras_name):
     logger.debug('Input units %s, output units %s.', input_channels, output_channels)
     if len(layers[node.input[1]].shape) > 2: #N-dim tensor multipication Dense doesn't work
         assert len(node.input) == 2
-        layers[node_name] = tf.matmul(layers[node.input[0]], layers[node.input[1]], name=keras_name)
+        layers[node_name] = tf_matmul(layers[node.input[0]], layers[node.input[1]], tf_name=f"{params['cleaned_name']}_matmul")
     else:
         if is_numpy(keras_weights[0]):
             dense = keras.layers.Dense(
@@ -50,14 +51,15 @@ def convert_gemm(node, params, layers, lambda_func, node_name, keras_name):
             try:
                 layers[node_name] = dense(layers[node.input[0]])
             except ValueError:
-                mid_shape = tf.shape(layers[node.input[0]], out_type=tf.int32)[:-1]
-                reshape_shape = tf.concat([mid_shape, [input_channels]], axis=0)
-                reshaped_x = tf.reshape(layers[node.input[0]], reshape_shape, name=keras_name + "_reshape")
+                mid_shape = tf_shape(layers[node.input[0]], out_type=tf.int32, tf_name=f"{params['cleaned_name']}_shape")[:-1]
+                reshape_shape = tf_concat([mid_shape, [input_channels]], axis=0, tf_name=f"{params['cleaned_name']}_concat")
+                reshaped_x = tf_reshape(layers[node.input[0]], reshape_shape, tf_name=f"{params['cleaned_name']}_reshape")
                 layers[node_name] = dense(reshaped_x)
 
         else:
-            layers[node_name] = keras.layers.Multiply()([layers[node.input[0]], layers[node.input[1]]])
+            layers[node_name] = keras.layers.Multiply(name=f"{params['cleaned_name']}_multiply")\
+                ([layers[node.input[0]], layers[node.input[1]]])
 
 
 def convert_det(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = tf.linalg.det(layers[node.input[0]])
+    layers[node_name] = tf_linalg_det(layers[node.input[0]], tf_name=f"{params['cleaned_name']}_det")
