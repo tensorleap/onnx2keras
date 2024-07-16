@@ -2,6 +2,9 @@ import numpy as np
 import keras
 import logging
 from .utils import is_numpy, ensure_tf_type
+from .tfops_funcs import tf_tensor_scatter_nd_update, tf_maximum, tf_minimum, tf_cast, tf_expand_dims, tf_repeat,\
+    tf_equal, tf_where, tf_round, tf_sign, tf_abs, tf_math_mod, tf_bitwise_left_shift, tf_bitwise_right_shift,\
+    tf_logical_not
 import tensorflow as tf
 from tensorflow.python.framework.ops import EagerTensor
 
@@ -33,7 +36,7 @@ def convert_elementwise_div(node, params, layers, lambda_func, node_name, keras_
         logger.debug('Divide numpy arrays.')
         div = input_0 / input_1
         if _is_integer_type(input_0.dtype) and _is_integer_type(input_1.dtype):
-            div = tf.cast(div, input_0.dtype)
+            div = tf_cast(div, input_0.dtype, tf_name=f"{params['cleaned_name']}_div_cast")
         if hasattr(div, 'numpy'):
             div = div.numpy()
         layers[node_name] = div
@@ -49,7 +52,7 @@ def convert_elementwise_div(node, params, layers, lambda_func, node_name, keras_
             )
             return layer
 
-        lambda_layer = keras.layers.Lambda(target_layer, name=keras_name)
+        lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_div")
         layers[node_name] = lambda_layer([input_0, input_1])
         lambda_func[keras_name] = target_layer
 
@@ -79,7 +82,8 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
         if not input_0_is_non_keras and not input_1_is_non_keras:
             to_add = input_1
             if input_0.shape != input_1.shape and input_0.shape[:-1] == input_1.shape:
-                to_add = tf.repeat(tf.expand_dims(input_1, axis=-1), input_0.shape[-1], axis=-1)
+                to_add = tf_repeat(tf_expand_dims(input_1, axis=-1, tf_name=f"{params['cleaned_name']}_expand"),
+                                   input_0.shape[-1], axis=-1, tf_name=f"{params['cleaned_name']}_repeat")
 
             layers[node_name] = keras.layers.Add(name=keras_name)([input_0, to_add])
         else:
@@ -115,7 +119,7 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
     input_1_is_constant = is_numpy(input_1) or isinstance(input_1, EagerTensor)
     try:
         if not input_0_is_constant and not input_1_is_constant:
-            mul = keras.layers.Multiply(name=keras_name)
+            mul = keras.layers.Multiply(name=f"{params['cleaned_name']}_mul")
             layers[node_name] = mul([input_0, input_1])
         else:
             raise ValueError('Operands are different.')
@@ -148,7 +152,7 @@ def convert_elementwise_sub(node, params, layers, lambda_func, node_name, keras_
 
     try:
         if not input_0_is_np and not input_1_is_np:
-            sub = keras.layers.Subtract(name=keras_name)
+            sub = keras.layers.Subtract(name=f"{params['cleaned_name']}_sub")
             layers[node_name] = sub([input_0, input_1])
         else:
             raise ValueError('Operands are different.')
@@ -183,7 +187,7 @@ def convert_min(node, params, layers, lambda_func, node_name, keras_name):
     # Broadcast the inputs to the same shape
     input1, input2 = inputs
     # Applying the minimum operation
-    min_output = tf.minimum(input1, input2)
+    min_output = tf_minimum(input1, input2, tf_name=f"{params['cleaned_name']}_min")
 
     layers[node_name] = min_output
 
@@ -210,7 +214,7 @@ def convert_max(node, params, layers, lambda_func, node_name, keras_name):
     # Broadcast the inputs to the same shape
     input1, input2 = inputs
     # Applying the maximum operation
-    max_output = tf.maximum(input1, input2)
+    max_output = tf_maximum(input1, input2, tf_name=f"{params['cleaned_name']}_maximum")
 
     layers[node_name] = max_output
 
@@ -234,23 +238,30 @@ def convert_mean(node, params, layers, lambda_func, node_name, keras_name):
     for i, inp in enumerate(node.input):
         input_ = ensure_tf_type(layers[inp], layers[list(layers)[0]], name="%s_const%i" % (keras_name, i + 1))
         inputs.append(input_)
-    layers[node_name] = keras.layers.Average(name=keras_name)(inputs)
+    layers[node_name] = keras.layers.Average(name=f"{params['cleaned_name']}_mean")(inputs)
 
 
 def convert_equal(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = tf.equal(layers[node.input[0]], layers[node.input[1]])
+    layers[node_name] = tf_equal(layers[node.input[0]], layers[node.input[1]],
+                                 tf_name=f"{params['cleaned_name']}_equal")
 
 
 def convert_where(node, params, layers, lambda_func, node_name, keras_name):
     if layers[node.input[0]].dtype != tf.bool:
-        casted = tf.cast(layers[node.input[0]], tf.bool)
+        casted = tf_cast(layers[node.input[0]], tf.bool, tf_name=f"{params['cleaned_name']}_cast")
     else:
         casted = layers[node.input[0]]
     if layers[node.input[1]].dtype == np.int64 and is_numpy(layers[node.input[1]]):
         # serialization doesn't work well for first argument if it is np array of type int64
-        layers[node_name] = tf.where(tf.logical_not(casted), layers[node.input[2]], layers[node.input[1]])
+        layers[node_name] = tf_where(tf_logical_not(casted,
+                                                    tf_name=f"{params['cleaned_name']}_not"
+                                                    ),
+                                     layers[node.input[2]],
+                                     layers[node.input[1]],
+                                     tf_name=f"{params['cleaned_name']}_where_1")
     else:
-        layers[node_name] = tf.where(casted, layers[node.input[1]], layers[node.input[2]])
+        layers[node_name] = tf_where(casted, layers[node.input[1]], layers[node.input[2]],
+                                     tf_name=f"{params['cleaned_name']}_where_2")
 
 
 def convert_scatter_nd(node, params, layers, lambda_func, node_name, keras_name):
@@ -271,33 +282,37 @@ def convert_scatter_nd(node, params, layers, lambda_func, node_name, keras_name)
     data = ensure_tf_type(layers[node.input[0]])
     indices = ensure_tf_type(layers[node.input[1]])
     updates = ensure_tf_type(layers[node.input[2]])
-    layers[node_name] = tf.tensor_scatter_nd_update(data, indices, updates)
+    layers[node_name] = tf_tensor_scatter_nd_update(data, indices, updates,
+                                                    tf_name=f"{params['cleaned_name']}_scatter_nd")
 
 
 def convert_round(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = tf.round(layers[node.input[0]])
+    layers[node_name] = tf_round(layers[node.input[0]], tf_name=f"{params['cleaned_name']}_round")
 
 
 def convert_mod(node, params, layers, lambda_func, node_name, keras_name):
     input_0 = layers[node.input[0]]
     input_1 = layers[node.input[1]]
     if params.get('fmod') == 1:
-        sign = tf.sign(layers[node.input[0]])
-        input_0 = tf.abs(layers[node.input[0]])
-        input_1 = tf.abs(layers[node.input[1]])
-        layers[node_name] = tf.math.mod(input_0, input_1) * sign
+        sign = tf_sign(layers[node.input[0]], tf_name=f"{params['cleaned_name']}_mod_sign")
+        input_0 = tf_abs(layers[node.input[0]], tf_name=f"{params['cleaned_name']}_abs_0")
+        input_1 = tf_abs(layers[node.input[1]], tf_name=f"{params['cleaned_name']}_abs_1")
+        layers[node_name] = tf_math_mod(input_0, input_1, tf_name=f"{params['cleaned_name']}_mod") * sign
     else:
-        layers[node_name] = tf.math.mod(input_0, input_1)
+        layers[node_name] = tf_math_mod(input_0, input_1, tf_name=f"{params['cleaned_name']}_mod")
 
 
 def convert_bitshift(node, params, layers, lambda_func, node_name, keras_name):
     direction = params.get("direction").decode()
     if direction == "LEFT":
-        shifter_pointer = tf.bitwise.left_shift
+        shifter_pointer = tf_bitwise_left_shift
     elif direction == "RIGHT":
-        shifter_pointer = tf.bitwise.right_shift
+        shifter_pointer = tf_bitwise_right_shift
     else:
         raise AttributeError("Onnx2Kerras cannot convert the BitShift operator"
                              " since the 'direction' attribute was missing")
-    layers[node_name] = shifter_pointer(tf.cast(layers[node.input[0]], tf.uint64),
-                                        tf.cast(layers[node.input[1]], tf.uint64))
+    layers[node_name] = shifter_pointer(tf_cast(layers[node.input[0]], tf.uint64,
+                                                tf_name=f"{params['cleaned_name']}_bitshift_cast_0"),
+                                        tf_cast(layers[node.input[1]], tf.uint64,
+                                                tf_name=f"{params['cleaned_name']}_bitshift_cast_1"),
+                                        tf_name=f"{params['cleaned_name']}_bitshift")

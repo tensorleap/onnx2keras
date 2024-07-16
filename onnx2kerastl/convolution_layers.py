@@ -8,7 +8,7 @@ import tensorflow as tf
 from tensorflow.python.framework.ops import EagerTensor
 
 from .utils import ensure_tf_type, is_numpy
-
+from .tfops_funcs import tf_transpose, tf_pad, tf_shape, tf_reshape
 
 def calculate_permute_values(n_dims: int, to_channel_first: bool) -> List[int]:
     if to_channel_first:
@@ -17,12 +17,14 @@ def calculate_permute_values(n_dims: int, to_channel_first: bool) -> List[int]:
         return list(range(2, n_dims)) + [1]
 
 
-def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_channels):
+def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_channels, params):
     if is_constant:
-        input_shape = tf.shape(conv_input)
-        permuted = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=False))(conv_input)
+        input_shape = tf_shape(conv_input, tf_name=f"{params['cleaned_name']}_conv_wrap_shape")
+        permuted = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=False),
+                                        name=f"{params['cleaned_name']}_conv_wrap_permute_1")(conv_input)
         conv_res = partial_func(data_format="channels_last")(permuted)
-        result = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=True))(conv_res)
+        result = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=True),
+                                      name=f"{params['cleaned_name']}_conv_wrap_permute_2")(conv_res)
     else:
         data_fmt = keras.backend.image_data_format()
         conv = partial_func(data_format=data_fmt)
@@ -31,9 +33,10 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
         else:
             channels_idx = -1
         if conv_input.shape[channels_idx] is None:  # This will not serialize well unless we reshape input
-            conv_input_shape = tf.shape(conv_input)
-            conv_input = tf.reshape(conv_input, [*conv_input_shape[:channels_idx], conv_channels,
-                                                 *conv_input_shape[channels_idx + 1:]])
+            conv_input_shape = tf_shape(conv_input, tf_name=f"{params['cleaned_name']}_conv_wrap_shape_1")
+            conv_input = tf_reshape(conv_input, [*conv_input_shape[:channels_idx], conv_channels,
+                                                 *conv_input_shape[channels_idx + 1:]],
+                                    tf_name=f"{params['cleaned_name']}_conv_wrap_reshape_2")
         if conv_input.shape[-1] is None:
             conv.build((None, conv_channels, *conv_input.shape[2:]))
         result = conv(conv_input)
@@ -81,7 +84,7 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
         logger.debug('3D convolution')
         if pads[0] > 0 or pads[1] > 0 or pads[2] > 0:
             logger.debug('Paddings exist, add ZeroPadding layer')
-            padding_name = keras_name + '_pad'
+            padding_name = f"{params['cleaned_name']}_" + 'conv_pad'
             padding_layer = keras.layers.ZeroPadding3D(
                 padding=(pads[0], pads[1], pads[2]),
                 name=padding_name
@@ -102,10 +105,10 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
                      "use_bias": has_bias,
                      "activation": None,
                      "dilation_rate": dilation,
-                     "name": keras_name,
+                     "name": f"{params['cleaned_name']}_" + 'conv',
                      "groups": n_groups}
         partial_conv = partial(keras.layers.Conv3D, **conv_args)
-        layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2])
+        layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2], params)
 
     elif len(W.shape) == 4:  # 2D conv
         logger.debug('2D convolution')
@@ -118,7 +121,7 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
 
         if padding:
             logger.debug('Paddings exist, add ZeroPadding layer')
-            padding_name = keras_name + '_pad'
+            padding_name = f"{params['cleaned_name']}" + 'conv_pad_1'
             padding_layer = keras.layers.ZeroPadding2D(
                 padding=padding,
                 name=padding_name,
@@ -142,21 +145,24 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
                          "use_bias": has_bias,
                          "activation": None,
                          "dilation_rate": dilation,
-                         "name": keras_name,
+                         "name": f"{params['cleaned_name']}_" + 'conv',
                          "groups": n_groups}
 
             partial_conv = partial(keras.layers.Conv2D, **conv_args)
-            layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2])
+            layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2], params)
         else:
-            input_0_nhwc = tf.transpose(input_0, [0, 2, 3, 1])
+            input_0_nhwc = tf_transpose(input_0, [0, 2, 3, 1],
+                                        tf_name=f"{params['cleaned_name']}_" + 'conv_transpose_nhwc')
 
             # Perform the convolution in NHWC format
             conv_nhwc = tf.nn.conv2d(input_0_nhwc, weights[0], strides=(strides[0], strides[1]),
                                      dilations=dilation,
-                                     padding='VALID', data_format='NHWC')
+                                     padding='VALID', data_format='NHWC',
+                                     name=f"{params['cleaned_name']}_" + 'conv')
 
             # Permute the result back to NCHW format
-            layers[node_name] = tf.transpose(conv_nhwc, [0, 3, 1, 2])
+            layers[node_name] = tf_transpose(conv_nhwc, [0, 3, 1, 2],
+                                             tf_name=f"{params['cleaned_name']}_" + 'conv_transpose_2_nchw')
     else:
         # 1D conv
         W = W.transpose(2, 1, 0)
@@ -171,7 +177,7 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
                      "use_bias": False,
                      "activation": None,
                      "dilation_rate": dilation,
-                     "name": keras_name,
+                     "name": f"{params['cleaned_name']}_" + 'conv',
                      "groups": n_groups}
 
         padding = None
@@ -185,11 +191,12 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
             padding_dim = 2 if partitioned_dim == 1 else 1
             tf_padding = np.zeros((2, len(input_shape))).astype(int)
             tf_padding[:, padding_dim] = [padding[0], padding[1]]
-            input_0 = tf.pad(input_0, tf.constant(list(tf_padding.transpose())))
+            input_0 = tf_pad(input_0, tf.constant(list(tf_padding.transpose())),
+                             tf_name=f"{params['cleaned_name']}_conv_pad_0")
         else:
             conv_args['padding'] = 'valid'
         partial_conv = partial(keras.layers.Conv1D, **conv_args)
-        res = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2])
+        res = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2], params)
         if has_bias:
             res_shape = np.asarray(keras.backend.int_shape(res))
             bias_dim = np.argwhere(res_shape == bias.shape)[0][0]
@@ -261,7 +268,7 @@ def convert_convtranspose(node, params, layers,
             use_bias=has_bias,
             activation=None,
             dilation_rate=dilation,
-            name=keras_name
+            name=f"{params['cleaned_name']}_convtranspose"
         )
 
         if 'output_shape' in params and 'pads' not in params:
@@ -284,7 +291,7 @@ def convert_convtranspose(node, params, layers,
 
             crop = keras.layers.Cropping2D(
                 pads[:2],
-                name=keras_name + '_crop'
+                name=f"{params['cleaned_name']}_convtranspose" + '_crop'
             )
             layers[node_name] = crop(input_0)
 
@@ -313,7 +320,7 @@ def convert_convtranspose(node, params, layers,
                 use_bias=has_bias,
                 activation=None,
                 dilation_rate=dilation,
-                name=keras_name
+                name=f"{params['cleaned_name']}_convtranspose"
             )
 
             if 'output_shape' in params and 'pads' not in params:
@@ -331,10 +338,12 @@ def convert_convtranspose(node, params, layers,
                                               padding='VALID')
             conv_transpose_nhwc = tf.nn.conv2d_transpose(input_0_nhwc, weights[0], output_shape=output_shape,
                                                          strides=(strides[0], strides[1]), dilations=dilation, padding='VALID',
-                                                         data_format='NHWC')
+                                                         data_format='NHWC',
+                                                         name=f"{params['cleaned_name']}_convtranspose_nhwc")
 
             # Permute the result back to NCHW format
-            layers[node_name] = tf.transpose(conv_transpose_nhwc, [0, 3, 1, 2])
+            layers[node_name] = tf_transpose(conv_transpose_nhwc, [0, 3, 1, 2],
+                                             tf_name=f"{params['cleaned_name']}_convtranspose")
 
         # Magic ad-hoc.
         # See the Keras issue: https://github.com/keras-team/keras/issues/6777
@@ -349,7 +358,7 @@ def convert_convtranspose(node, params, layers,
 
             crop = keras.layers.Cropping2D(
                 pads[:2],
-                name=keras_name + '_crop'
+                name=f"{params['cleaned_name']}_convtranspose" + '_crop_1'
             )
             layers[node_name] = crop(input_0)
     else:

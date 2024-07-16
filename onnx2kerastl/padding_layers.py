@@ -2,6 +2,7 @@ import keras
 import logging
 from .utils import ensure_tf_type
 from .utils import is_numpy
+from .tfops_funcs import tf_pad
 import tensorflow as tf
 
 
@@ -38,7 +39,8 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
         if 'value' in params and params['value'] != 0.0:
             raise AssertionError('Cannot convert non-zero padding')
         if pads.shape[0] == 6 and len(layers[node.input[0]].shape) == 3:
-            layers[node_name] = tf.pad(input_0, [[pads[0], pads[3]], [pads[1], pads[4]], [pads[2], pads[5]]])
+            layers[node_name] = tf_pad(input_0, [[pads[0], pads[3]], [pads[1], pads[4]], [pads[2], pads[5]]],
+                                       tf_name=f"{params['cleaned_name']}_pad")
         # Magic ordering
         else:
             if pads.shape[0] == 8:

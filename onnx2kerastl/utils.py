@@ -1,10 +1,11 @@
-from typing import List, Union
+from typing import List, Union, Callable
 
 import numpy as np
 import keras
 from keras.engine.keras_tensor import KerasTensor
 from keras_data_format_converter import convert_channels_first_to_last
 import tensorflow as tf
+from.tfops_funcs import tf_reshape
 
 ONNX_ELEM_TO_TF_TYPE = {
     1: tf.float32,
@@ -145,7 +146,7 @@ def check_torch_keras_error(model, k_model, input_np, epsilon=1e-5, change_order
     return max_error
 
 
-def unsqueeze_tensors_of_rank_one(tensor_list, axis: int):
+def unsqueeze_tensors_of_rank_one(tensor_list, axis: int, name: str):
     """
     Adjusts the ranks of tensors of rank 1 in a given list to match the maximum rank by adding dummy dimensions
     e.g., for input tensors shapes [(2,), (1, 4)] the unsqueezed tensors are [(1, 2), (1, 4)]
@@ -172,7 +173,7 @@ def unsqueeze_tensors_of_rank_one(tensor_list, axis: int):
         if tensor_rank == 1:
             rank_diff = max_rank - 1
             new_shape = [1] * axis + list(tensor.shape) + [1] * (rank_diff - axis)
-            unsqueezed_tensor = tf.reshape(tensor, new_shape)
+            unsqueezed_tensor = tf_reshape(tensor, new_shape, tf_name=f"{name}_rank_one_reshape")
             unsqueezed_tensors.append(unsqueezed_tensor)
         else:
             unsqueezed_tensors.append(tensor)
@@ -187,4 +188,3 @@ def ensure_float(value):
         return float(value.numpy().item())
     else:
         return float(value)
-    

@@ -4,6 +4,7 @@ import keras
 import tensorflow as tf
 
 from .utils import ensure_tf_type
+from .tfops_funcs import tf_multiply, tf_add, tf_clip_by_value, tf_math_erf, tf_math_tanh, tf_math_softplus
 
 
 def convert_relu(node, params, layers, lambda_func, node_name, keras_name):
@@ -178,7 +179,7 @@ def convert_mish(node, params, layers, lambda_func, node_name, keras_name):
         assert AttributeError('More than 1 input for an activation layer.')
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-    layers[node_name] = input_0 * tf.math.tanh(tf.math.softplus(input_0))
+    layers[node_name] = input_0 * tf_math_tanh(tf_math_softplus(input_0))
 
 
 def convert_hard_swish(node, params, layers, lambda_func, node_name, keras_name):
@@ -237,7 +238,7 @@ def convert_softmax(node, params, layers, lambda_func, node_name, keras_name):
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     axis = params.get('axis', keras.layers.Softmax.__init__.__defaults__[0])
-    softmax_layer = keras.layers.Softmax(axis=axis, name=keras_name)
+    softmax_layer = keras.layers.Softmax(axis=axis, name=f"{params['cleaned_name']}_softmax")
     layers[node_name] = softmax_layer(input_0)
     layers[node_name].set_shape(layers[node_name].shape)
 
@@ -270,7 +271,7 @@ def convert_prelu(node, params, layers, lambda_func, node_name, keras_name):
     # for case when W.shape (n,). When activation is used for single dimension vector.
     shared_axes = shared_axes if len(W.shape) > 1 else None
 
-    prelu = keras.layers.PReLU(weights=[W], shared_axes=shared_axes, name=keras_name)
+    prelu = keras.layers.PReLU(weights=[W], shared_axes=shared_axes, name=f"{params['cleaned_name']}_prelu")
     layers[node_name] = prelu(input_0)
 
 
@@ -292,11 +293,10 @@ def convert_hard_sigmoid(node, params, layers, lambda_func, node_name, keras_nam
 
     alpha = params.get("alpha", 0.2)
     beta = params.get("beta", 0.5)
-
     # hard sigmoid logic
-    x = tf.multiply(input_0, alpha)
-    x = tf.add(x, beta)
-    x = tf.clip_by_value(x, 0., 1.)
+    x = tf_multiply(input_0, alpha, tf_name=f"{params['cleaned_name']}_multiply")
+    x = tf_add(x, beta, tf_name=f"{params['cleaned_name']}_add")
+    x = tf_clip_by_value(x, 0., 1., tf_name=f"{params['cleaned_name']}_clip")
     layers[node_name] = x
 
 
@@ -315,4 +315,4 @@ def convert_erf(node, params, layers, lambda_func, node_name, keras_name):
         assert AttributeError('More than 1 input for an activation layer.')
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-    layers[node_name] = tf.math.erf(input_0)
+    layers[node_name] = tf_math_erf(input_0, tf_name=f"{params['cleaned_name']}_erf")

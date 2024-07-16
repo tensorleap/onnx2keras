@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 from .utils import ensure_tf_type
+from .tfops_funcs import tf_math_reduce_mean, tf_math_reduce_variance, tf_sqrt
 
 
 def convert_batchnorm(node, params, layers, lambda_func, node_name, keras_name):
@@ -85,12 +86,13 @@ def convert_instancenorm(node, params, layers, lambda_func, node_name, keras_nam
     epsilon = params['epsilon']
     dims_x = len(input_0.shape)
     axis = list(range(2, dims_x))
-    var = tf.math.reduce_variance(input_0, axis=axis, keepdims=True, name=None)
-    mean = tf.math.reduce_mean(input_0, axis=axis, keepdims=True, name=None)
+    var = tf_math_reduce_variance(input_0, axis=axis, keepdims=True, name=None, tf_name=f"{params['cleaned_name']}_var")
+    mean = tf_math_reduce_mean(input_0, axis=axis, keepdims=True, name=None, tf_name=f"{params['cleaned_name']}_mean")
     dim_ones = (1,) * (dims_x - 2)
     scale = np.reshape(scale, (-1, *dim_ones))
     bias = np.reshape(bias, (-1, *dim_ones))
-    layers[node_name] = (input_0 - mean) * scale / tf.sqrt(var + epsilon) + bias
+    layers[node_name] = (input_0 - mean) * scale / tf_sqrt(var + epsilon, tf_name=f"{params['cleaned_name']}_sqrt")\
+                        + bias
 
 
 def convert_dropout(node, params, layers, lambda_func, node_name, keras_name):
