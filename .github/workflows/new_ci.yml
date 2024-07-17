@@ -19,8 +19,8 @@ jobs:
       - name: Create and push branch in Repo B
         run: |
           # Clone Repo B
-          git clone https://github.com/yourusername/repo-b.git
-          cd repo-b
+          git clone https://github.com/tensorleap/leap-model-parser.git
+          cd leap-model-parser
 
           # Extract current branch name
           CURRENT_BRANCH=$(echo ${{ steps.extract_branch.outputs.branch_name }})
