@@ -28,24 +28,23 @@ jobs:
         with:
           github-token: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
           script: |
+            const { exec } = require('@actions/github-script');
+            
             async function run() {
-              const repoBUrl = "https://github.com/tensorleap/leap-model-parser.git";  // Replace with the HTTPS URL of repo B
+              const repoBUrl = "https://github.com/owner/repo-b.git";  // Replace with the HTTPS URL of repo B
               
               // Clone repo B
-              await exec(`git clone ${repoBUrl} leap_parser`);
-              // Optionally, perform operations within 'repo-b'
-              await exec('ls -l'); // List files in 'repo-b'
+              await exec(`git clone ${repoBUrl} repo-b`);
+              process.chdir('repo-b');
+              
+              // Optionally, checkout a specific branch or tag in repo B
+              // await exec('git checkout main');
+              
+              // Example: List files in repo B after cloning
+              await exec('ls -l');
             }
+            
             run().catch(err => {
               console.error(err);
               process.exit(1);
             });
-          # Extract current branch name
-          #CURRENT_BRANCH=$(echo ${{ steps.extract_branch.outputs.branch_name }})
-
-          # Create a new branch based on the current branch name from Repo A
-          #NEW_BRANCH="${CURRENT_BRANCH}-from-prev"
-          #git checkout -b $NEW_BRANCH
-
-          # Push the branch to Repo B
-          #git push origin $NEW_BRANCH
