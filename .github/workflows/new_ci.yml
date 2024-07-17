@@ -26,7 +26,7 @@ jobs:
       - name: Clone leap-model-parser using GitHub Script
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.GH_TOKEN_REPO_B }}
+          github-token: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
           script: |
             const { exec } = require('@actions/github-script');
             
