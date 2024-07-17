@@ -35,7 +35,13 @@ jobs:
               
               // Clone repo B
               await exec(`git clone ${repoBUrl} leap_parser`);
-
+              // Optionally, perform operations within 'repo-b'
+              await exec('ls -l'); // List files in 'repo-b'
+            }
+            run().catch(err => {
+              console.error(err);
+              process.exit(1);
+            });
           # Extract current branch name
           #CURRENT_BRANCH=$(echo ${{ steps.extract_branch.outputs.branch_name }})
 
