@@ -15,6 +15,8 @@ jobs:
 
       - name: Checkout Repo A
         uses: actions/checkout@v2
+        with:
+          token: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
 
 #      - name: Set up Git
 #        run: |
@@ -22,20 +24,21 @@ jobs:
 #          git config --global user.name github-actions
 
       - name: Create and push branch in Repo B
+        env:
+          GH_TOKEN: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
         run: |
           # Clone Repo B
-          git config --local user.email github-actions@github.com
-          git config --local user.name github-actions
-          git clone git@github.com:tensorleap/leap-model-parser.git
-          echo "1"
+          git config user.email github-actions@github.com
+          git config user.name github-actions
+          git clone https://github.com/tensorleap/leap-model-parser.git
           cd leap-model-parser
 
           # Extract current branch name
-          CURRENT_BRANCH=$(echo ${{ steps.extract_branch.outputs.branch_name }})
+          #CURRENT_BRANCH=$(echo ${{ steps.extract_branch.outputs.branch_name }})
 
           # Create a new branch based on the current branch name from Repo A
-          NEW_BRANCH="${CURRENT_BRANCH}-from-prev"
-          git checkout -b $NEW_BRANCH
+          #NEW_BRANCH="${CURRENT_BRANCH}-from-prev"
+          #git checkout -b $NEW_BRANCH
 
           # Push the branch to Repo B
-          git push origin $NEW_BRANCH
+          #git push origin $NEW_BRANCH
