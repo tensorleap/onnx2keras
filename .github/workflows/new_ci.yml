@@ -28,22 +28,21 @@ jobs:
         with:
           github-token: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
           script: |
-            const { exec } = require('@actions/github-script');
-            
+            const { exec: githubExec } = require('@actions/github-script');
+
             async function run() {
-              const repoBUrl = "https://github.com/owner/repo-b.git";  // Replace with the HTTPS URL of repo B
+              const repoBUrl = "https://github.com/owner/repo-b.git";
               
-              // Clone repo B
-              await exec(`git clone ${repoBUrl} repo-b`);
+              // Use GitHub Actions exec to clone repo B
+              await githubExec(`git clone ${repoBUrl} repo-b`);
+              
+              // Change directory to repo-b
               process.chdir('repo-b');
               
-              // Optionally, checkout a specific branch or tag in repo B
-              // await exec('git checkout main');
-              
-              // Example: List files in repo B after cloning
-              await exec('ls -l');
+              // List files in repo-b after cloning
+              await githubExec('ls -l');
             }
-            
+
             run().catch(err => {
               console.error(err);
               process.exit(1);
