@@ -24,8 +24,8 @@ jobs:
       - name: Create and push branch in Repo B
         run: |
           # Clone Repo B
-          git config --global user.email github-actions@github.com
-          git config --global user.name github-actions
+          git config --local user.email github-actions@github.com
+          git config --local user.name github-actions
           git clone https://github.com/tensorleap/leap-model-parser.git
           cd leap-model-parser
 
