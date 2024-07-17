@@ -28,10 +28,10 @@ jobs:
         with:
           github-token: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
           script: |
-            const { exec: githubExec } = require('@actions/github-script');
+            const { exec: githubExec } = require('@actions/github-script@v6');
 
             async function run() {
-              const repoBUrl = "https://github.com/owner/repo-b.git";
+              const repoBUrl = "https://github.com/tensorleap/leap-model-parser.git";
               
               // Use GitHub Actions exec to clone repo B
               await githubExec(`git clone ${repoBUrl} repo-b`);
