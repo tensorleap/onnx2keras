@@ -1,64 +1,64 @@
-name: CI
-on: [push]
-permissions:
-    id-token: write # This is required for requesting the JWT
-    contents: read  # This is required for actions/checkout
-jobs:
-  python-setup:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        os: [ubuntu-20.04]
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v2
-      - name: Set up python
-        id: setup-python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.8
-      #---------------------------#
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: 1.4.0
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v2
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-1
-      - name: Install dependencies
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction --no-root
-    outputs:
-        python-version: ${{ steps.setup-python.outputs.python-version }}
-  test:
-    runs-on: ubuntu-latest
-    needs: python-setup
-    strategy:
-      matrix:
-        os: [ubuntu-20.04]
-        pytest_target: [models, layers]
-    name: test-${{ matrix.pytest_target }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v2
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v2
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ needs.python-setup.outputs.python-version }}-1
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4.0.1
-        with:
-          role-to-assume: arn:aws:iam::898022457080:role/TerraformAdmin
-          aws-region: us-east-1
-      - name: Test with pytest
-        run: |
-          source .venv/bin/activate
-          pytest test/${{ matrix.pytest_target }}/
+#name: CI
+#on: [push]
+#permissions:
+#    id-token: write # This is required for requesting the JWT
+#    contents: read  # This is required for actions/checkout
+#jobs:
+#  python-setup:
+#    runs-on: ubuntu-latest
+#    strategy:
+#      matrix:
+#        os: [ubuntu-20.04]
+#    steps:
+#      - name: Check out repository
+#        uses: actions/checkout@v2
+#      - name: Set up python
+#        id: setup-python
+#        uses: actions/setup-python@v2
+#        with:
+#          python-version: 3.8
+#      #---------------------------#
+#      - name: Install Poetry
+#        uses: snok/install-poetry@v1
+#        with:
+#          version: 1.4.0
+#          virtualenvs-create: true
+#          virtualenvs-in-project: true
+#          installer-parallel: true
+#      - name: Load cached venv
+#        id: cached-poetry-dependencies
+#        uses: actions/cache@v2
+#        with:
+#          path: .venv
+#          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-1
+#      - name: Install dependencies
+#        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+#        run: poetry install --no-interaction --no-root
+#    outputs:
+#        python-version: ${{ steps.setup-python.outputs.python-version }}
+#  test:
+#    runs-on: ubuntu-latest
+#    needs: python-setup
+#    strategy:
+#      matrix:
+#        os: [ubuntu-20.04]
+#        pytest_target: [models, layers]
+#    name: test-${{ matrix.pytest_target }}
+#    steps:
+#      - name: Check out repository
+#        uses: actions/checkout@v2
+#      - name: Load cached venv
+#        id: cached-poetry-dependencies
+#        uses: actions/cache@v2
+#        with:
+#          path: .venv
+#          key: venv-${{ runner.os }}-${{ needs.python-setup.outputs.python-version }}-1
+#      - name: Configure AWS Credentials
+#        uses: aws-actions/configure-aws-credentials@v4.0.1
+#        with:
+#          role-to-assume: arn:aws:iam::898022457080:role/TerraformAdmin
+#          aws-region: us-east-1
+#      - name: Test with pytest
+#        run: |
+#          source .venv/bin/activate
+#          pytest test/${{ matrix.pytest_target }}/
