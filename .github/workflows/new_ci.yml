@@ -18,8 +18,8 @@ jobs:
 
       - name: Set up Git
         run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
+          git config --global user.email github-actions@github.com
+          git config --global user.name github-actions
 
       - name: Create and push branch in Repo B
         run: |
