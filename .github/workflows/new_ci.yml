@@ -1,5 +1,10 @@
 name: Push to Repo B
 on: [push]
+permissions:
+    id-token: write # This is required for requesting the JWT
+    contents: read  # This is required for actions/checkout
+    issues: write   # permits an action to add a comment to an issue.
+    pull-requests: write
 jobs:
   update-leap-model-parser:
     runs-on: ubuntu-latest
