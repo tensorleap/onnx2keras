@@ -18,20 +18,23 @@ jobs:
         with:
           token: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
 
-#      - name: Set up Git
-#        run: |
-#          git config --global user.email github-actions@github.com
-#          git config --global user.name github-actions
-
-      - name: Create and push branch in Repo B
-        env:
-          GH_TOKEN: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
+      - name: Set up Git
         run: |
-          # Clone Repo B
           git config user.email github-actions@github.com
           git config user.name github-actions
-          git clone https://github.com/tensorleap/leap-model-parser.git
-          cd leap-model-parser
+
+      - name: Clone leap-model-parser using GitHub Script
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GH_TOKEN_REPO_B }}
+          script: |
+            const { exec } = require('@actions/github-script');
+            
+            async function run() {
+              const repoBUrl = "https://github.com/tensorleap/leap-model-parser.git";  // Replace with the HTTPS URL of repo B
+              
+              // Clone repo B
+              await exec(`git clone ${repoBUrl} leap_parser`);
 
           # Extract current branch name
           #CURRENT_BRANCH=$(echo ${{ steps.extract_branch.outputs.branch_name }})
