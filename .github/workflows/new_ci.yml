@@ -28,8 +28,6 @@ jobs:
         with:
           github-token: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
           script: |
-            const { exec } = require('@actions/github-script');
-            
             async function run() {
               const repoBUrl = "https://github.com/tensorleap/leap-model-parser.git";  // Replace with the HTTPS URL of repo B
               
