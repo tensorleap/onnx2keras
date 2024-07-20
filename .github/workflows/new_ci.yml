@@ -29,5 +29,6 @@ jobs:
           git config user.name github-actions
           git checkout -b test-test
           git branch
+          git push origin test-test
           ls -l  # Example command: List files in the checked-out repositor
           echo "1"
