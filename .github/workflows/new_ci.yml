@@ -23,6 +23,7 @@ jobs:
         with:
           token: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
           repository: tensorleap/leap-model-parser
+      - name: check
         run: |
           git config user.email github-actions@github.com
           git config user.name github-actions
