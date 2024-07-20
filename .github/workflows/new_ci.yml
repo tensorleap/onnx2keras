@@ -18,7 +18,7 @@ jobs:
         with:
           token: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
 
-      - name: Set up Git
+      - name: checkout leap model parser
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
@@ -27,28 +27,3 @@ jobs:
           git config user.email github-actions@github.com
           git config user.name github-actions
           echo "1"
-#
-#      - name: Clone leap-model-parser using GitHub Script
-#        uses: actions/github-script@v6
-#        with:
-#          github-token: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
-#          script: |
-#            const { exec: githubExec } = require('@actions/github-script@v6');
-#
-#            async function run() {
-#              const repoBUrl = "https://github.com/tensorleap/leap-model-parser.git";
-#              
-#              // Use GitHub Actions exec to clone repo B
-#              await githubExec(`git clone ${repoBUrl} repo-b`);
-#              
-#              // Change directory to repo-b
-#              process.chdir('repo-b');
-#              
-#              // List files in repo-b after cloning
-#              await githubExec('ls -l');
-#            }
-#
-#            run().catch(err => {
-#              console.error(err);
-#              process.exit(1);
-#            });
