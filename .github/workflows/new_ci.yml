@@ -27,4 +27,5 @@ jobs:
         run: |
           git config user.email github-actions@github.com
           git config user.name github-actions
+          ls -l  # Example command: List files in the checked-out repositor
           echo "1"
