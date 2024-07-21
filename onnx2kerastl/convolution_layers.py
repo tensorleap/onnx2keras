@@ -121,7 +121,7 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
 
         if padding:
             logger.debug('Paddings exist, add ZeroPadding layer')
-            padding_name = f"{params['cleaned_name']}" + 'conv_pad_1'
+            padding_name = f"{params['cleaned_name']}_" + 'conv_pad_1'
             padding_layer = keras.layers.ZeroPadding2D(
                 padding=padding,
                 name=padding_name,

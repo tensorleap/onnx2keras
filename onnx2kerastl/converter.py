@@ -16,6 +16,7 @@ from keras.models import Model
 from .customonnxlayer import onnx_custom_objects_map
 from .exceptions import UnsupportedLayer, OnnxUnsupported
 from .layers import AVAILABLE_CONVERTERS
+import re
 
 onnx_imported = False
 package_name = 'onnx'
@@ -209,9 +210,10 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
             else:
                 keras_names = keras_names[0]
                 node_names.append(keras_names)
-            cleaned_node_name = node.name.replace("#", "_").rstrip("/").lstrip("/").replace(":", "_")
+            pattern = r'[#:]'  # Example pattern to match #, /, and :
+            cleaned_node_name = re.sub(pattern, '_', node.name.rstrip("/").lstrip("/"))
             if len(cleaned_node_name) == 0:
-                cleaned_node_name = f'{node_name.rstrip("/").lstrip("/").replace(":", "_")}'
+                cleaned_node_name = re.sub(pattern, '_', node_name.rstrip("/").lstrip("/"))
             node_params['cleaned_name'] = f'{cleaned_node_name}_tl'
             logger.debug('######')
             logger.debug(f"{node_index/len(onnx_nodes):.1%} completed")

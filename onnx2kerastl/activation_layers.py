@@ -23,7 +23,7 @@ def convert_relu(node, params, layers, lambda_func, node_name, keras_name):
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-    relu = keras.layers.Activation('relu', name=f"{params['cleaned_name']}_reli")
+    relu = keras.layers.Activation('relu', name=f"{params['cleaned_name']}_relu")
     layers[node_name] = relu(input_0)
 
 
