@@ -47,15 +47,21 @@ jobs:
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://pypi.org/pypi/onnx2kerastl/$PACKAGE_VERSION/)
           if [ $RESPONSE -eq 200 ]; then
             echo "Version $PACKAGE_VERSION already exists on PyPI."
-            exit 1  # Exit with failure if version exists
+            echo "IS_O2K_PUBLISHED=true" >> $GITHUB_ENV
           else
             echo "Version $PACKAGE_VERSION does not exist on PyPI."
+            echo "IS_O2K_PUBLISHED=false" >> $GITHUB_ENV
           fi
       - name: Build and publish package
         if: success()  # Only run this step if the previous steps were successful
         run: |
+          if [ "$IS_O2K_PUBLISHED" != "true" ]; then
           poetry build
           poetry publish -u __token__ -p ${{ secrets.PYPI_O2K }}
+            echo "Published O2K version $PACKAGE_VERSION"
+          else
+            echo "Skipping publishing as version already exists on PyPI."
+          fi
       - name: checkout leap model parser
         uses: actions/checkout@v4
         with:
