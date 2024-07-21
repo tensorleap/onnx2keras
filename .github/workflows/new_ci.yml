@@ -14,6 +14,12 @@ jobs:
         run: echo "::set-output name=branch_name::$(echo ${GITHUB_REF#refs/heads/})"
       - name: Check out repository
         uses: actions/checkout@v2
+      - name: Get package version from pyproject.toml
+        id: package_version
+        run: |
+          PACKAGE_VERSION=$(awk -F' = ' '$1 == "version" {gsub(/"/, "", $2); print $2}' pyproject.toml | head -n 1)
+          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
+          echo "$PACKAGE_VERSION"
       - name: Set up python
         id: setup-python
         uses: actions/setup-python@v2
@@ -35,16 +41,22 @@ jobs:
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction --no-root
-      - name: Build and publish to pypi
-        uses: JRubics/poetry-publish@v2.0
-        with:
-          pypi_token: ${{ secrets.PYPI_O2K }}
-      - name: Get package version from pyproject.toml
-        id: package_version
+      - name: Check if version exists on PyPI
+        id: check_version
         run: |
-          PACKAGE_VERSION=$(awk -F' = ' '$1 == "version" {gsub(/"/, "", $2); print $2}' pyproject.toml | head -n 1)
-          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
-          echo "$PACKAGE_VERSION"
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://pypi.org/pypi/onnx2kerastl/$PACKAGE_VERSION/)
+          if [ $RESPONSE -eq 200 ]; then
+            echo "Version $PACKAGE_VERSION already exists on PyPI."
+            exit 1  # Exit with failure if version exists
+          else
+            echo "Version $PACKAGE_VERSION does not exist on PyPI."
+          fi
+      - name: Build and publish package
+        if: success()  # Only run this step if the previous steps were successful
+        run: |
+          poetry build
+          poetry config pypi-token.pypi ${{ secrets.PYPI_O2K }}
+          poetry publish --build -u __token__ -p ''
       - name: checkout leap model parser
         uses: actions/checkout@v4
         with:
