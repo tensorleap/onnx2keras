@@ -13,9 +13,10 @@ jobs:
         id: extract_branch
         run: echo "::set-output name=branch_name::$(echo ${GITHUB_REF#refs/heads/})"
       - name: Get package version from pyproject.toml
+        id: package_version
         run: |
           PACKAGE_VERSION=$(awk -F' = ' '$1 == "version" {gsub(/"/, "", $2); print $2}' pyproject.toml | head -n 1)
-          echo "::set-output name=project_version::$VERSION"
+            echo "project_version=$VERSION" >> $GITHUB_OUTPUT
       - name: checkout leap model parser
         uses: actions/checkout@v4
         with:
@@ -23,6 +24,7 @@ jobs:
           repository: tensorleap/leap-model-parser
       - name: Checkout leap-model-parser
         run: |
+          echo "Project version is ${{ steps.package_version.outputs.project_version }}"
           BRANCH="${{ steps.extract_branch.outputs.branch_name }}-from-o2k"
           git config user.email github-actions@github.com
           git config user.name github-actions
