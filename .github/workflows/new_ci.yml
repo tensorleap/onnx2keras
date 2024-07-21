@@ -12,6 +12,10 @@ jobs:
       - name: Extract branch name
         id: extract_branch
         run: echo "::set-output name=branch_name::$(echo ${GITHUB_REF#refs/heads/})"
+      - name: Get package version from pyproject.toml
+        run: |
+          PACKAGE_VERSION=$(awk -F' = ' '$1 == "version" {gsub(/"/, "", $2); print $2}' pyproject.toml | head -n 1)
+          echo "::set-output name=project_version::$VERSION"
       - name: checkout leap model parser
         uses: actions/checkout@v4
         with:
