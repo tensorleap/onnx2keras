@@ -19,6 +19,7 @@ jobs:
         run: |
           PACKAGE_VERSION=$(awk -F' = ' '$1 == "version" {gsub(/"/, "", $2); print $2}' pyproject.toml | head -n 1)
           echo "project_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "$VERSION"
       - name: checkout leap model parser
         uses: actions/checkout@v4
         with:
