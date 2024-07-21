@@ -1,4 +1,4 @@
-name: Push to Repo B
+name: Push to O2K
 on: [push]
 permissions:
     id-token: write # This is required for requesting the JWT
@@ -12,23 +12,22 @@ jobs:
       - name: Extract branch name
         id: extract_branch
         run: echo "::set-output name=branch_name::$(echo ${GITHUB_REF#refs/heads/})"
-
-      - name: Checkout Repo A
-        uses: actions/checkout@v2
-        with:
-          token: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
-
       - name: checkout leap model parser
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}
           repository: tensorleap/leap-model-parser
-      - name: check
+      - name: Checkout leap-model-parser
         run: |
+          BRANCH="${{ steps.extract_branch.outputs.branch_name }}-from-o2k"
           git config user.email github-actions@github.com
           git config user.name github-actions
-          git checkout -b test-test
-          git branch
-          git push origin test-test
+          if git fetch origin && git ls-remote --exit-code --heads origin "$BRANCH"; then
+              git checkout "$BRANCH"
+              git pull origin "$BRANCH"
+          else
+              git checkout -b "$BRANCH"
+          fi
+          git push origin "$BRANCH"
           ls -l  # Example command: List files in the checked-out repositor
           echo "1"
