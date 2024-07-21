@@ -55,8 +55,7 @@ jobs:
         if: success()  # Only run this step if the previous steps were successful
         run: |
           poetry build
-          poetry config pypi-token.pypi ${{ secrets.PYPI_O2K }}
-          poetry publish --build -u __token__ -p ''
+          poetry publish --build -u __token__ -p ${{ secrets.PYPI_O2K }}
       - name: checkout leap model parser
         uses: actions/checkout@v4
         with:
