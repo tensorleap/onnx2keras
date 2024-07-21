@@ -44,7 +44,7 @@ jobs:
       - name: Check if version exists on PyPI
         id: check_version
         run: |
-          URL="https://pypi.org/pypi/onnx2kerastl/$PACKAGE_VERSION/"
+          URL="https://pypi.org/pypi/onnx2kerastl/$PACKAGE_VERSION/json"
           echo "URL: $URL"
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
           if [ $RESPONSE -eq 200 ]; then
