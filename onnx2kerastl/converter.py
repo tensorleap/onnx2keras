@@ -277,7 +277,8 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
             for inp in node.input:
                 keras_middle_outputs.pop(inp, None)
             # add node to middle map
-            keras_middle_outputs[node_name] = layers[node_name]
+            if tf.is_tensor(layers[node_name]):
+                keras_middle_outputs[node_name] = layers[node_name]
 
             if isinstance(keras_names, list):
                 keras_names = keras_names[0]
