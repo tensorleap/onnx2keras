@@ -88,10 +88,6 @@ jobs:
           else
             echo "Skipping publishing as version already exists on PyPI."
           fi
-      - name: Ensure empty folder exists
-        run: mkdir -p leap_parser_tests_copy  # Ensure the folder exists if it doesn't already
-      - name: Copy leap_model_tests from onnx2keras
-        run: cp -r $GITHUB_WORKSPACE/leap_parser_tests /home/runner/work/leap_parser_tests_copy
       - name: checkout leap model parser
         uses: actions/checkout@v4
         with:
@@ -123,7 +119,6 @@ jobs:
               git checkout -b "$BRANCH"
           fi
           poetry add onnx2kerastl==$PACKAGE_VERSION
-          find /home/runner/work/leap_parser_tests_copy -type f -exec sh -c 'cp -v "$1" "$GITHUB_WORKSPACE/leap-model-parser/tests/$(basename "$1")"' _ {} \;
           source .venv/bin/activate
           cd tests
           if pytest -s test_branch_model.py --cloud_dir ${{ github.event.inputs.cloud_dir }} --model_name ${{ github.event.inputs.model_name }}; then
