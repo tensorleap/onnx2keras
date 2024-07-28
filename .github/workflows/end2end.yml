@@ -132,7 +132,7 @@ jobs:
               git add -u
               if git status --porcelain | grep -q '^M'; then
                   echo "Files are modified - updating branch"
-                  git commit -m "update O2K version"
+                  git commit -m "update O2K --model_name ${{ github.event.inputs.model_name }} --cloud_dir ${{ github.event.inputs.cloud_dir }}"
                   git push origin "$BRANCH" 
               else
                   echo "No changes were made to leap-model-parser - not pushing the branch"
