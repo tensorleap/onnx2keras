@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 from .utils import ensure_tf_type
-from .tfops_funcs import tf_math_reduce_mean, tf_math_reduce_variance, tf_sqrt
+from .tfops_funcs import tf_math_reduce_mean, tf_math_reduce_variance, tf_sqrt, tf_rank, tf_concat, tf_reshape
 
 
 def convert_batchnorm(node, params, layers, lambda_func, node_name, keras_name):
@@ -155,3 +155,39 @@ def convert_lrn(node, params, layers, lambda_func, node_name, keras_name):
     lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_lrn")
     layers[node_name] = lambda_layer(input_0)
     lambda_func[keras_name] = target_layer
+
+
+def convert_layernorm(node, params, layers, lambda_func, node_name, keras_name):
+    axis = params.get('axis', -1)
+    epsilon = params.get('epsilon', 1e-05)
+    stash_type = params.get('stash_type')
+    if stash_type is not None:
+        raise Exception("LayerNorm stash_type attribute is not implemented")
+    input_x = layers[node.input[0]]
+    weight = layers[node.input[1]]
+    if len(node.input) > 2:
+        bias = layers[node.input[2]]
+    else:
+        bias = None
+    center = True if bias is not None else False
+    layer_norm = tf.keras.layers.LayerNormalization(
+        axis=axis,
+        epsilon=epsilon,
+        center=center,
+        name=f"{params['cleaned_name']}_LayerNorm"
+    )
+    input_shape = input_x.shape.as_list()
+    if input_shape[axis] is None:
+        # reshape input such that the axis dim would be non-None (set by weights)
+        tf_input_shape = tf.shape(input_x)
+        if axis < 0:
+            axis = tf_rank(input_x, tf_name=f"{params['cleaned_name']}_LayerNorm_rank")._inferred_value[0] + axis
+        tf_new_shape = tf_concat([tf_input_shape[:axis], [weight.shape[0]], tf_input_shape[axis+1:]], axis=-1,
+                                 tf_name=f"{params['cleaned_name']}_LayerNorm_new_shape")
+        input_x = tf_reshape(input_x, tf_new_shape, tf_name=f"{params['cleaned_name']}_LayerNorm_reshape_none_axis")
+    layer_norm.build(input_x.shape)
+    if center:
+        layer_norm.set_weights([weight, bias])
+    else:
+        layer_norm.set_weights([weight])
+    layers[node_name] = layer_norm(input_x)
