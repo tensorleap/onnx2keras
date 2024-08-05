@@ -43,7 +43,14 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
                                        tf_name=f"{params['cleaned_name']}_pad")
         # Magic ordering
         else:
-            if pads.shape[0] == 8:
+            if isinstance(pads, keras.engine.keras_tensor.KerasTensor) and pads.shape[0] == 8:
+                padding_layer = lambda x: tf_pad(x,
+                                                 [[pads[0], pads[4]],
+                                                     [pads[1], pads[5]],
+                                                     [pads[2], pads[6]],
+                                                     [pads[3], pads[7]]],
+                                                 tf_name=f"{params['cleaned_name']}_pad_3")
+            elif pads.shape[0] == 8:
                 padding_layer = keras.layers.ZeroPadding2D(
                     padding=((pads[2], pads[6]), (pads[3], pads[7])),
                     name=f"{params['cleaned_name']}_pad_0"
