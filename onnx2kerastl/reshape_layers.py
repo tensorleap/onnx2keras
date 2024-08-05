@@ -10,7 +10,8 @@ from typing import Union
 from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
 from .tfops_funcs import tf_reshape, tf_shape, tf_cast, tf_stack, tf_image_resize, tf_strided_slice,\
     tf_squeeze, tf_transpose, tf_where, tf_gather, tf_range, tf_reduce_sum, tf_abs, tf_expand_dims, tf_concat, \
-    tf_shape, tf_tile, tf_fill, tf_gather_nd, tf_reduce_sum, tf_zeros_like, tf_multiply, tf_tensor_scatter_nd_update
+    tf_shape, tf_tile, tf_fill, tf_gather_nd, tf_reduce_sum, tf_zeros_like, tf_multiply, tf_tensor_scatter_nd_update,\
+    tf_ones
 
 
 def convert_transpose(node, params, layers, lambda_func, node_name, keras_name):
@@ -671,7 +672,8 @@ def convert_expand(node, params, layers, lambda_func, node_name, keras_name):
     input_1 = layers[node.input[1]]
     if input_0.dtype.is_bool:
         input_0 = tf_cast(input_0, dtype='int32', tf_name=f"{params['cleaned_name']}_bool_to_int")
-    multiply_res = input_0 * tf.ones(shape=input_1, dtype=input_0.dtype)
+    multiply_res = input_0 * tf_ones(shape=input_1, dtype=input_0.dtype,
+                                     tf_name=f"{params['cleaned_name']}_expand_use_ones")
     # input_0.dtype == np.int32 since we can't serialize constants as int64, need to cast to true type
     if layers[node.input[0]].dtype == np.int64:
         multiply_res = tf_cast(multiply_res, tf.int64, tf_name=f"{params['cleaned_name']}_to_int64")
