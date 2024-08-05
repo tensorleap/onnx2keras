@@ -4,7 +4,7 @@ import logging
 from .utils import is_numpy, ensure_tf_type
 from .tfops_funcs import tf_tensor_scatter_nd_update, tf_maximum, tf_minimum, tf_cast, tf_expand_dims, tf_repeat,\
     tf_equal, tf_where, tf_round, tf_sign, tf_abs, tf_math_mod, tf_bitwise_left_shift, tf_bitwise_right_shift,\
-    tf_logical_not
+    tf_logical_not, tf_add
 import tensorflow as tf
 from tensorflow.python.framework.ops import EagerTensor
 
@@ -81,11 +81,13 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
     try:
         if not input_0_is_non_keras and not input_1_is_non_keras:
             to_add = input_1
-            if input_0.shape != input_1.shape and input_0.shape[:-1] == input_1.shape:
-                to_add = tf_repeat(tf_expand_dims(input_1, axis=-1, tf_name=f"{params['cleaned_name']}_expand"),
-                                   input_0.shape[-1], axis=-1, tf_name=f"{params['cleaned_name']}_repeat")
-
-            layers[node_name] = keras.layers.Add(name=f"{params['cleaned_name']}_add")([input_0, to_add])
+            # We probably need to seperate two possibilities here. Currently we only deal with second option
+            # [Batch] + [Batch,1] -> [Batch,1]
+            # [Not-Batch] + [Not,Batch,1] -> [Not-batch, Not-batch]
+            if len(input_0.shape) != len(input_1.shape):
+                layers[node_name] = tf_add(input_0, to_add, tf_name=f"{params['cleaned_name']}_add")
+            else:
+                layers[node_name] = keras.layers.Add(name=f"{params['cleaned_name']}_add")([input_0, to_add])
         else:
             raise ValueError('Operands are different.')
     except (IndexError, ValueError):
