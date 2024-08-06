@@ -12,3 +12,4 @@ dist/
 test/models/custom_conversion_tests
 
 .vscode/
+gallery_models
