@@ -36,6 +36,7 @@ class FPELU(nn.Module):
 @pytest.mark.repeat(10)
 @pytest.mark.parametrize('change_ordering', [False])
 def test_layer_elu(change_ordering):
+    assert False
     model = LayerELU()
     model.eval()
     input_np = np.random.uniform(0, 1, (1, 3, 224, 224))
@@ -45,6 +46,7 @@ def test_layer_elu(change_ordering):
 @pytest.mark.repeat(10)
 @pytest.mark.parametrize('change_ordering', [False])
 def test_fp_elu(change_ordering):
+    assert False
     model = FPELU()
     model.eval()
     input_np = np.random.uniform(0, 1, (1, 3, 224, 224))
