@@ -118,7 +118,40 @@ jobs:
           else
               git checkout -b "$BRANCH"
           fi
-          poetry add onnx2kerastl==$PACKAGE_VERSION
+          # add packages with retry
+          clear_cache() {
+              echo "Clearing Poetry cache..."
+              poetry cache clear . --all --no-interaction
+          }
+          add_packages() {
+              poetry add onnx2kerastl==$PACKAGE_VERSION
+          }
+          max_retries=3
+          attempt=0
+          # Try to add packages
+          while [ $attempt -lt $max_retries ]; do
+              echo "Attempt $(($attempt + 1)) to add the package..."
+
+              # Attempt to add the package
+              if add_packages; then
+                  echo "Package added successfully."
+                  break
+              else
+                  echo "Package add failed."
+
+                  # Clear the cache before retrying
+                  clear_cache
+
+                  # Increment the attempt counter
+                  attempt=$((attempt + 1))
+                  
+                  # If this was the last attempt, exit with failure
+                  if [ $attempt -ge $max_retries ]; then
+                      echo "Failed to add the package after $max_retries attempts."
+                      exit 1
+                  fi
+              fi
+          done
           source .venv/bin/activate
           cd tests
           if pytest -s test_branch_model.py --cloud_dir ${{ github.event.inputs.cloud_dir }} --model_name ${{ github.event.inputs.model_name }}; then
