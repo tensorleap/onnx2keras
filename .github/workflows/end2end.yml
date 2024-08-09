@@ -155,19 +155,28 @@ jobs:
           source .venv/bin/activate
           cd tests
           if pytest -s test_branch_model.py --cloud_dir ${{ github.event.inputs.cloud_dir }} --model_name ${{ github.event.inputs.model_name }}; then
+              TEST_CONCLUSION=success
               echo "Tests passed, Pushing Branch if needed"
               cd ..
               git add -u
               if git status --porcelain | grep -q '^M'; then
                   echo "Files are modified - updating branch"
-                  git commit -m "update O2K --model_name ${{ github.event.inputs.model_name }} --cloud_dir ${{ github.event.inputs.cloud_dir }}"
+                  git commit -m "update O2K --model_name ${{ github.event.inputs.model_name }} --cloud_dir ${{ github.event.inputs.cloud_dir }} --sha $GITHUB_SHA"
                   git push origin "$BRANCH" 
               else
                   echo "No changes were made to leap-model-parser - not pushing the branch"
               fi
           else
+              TEST_CONCLUSION=failure
               echo "Tests Failed, check pytest output"
           fi
-          rm -rf /home/runner/work/leap_parser_tests_copy
-
-
+          echo "TEST_CONCLUSION=$TEST_CONCLUSION" >> $GITHUB_ENV
+      - name: add commit status
+        id: commit_status
+        run: | 
+            curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.TENSORLEAP_OPS_GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/tensorleap/onnx2keras/statuses/$GITHUB_SHA \
+            -d '{"state":"'${TEST_CONCLUSION}'","target_url":"https://github.com/'${GITHUB_REPOSITORY}'/actions/runs/'${GITHUB_RUN_ID}'","description":"Leap model parser dynamic test result","context":"end2end/parser-dynamic-test"}'
