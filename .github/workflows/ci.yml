@@ -56,7 +56,7 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4.0.1
         with:
-          role-to-assume: arn:aws:iam::898022457080:role/TerraformAdmin
+          role-to-assume: arn:aws:iam::898022457080:role/github-action-test-s3-access-role
           aws-region: us-east-1
       - name: Test with pytest
         run: |
