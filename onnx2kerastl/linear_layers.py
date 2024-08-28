@@ -1,7 +1,7 @@
 import keras
 import logging
 from .utils import is_numpy
-from .tfops_funcs import tf_matmul, tf_shape, tf_concat, tf_reshape, tf_linalg_det
+from .tfops_funcs import tf_matmul, tf_shape, tf_concat, tf_reshape, tf_linalg_det, tf_linalg_matmul
 import tensorflow as tf
 
 
@@ -57,8 +57,8 @@ def convert_gemm(node, params, layers, lambda_func, node_name, keras_name):
                 layers[node_name] = dense(reshaped_x)
 
         else:
-            layers[node_name] = keras.layers.Multiply(name=f"{params['cleaned_name']}_multiply")\
-                ([layers[node.input[0]], layers[node.input[1]]])
+            #MatMul branch should point here. If there is a bug here - split GEMM from matmul
+            layers[node_name] = tf_linalg_matmul(layers[node.input[0]], layers[node.input[1]], tf_name=f"{params['cleaned_name']}_multiply")
 
 
 def convert_det(node, params, layers, lambda_func, node_name, keras_name):
