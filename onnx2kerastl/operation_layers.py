@@ -894,8 +894,8 @@ def convert_einsum(node, params, layers, lambda_func, node_name, keras_name):
     input_1 = layers[node.input[1]]
     equation = params['equation'].decode('utf-8')
 
-    is_input_0_constant = isinstance(input_0, tf.Tensor)
-    is_input_1_constant = isinstance(input_1, tf.Tensor)
+    is_input_0_constant = isinstance(input_0, (tf.Tensor, np.ndarray))
+    is_input_1_constant = isinstance(input_1, (tf.Tensor, np.ndarray))
     if is_input_0_constant and is_input_1_constant:
         layers[node_name] = tf.einsum(equation, *[input_0, input_1], name=keras_name)
     elif is_input_0_constant:
