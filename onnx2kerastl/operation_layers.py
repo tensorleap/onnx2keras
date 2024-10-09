@@ -8,13 +8,13 @@ import tensorflow as tf
 from .customonnxlayer.onnxeinsum import OnnxEinsumLayer
 from .exceptions import UnsupportedLayer
 from .utils import is_numpy, ensure_tf_type, ensure_float
-from .tfops_funcs import tf_math_abs, tf_clip_by_value, tf_math_negative, K_mean, tf_math_reduce_prod,\
-    tf_math_reduce_min, tf_math_pow, tf_math_sqrt, tf_cast, tf_argmax, tf_expand_dims, tf_math_reciprocal,\
-    tf_logical_not, tf_math_sign, tf_math_sin, tf_math_cosh, tf_math_ceil, tf_math_acosh, tf_math_acos,\
-    tf_math_asinh, tf_math_asin, tf_math_atanh, tf_math_tan, tf_math_atan, tf_math_sinh, tf_math_less_equal,\
-    tf_bitwise_invert, tf_bitwise_bitwise_and, tf_bitwise_bitwise_or, tf_bitwise_bitwise_xor, tf_cos,\
-    tf_math_greater, tf_math_greater, tf_math_greater_equal, tf_logical_and, tf_math_logical_xor, tf_math_logical_or,\
-    tf_argmin, tf_math_is_inf, tf_math_is_nan, tf_size, tf_not_equal, tf_where, tf_transpose, tf_gather_nd,\
+from .tfops_funcs import tf_math_abs, tf_clip_by_value, tf_math_negative, K_mean, tf_math_reduce_prod, \
+    tf_math_reduce_min, tf_math_pow, tf_math_sqrt, tf_cast, tf_argmax, tf_expand_dims, tf_math_reciprocal, \
+    tf_logical_not, tf_math_sign, tf_math_sin, tf_math_cosh, tf_math_ceil, tf_math_acosh, tf_math_acos, \
+    tf_math_asinh, tf_math_asin, tf_math_atanh, tf_math_tan, tf_math_atan, tf_math_sinh, tf_math_less_equal, \
+    tf_bitwise_invert, tf_bitwise_bitwise_and, tf_bitwise_bitwise_or, tf_bitwise_bitwise_xor, tf_cos, \
+    tf_math_greater, tf_math_greater, tf_math_greater_equal, tf_logical_and, tf_math_logical_xor, tf_math_logical_or, \
+    tf_argmin, tf_math_is_inf, tf_math_is_nan, tf_size, tf_not_equal, tf_where, tf_transpose, tf_gather_nd, \
     tf_multiply, tf_image_non_max_suppression, tf_ones_like, tf_stack, tf_concat
 
 # Handle python 2.7 import error
@@ -59,6 +59,10 @@ def convert_clip(node, params, layers, lambda_func, node_name, keras_name):
 
     if clip_max is None:
         clip_max = tf.float32.max
+
+    if input_0.dtype == tf.int32:
+        clip_min = int(clip_min)
+        clip_max = int(clip_max)
 
     layers[node_name] = tf_clip_by_value(input_0, clip_min, clip_max, tf_name=f"{params['cleaned_name']}_clip")
 
@@ -383,16 +387,16 @@ def convert_cast(node, params, layers, lambda_func, node_name, keras_name):
     else:
         input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
         check_cast_map = {
-                1: tf.float32,
-                2: tf.uint8,
-                3: tf.int8,
-                5: tf.int16,
-                6: tf.int32,
-                7: tf.int64,
-                9: tf.bool,
-                10: tf.float16,
-                11: tf.double,
-            }
+            1: tf.float32,
+            2: tf.uint8,
+            3: tf.int8,
+            5: tf.int16,
+            6: tf.int32,
+            7: tf.int64,
+            9: tf.bool,
+            10: tf.float16,
+            11: tf.double,
+        }
         if input_0.dtype == check_cast_map[params['to']] and not isinstance(input_0, (tf.Tensor, np.ndarray)):
             # casting a tensor to the same dtype create placeholder:0 tensor which does not process well in engine
             # trying to ignore the conversion (since its identity) might result in wrong types due to the way
@@ -569,6 +573,7 @@ def convert_less(node, params, layers, lambda_func, node_name, keras_name):
             input_0 = tf_cast(input_0, dtype=tf.double, tf_name=f"{params['cleaned_name']}_less_cast")
         else:
             raise NotImplementedError("Casting a tensor to itself is not supported")
+
     def target_layer(y, x=input_0):
         x = tf.cast(x, y.dtype)
         return tf.math.less(x, y)
@@ -829,7 +834,7 @@ def convert_nms(node, params, layers, lambda_func, node_name, keras_name):
     all_results = []
     try:
         iou_threshold = iou_threshold[0]
-    except IndexError: #iou threshold is already a scalar
+    except IndexError:  # iou threshold is already a scalar
         pass
     for batch in range(batch_size):
         for c_class in range(num_classes):
@@ -904,5 +909,3 @@ def convert_einsum(node, params, layers, lambda_func, node_name, keras_name):
         layers[node_name] = OnnxEinsumLayer(equation, input_1, 1)(input_0, name=keras_name)
     else:
         layers[node_name] = OnnxEinsumLayer(equation, None, None)([input_0, input_1], name=keras_name)
-
-
