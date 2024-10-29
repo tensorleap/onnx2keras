@@ -1,5 +1,7 @@
 import keras
 import logging
+
+import numpy as np
 from .utils import ensure_tf_type
 from .utils import is_numpy
 from .tfops_funcs import tf_pad
@@ -80,12 +82,14 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
                 )
             layers[node_name] = padding_layer(input_0)
     elif params['mode'] == 'reflect':
-
+        if pads.shape[0] == 6:
+            result = tf_pad(input_0, [[pads[0], pads[3]], [pads[1], pads[4]], [pads[2], pads[5]]], mode='REFLECT',
+                                       tf_name=f"{params['cleaned_name']}_reflect_pad")
         def target_layer(x, pads=pads):
+            pads = np.array(pads)
             if pads.shape[0] == 8:
                 layer = tf.pad(x, [[0, 0], [0, 0], [pads[2], pads[6]], [pads[3], pads[7]]], 'REFLECT')
             else:
-                logger.warning("Caution - no test yet")
                 layer = tf.pad(x, [[0, 0], [0, 0], [pads[2], pads[7]], [pads[3], pads[8]], [pads[4], pads[9]]], 'REFLECT')
             return layer
 
@@ -109,3 +113,4 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
 
     else:
         raise AttributeError('Unknown padding')
+
