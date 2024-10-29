@@ -681,7 +681,32 @@ def convert_expand(node, params, layers, lambda_func, node_name, keras_name):
 
 
 def convert_tile(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = tf_tile(layers[node.input[0]], layers[node.input[1]], tf_name=f"{params['cleaned_name']}_tile")
+    input_layer = layers[node.input[0]]
+
+    repeats_name = node.input[1]
+    if repeats_name in params:
+        # Repeats is a constant
+        repeats = params[repeats_name]
+        repeats = np.array(repeats).astype(np.int32)
+
+        # Create a Lambda layer with repeats as a constant
+        tile_layer = tf.keras.layers.Lambda(
+            lambda x: tf.tile(x, repeats),
+            name=keras_name
+        )
+
+        layers[node_name] = tile_layer(input_layer)
+    else:
+        # Repeats is a tensor (e.g., dynamic)
+        repeats_layer = layers[repeats_name]
+
+        # Create a Lambda layer that accepts both input and repeats
+        tile_layer = tf.keras.layers.Lambda(
+            lambda x: tf.tile(x[0], tf.cast(x[1], tf.int32)),
+            name=keras_name
+        )
+
+        layers[node_name] = tile_layer([input_layer, repeats_layer])
 
 
 def convert_gather_elements(node, params, layers, lambda_func, node_name, keras_name):
