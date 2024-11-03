@@ -1,6 +1,8 @@
 import numpy as np
 import keras
 import logging
+
+from onnx2kerastl.customonnxlayer.onnxconstantmul import ONNXMultiplyByConstantLayer
 from .utils import is_numpy, ensure_tf_type
 from .tfops_funcs import tf_tensor_scatter_nd_update, tf_maximum, tf_minimum, tf_cast, tf_expand_dims, tf_repeat,\
     tf_equal, tf_where, tf_round, tf_sign, tf_abs, tf_math_mod, tf_bitwise_left_shift, tf_bitwise_right_shift,\
@@ -98,39 +100,88 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
             layers[node_name] = input_0 + input_1
 
 
+# def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_name):
+#     """
+#     Convert element-wise mul.
+#     :param node: current operation node
+#     :param params: operation attributes
+#     :param layers: available keras layers
+#     :param lambda_func: function for keras Lambda layer
+#     :param node_name: internal converter name
+#     :param keras_name: resulting layer name
+#     :return: None
+#     """
+#     logger = logging.getLogger('onnx2keras.mul')
+
+#     if len(node.input) != 2:
+#         raise AttributeError('Number of inputs is not equal 2 for element-wise layer')
+
+#     input_0 = layers[node.input[0]]
+#     input_1 = layers[node.input[1]]
+
+#     input_0_is_constant = is_numpy(input_0) or isinstance(input_0, EagerTensor)
+#     input_1_is_constant = is_numpy(input_1) or isinstance(input_1, EagerTensor)
+#     try:
+#         if not input_0_is_constant and not input_1_is_constant:
+#             mul = keras.layers.Multiply(name=f"{params['cleaned_name']}_mul")
+#             layers[node_name] = mul([input_0, input_1])
+#         else:
+#             raise ValueError('Operands are different.')
+
+#     except (IndexError, ValueError):
+#         logger.warning('Failed to use keras.layers.Multiply. Fallback to TF lambda.')
+#         layers[node_name] = input_0 * input_1
+
 def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert element-wise mul.
-    :param node: current operation node
-    :param params: operation attributes
-    :param layers: available keras layers
-    :param lambda_func: function for keras Lambda layer
-    :param node_name: internal converter name
-    :param keras_name: resulting layer name
-    :return: None
     """
     logger = logging.getLogger('onnx2keras.mul')
 
     if len(node.input) != 2:
-        raise AttributeError('Number of inputs is not equal 2 for element-wise layer')
+        raise AttributeError('Number of inputs is not equal to 2 for element-wise layer')
 
     input_0 = layers[node.input[0]]
     input_1 = layers[node.input[1]]
 
     input_0_is_constant = is_numpy(input_0) or isinstance(input_0, EagerTensor)
     input_1_is_constant = is_numpy(input_1) or isinstance(input_1, EagerTensor)
-    try:
-        if not input_0_is_constant and not input_1_is_constant:
-            mul = keras.layers.Multiply(name=f"{params['cleaned_name']}_mul")
-            layers[node_name] = mul([input_0, input_1])
+
+    if not input_0_is_constant and not input_1_is_constant:
+        # Both inputs are tensors; use Multiply layer
+        mul = keras.layers.Multiply(name=f"{params['cleaned_name']}_mul")
+        layers[node_name] = mul([input_0, input_1])
+    else:
+        # One of the inputs is a constant
+        if input_0_is_constant:
+            # input_0 is constant
+            constant_value = input_0
+            variable_input = input_1
         else:
-            raise ValueError('Operands are different.')
+            # input_1 is constant
+            constant_value = input_1
+            variable_input = input_0
 
-    except (IndexError, ValueError):
-        logger.warning('Failed to use keras.layers.Multiply. Fallback to TF lambda.')
-        layers[node_name] = input_0 * input_1
-
-
+        # Define the shape and value of the constant tensor
+        constant_shape = constant_value.shape
+        if np.all(constant_value == constant_value.flat[0]):
+            # Constant tensor has the same value throughout
+            const_val = float(constant_value.flat[0])
+            # Use tf.fill to create the constant tensor at runtime
+            layers[node_name] = ONNXMultiplyByConstantLayer(
+                constant_shape=constant_shape,
+                constant_value=const_val,
+                name=keras_name
+            )(variable_input)
+        else:
+            # If the constant tensor has varying values, we need to embed it
+            logger.warning('Constant tensor has varying values; embedding it into the model.')
+            constant_tensor = tf.constant(constant_value)
+            layers[node_name] = keras.layers.Lambda(
+                lambda x: x * constant_tensor,
+                name=keras_name
+            )(variable_input)
+    
 def convert_elementwise_sub(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert element-wise sub.
