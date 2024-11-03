@@ -190,7 +190,7 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
                 if isinstance(const_val, np.ndarray):
                     const_val = const_val.item()
 
-                def generate_constant_tensor(_):
+                def generate_constant_tensor(inputs, **kwargs):
                     return tf.fill(tensor_shape, const_val, dtype=tensor_dtype)
 
                 layers[node_name] = keras.layers.Lambda(
@@ -206,7 +206,7 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
                 if isinstance(const_value, EagerTensor):
                     const_value = const_value.numpy()
 
-                def return_constant_tensor(_):
+                def return_constant_tensor(inputs, **kwargs):
                     return tf.constant(const_value)
 
                 layers[node_name] = keras.layers.Lambda(
@@ -245,7 +245,7 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
                     constant_value = constant_value.numpy()
 
                 # Avoid capturing the NumPy array directly in the lambda function
-                def mul_with_constant(x, const=constant_value):
+                def mul_with_constant(x, const=constant_value, **kwargs):
                     const_tensor = tf.constant(const, dtype=variable_dtype)
                     return x * const_tensor
 
@@ -253,7 +253,6 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
                     mul_with_constant,
                     name=keras_name
                 )(variable_input)
-
 
     
 def convert_elementwise_sub(node, params, layers, lambda_func, node_name, keras_name):
