@@ -6,6 +6,7 @@ __pycache__/
 *.h5
 *.npy
 *.pth
+*.log
 dist/
 *.DS_Store
 .python-version
