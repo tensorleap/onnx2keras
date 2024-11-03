@@ -61,6 +61,13 @@ def convert_elementwise_div(node, params, layers, lambda_func, node_name, keras_
 def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert element-wise add.
+    :param node: current operation node
+    :param params: operation attributes
+    :param layers: available keras layers
+    :param lambda_func: function for keras Lambda layer
+    :param node_name: internal converter name
+    :param keras_name: resulting layer name
+    :return: None
     """
     logger = logging.getLogger('onnx2keras.add')
 
@@ -133,6 +140,13 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
 def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert element-wise mul.
+    :param node: current operation node
+    :param params: operation attributes
+    :param layers: available keras layers
+    :param lambda_func: function for keras Lambda layer
+    :param node_name: internal converter name
+    :param keras_name: resulting layer name
+    :return: None
     """
     logger = logging.getLogger('onnx2keras.mul')
 
@@ -200,6 +214,13 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
 def convert_elementwise_sub(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert element-wise sub.
+    :param node: current operation node
+    :param params: operation attributes
+    :param layers: available keras layers
+    :param lambda_func: function for keras Lambda layer
+    :param node_name: internal converter name
+    :param keras_name: resulting layer name
+    :return: None
     """
     logger = logging.getLogger('onnx2keras.sub')
 
