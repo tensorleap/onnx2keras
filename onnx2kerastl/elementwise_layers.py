@@ -147,40 +147,56 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
     input_0_is_constant = is_numpy(input_0) or isinstance(input_0, EagerTensor)
     input_1_is_constant = is_numpy(input_1) or isinstance(input_1, EagerTensor)
 
-    if not input_0_is_constant and not input_1_is_constant:
-        # Both inputs are tensors; use Multiply layer
-        mul = keras.layers.Multiply(name=f"{params['cleaned_name']}_mul")
-        layers[node_name] = mul([input_0, input_1])
-    else:
-        # One of the inputs is a constant
-        if input_0_is_constant:
-            # input_0 is constant
+    try:
+        if not input_0_is_constant and not input_1_is_constant:
+            mul = keras.layers.Multiply(name=f"{params['cleaned_name']}_mul")
+            layers[node_name] = mul([input_0, input_1])
+        else:
+            raise ValueError('Operands are different.')
+
+    except (IndexError, ValueError):
+        logger.warning('Failed to use keras.layers.Multiply. Fallback to Lambda layer.')
+
+        if input_0_is_constant and not input_1_is_constant:
+            # input_0 is constant, input_1 is variable
             constant_value = input_0
             variable_input = input_1
-        else:
-            # input_1 is constant
+
+            if np.all(constant_value == constant_value.flat[0]):
+                # Constant tensor has the same value throughout
+                const_val = float(constant_value.flat[0])
+                layers[node_name] = keras.layers.Lambda(
+                    lambda x: x * const_val,
+                    name=keras_name
+                )(variable_input)
+            else:
+                # Cannot avoid embedding the constant tensor
+                layers[node_name] = keras.layers.Lambda(
+                    lambda x: x * constant_value,
+                    name=keras_name
+                )(variable_input)
+
+        elif not input_0_is_constant and input_1_is_constant:
+            # input_0 is variable, input_1 is constant
             constant_value = input_1
             variable_input = input_0
 
-        # Define the shape and value of the constant tensor
-        constant_shape = constant_value.shape
-        if np.all(constant_value == constant_value.flat[0]):
-            # Constant tensor has the same value throughout
-            const_val = float(constant_value.flat[0])
-            # Use tf.fill to create the constant tensor at runtime
-            layers[node_name] = ONNXMultiplyByConstantLayer(
-                constant_shape=constant_shape,
-                constant_value=const_val,
-                name=keras_name
-            )(variable_input)
+            if np.all(constant_value == constant_value.flat[0]):
+                # Constant tensor has the same value throughout
+                const_val = float(constant_value.flat[0])
+                layers[node_name] = keras.layers.Lambda(
+                    lambda x: x * const_val,
+                    name=keras_name
+                )(variable_input)
+            else:
+                # Cannot avoid embedding the constant tensor
+                layers[node_name] = keras.layers.Lambda(
+                    lambda x: x * constant_value,
+                    name=keras_name
+                )(variable_input)
         else:
-            # If the constant tensor has varying values, we need to embed it
-            logger.warning('Constant tensor has varying values; embedding it into the model.')
-            constant_tensor = tf.constant(constant_value)
-            layers[node_name] = keras.layers.Lambda(
-                lambda x: x * constant_tensor,
-                name=keras_name
-            )(variable_input)
+            # Both inputs are constants; compute the result now
+            layers[node_name] = input_0 * input_1
     
 def convert_elementwise_sub(node, params, layers, lambda_func, node_name, keras_name):
     """
