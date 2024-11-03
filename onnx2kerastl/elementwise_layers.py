@@ -2,7 +2,6 @@ import numpy as np
 import keras
 import logging
 
-from onnx2kerastl.customonnxlayer.onnxconstantmul import ONNXMultiplyByConstantLayer
 from .utils import is_numpy, ensure_tf_type
 from .tfops_funcs import tf_tensor_scatter_nd_update, tf_maximum, tf_minimum, tf_cast, tf_expand_dims, tf_repeat,\
     tf_equal, tf_where, tf_round, tf_sign, tf_abs, tf_math_mod, tf_bitwise_left_shift, tf_bitwise_right_shift,\
@@ -159,12 +158,12 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
 
         if input_0_is_constant and not input_1_is_constant:
             # input_0 is constant, input_1 is variable
-            constant_value = np.asarray(input_0)
+            constant_value = np.asarray(tf.cast(input_0, dtype=input_1.dtype))
             variable_input = input_1
 
             if np.all(constant_value == constant_value.flat[0]):
                 # Constant tensor has the same value throughout
-                const_val = float(constant_value.flat[0])
+                const_val = constant_value.flat[0]
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: x * const_val,
                     name=keras_name
@@ -178,12 +177,12 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
 
         elif not input_0_is_constant and input_1_is_constant:
             # input_0 is variable, input_1 is constant
-            constant_value = np.asarray(input_1)
+            constant_value = np.asarray(tf.cast(input_1, dtype=input_0.dtype))
             variable_input = input_0
 
             if np.all(constant_value == constant_value.flat[0]):
                 # Constant tensor has the same value throughout
-                const_val = float(constant_value.flat[0])
+                const_val = constant_value.flat[0]
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: x * const_val,
                     name=keras_name
