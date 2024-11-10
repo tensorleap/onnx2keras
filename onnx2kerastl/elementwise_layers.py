@@ -94,14 +94,29 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
     except (IndexError, ValueError):
         logger.warning('Failed to use keras.layers.Add. Fallback to Lambda layer.')
 
-        if (input_0_is_constant and not input_1_is_constant) or (not input_0_is_constant and input_1_is_constant):
-            # One input is constant and the other is variable
-            if input_0_is_constant:
-                constant_value = np.asarray(tf.cast(input_0, dtype=input_1.dtype))
-                variable_input = input_1
+        if input_0_is_constant and not input_1_is_constant:
+            # input_0 is constant, input_1 is variable
+            constant_value = np.asarray(tf.cast(input_0, dtype=input_1.dtype))
+            variable_input = input_1
+
+            if np.all(constant_value == constant_value.flat[0]):
+                # Constant tensor has the same value throughout
+                const_val = constant_value.flat[0]
+                layers[node_name] = keras.layers.Lambda(
+                    lambda x: x + const_val,
+                    name=keras_name
+                )(variable_input)
             else:
-                constant_value = np.asarray(tf.cast(input_1, dtype=input_0.dtype))
-                variable_input = input_0
+                # Embedding the constant tensor
+                layers[node_name] = keras.layers.Lambda(
+                    lambda x: x + constant_value,
+                    name=keras_name
+                )(variable_input)
+
+        elif not input_0_is_constant and input_1_is_constant:
+            # input_0 is variable, input_1 is constant
+            constant_value = np.asarray(tf.cast(input_1, dtype=input_0.dtype))
+            variable_input = input_0
 
             if np.all(constant_value == constant_value.flat[0]):
                 # Constant tensor has the same value throughout
@@ -154,14 +169,29 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
     except (IndexError, ValueError):
         logger.warning('Failed to use keras.layers.Multiply. Fallback to Lambda layer.')
 
-        if (input_0_is_constant and not input_1_is_constant) or (not input_0_is_constant and input_1_is_constant):
-            # One input is constant and the other is variable
-            if input_0_is_constant:
-                constant_value = np.asarray(tf.cast(input_0, dtype=input_1.dtype))
-                variable_input = input_1
+        if input_0_is_constant and not input_1_is_constant:
+            # input_0 is constant, input_1 is variable
+            constant_value = np.asarray(tf.cast(input_0, dtype=input_1.dtype))
+            variable_input = input_1
+
+            if np.all(constant_value == constant_value.flat[0]):
+                # Constant tensor has the same value throughout
+                const_val = constant_value.flat[0]
+                layers[node_name] = keras.layers.Lambda(
+                    lambda x: x * const_val,
+                    name=keras_name
+                )(variable_input)
             else:
-                constant_value = np.asarray(tf.cast(input_1, dtype=input_0.dtype))
-                variable_input = input_0
+                # Cannot avoid embedding the constant tensor
+                layers[node_name] = keras.layers.Lambda(
+                    lambda x: x * constant_value,
+                    name=keras_name
+                )(variable_input)
+
+        elif not input_0_is_constant and input_1_is_constant:
+            # input_0 is variable, input_1 is constant
+            constant_value = np.asarray(tf.cast(input_1, dtype=input_0.dtype))
+            variable_input = input_0
 
             if np.all(constant_value == constant_value.flat[0]):
                 # Constant tensor has the same value throughout
@@ -213,14 +243,10 @@ def convert_elementwise_sub(node, params, layers, lambda_func, node_name, keras_
     except (IndexError, ValueError):
         logger.warning('Failed to use keras.layers.Subtract. Fallback to Lambda layer.')
 
-        if (input_0_is_constant and not input_1_is_constant) or (not input_0_is_constant and input_1_is_constant):
-            # One input is constant and the other is variable
-            if input_0_is_constant:
-                constant_value = np.asarray(tf.cast(input_0, dtype=input_1.dtype))
-                variable_input = input_1
-            else:
-                constant_value = np.asarray(tf.cast(input_1, dtype=input_0.dtype))
-                variable_input = input_0
+        if input_0_is_constant and not input_1_is_constant:
+            # input_0 is constant, input_1 is variable: constant - variable
+            constant_value = np.asarray(tf.cast(input_0, dtype=input_1.dtype))
+            variable_input = input_1
 
             if np.all(constant_value == constant_value.flat[0]):
                 # Constant tensor has the same value throughout
@@ -233,6 +259,25 @@ def convert_elementwise_sub(node, params, layers, lambda_func, node_name, keras_
                 # Cannot avoid embedding the constant tensor
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: constant_value - x,
+                    name=keras_name
+                )(variable_input)
+
+        elif not input_0_is_constant and input_1_is_constant:
+            # input_0 is variable, input_1 is constant: variable - constant
+            constant_value = np.asarray(tf.cast(input_1, dtype=input_0.dtype))
+            variable_input = input_0
+
+            if np.all(constant_value == constant_value.flat[0]):
+                # Constant tensor has the same value throughout
+                const_val = constant_value.flat[0]
+                layers[node_name] = keras.layers.Lambda(
+                    lambda x: x - const_val,
+                    name=keras_name
+                )(variable_input)
+            else:
+                # Cannot avoid embedding the constant tensor
+                layers[node_name] = keras.layers.Lambda(
+                    lambda x: x - constant_value,
                     name=keras_name
                 )(variable_input)
         else:
