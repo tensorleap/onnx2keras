@@ -80,18 +80,22 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
                 )
             layers[node_name] = padding_layer(input_0)
     elif params['mode'] == 'reflect':
+        if pads.shape[0] == 6:
+            result = tf_pad(input_0, [[pads[0], pads[3]], [pads[1], pads[4]], [pads[2], pads[5]]], mode='REFLECT',
+                                       tf_name=f"{params['cleaned_name']}_reflect_pad")
+            layers[node_name] = result
+        else:
+            def target_layer(x, pads=pads):
+                if pads.shape[0] == 8:
+                    layer = tf.pad(x, [[0, 0], [0, 0], [pads[2], pads[6]], [pads[3], pads[7]]], 'REFLECT')
+                else:
+                    logger.warning("Caution - no test yet")
+                    layer = tf.pad(x, [[0, 0], [0, 0], [pads[2], pads[7]], [pads[3], pads[8]], [pads[4], pads[9]]], 'REFLECT')
+                return layer
 
-        def target_layer(x, pads=pads):
-            if pads.shape[0] == 8:
-                layer = tf.pad(x, [[0, 0], [0, 0], [pads[2], pads[6]], [pads[3], pads[7]]], 'REFLECT')
-            else:
-                logger.warning("Caution - no test yet")
-                layer = tf.pad(x, [[0, 0], [0, 0], [pads[2], pads[7]], [pads[3], pads[8]], [pads[4], pads[9]]], 'REFLECT')
-            return layer
-
-        lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_pad_reflect")
-        layers[node_name] = lambda_layer(input_0)
-        lambda_func[keras_name] = target_layer
+            lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_pad_reflect")
+            layers[node_name] = lambda_layer(input_0)
+            lambda_func[keras_name] = target_layer
     elif params['mode'] == 'edge':
 
         def target_layer(x, pads=pads):
