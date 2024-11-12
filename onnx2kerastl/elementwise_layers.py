@@ -131,9 +131,24 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
                     lambda x: x + constant_value,
                     name=keras_name
                 )(variable_input)
-        else:
-            # Both inputs are constants; compute the result now
-            layers[node_name] = input_0 + input_1
+    else:
+        # Both inputs are constants; perform addition at runtime without embedding the result
+        constant_value_0 = tf.constant(input_0)
+        constant_value_1 = tf.constant(input_1)
+
+        # Create a dummy input to satisfy Keras's requirements
+        dummy_input = keras.Input(shape=(1,), name='dummy_input')
+
+        # Define a function outside the Lambda to ensure serialization
+        def add_constants(x):
+            return constant_value_0 + constant_value_1 + x * 0  # x * 0 ensures connection to input
+
+        layers[node_name] = keras.layers.Lambda(
+            add_constants,
+            name=keras_name
+        )(dummy_input)
+
+        layers['dummy_input'] = dummy_input
 
 
 
