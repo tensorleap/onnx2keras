@@ -13,6 +13,8 @@ import keras.backend
 import tensorflow as tf
 from keras.models import Model
 
+from onnx2kerastl.logger_helpers import log_oom_layers
+
 from .customonnxlayer import onnx_custom_objects_map
 from .exceptions import UnsupportedLayer, OnnxUnsupported
 from .layers import AVAILABLE_CONVERTERS
@@ -94,7 +96,7 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
     logger = logging.getLogger('onnx2keras')
 
     logger.info('Converter is called.')
-
+    log_oom_layers(onnx_model, logger)
     onnx_weights = onnx_model.graph.initializer
     onnx_inputs = onnx_model.graph.input
     onnx_outputs = [i.name for i in onnx_model.graph.output]
