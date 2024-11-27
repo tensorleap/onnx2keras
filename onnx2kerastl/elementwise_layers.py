@@ -381,8 +381,11 @@ def convert_where(node, params, layers, lambda_func, node_name, keras_name):
                                      layers[node.input[1]],
                                      tf_name=f"{params['cleaned_name']}_where_1")
     else:
-        layers[node_name] = tf_where(casted, layers[node.input[1]], layers[node.input[2]],
-                                     tf_name=f"{params['cleaned_name']}_where_2")
+        try:
+            layers[node_name] = tf_where(casted, layers[node.input[1]], layers[node.input[2]],
+                                         tf_name=f"{params['cleaned_name']}_where_2")
+        except Exception as e:
+            print(1)
 
 
 def convert_scatter_nd(node, params, layers, lambda_func, node_name, keras_name):
