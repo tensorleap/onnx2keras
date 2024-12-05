@@ -670,13 +670,17 @@ def convert_expand(node, params, layers, lambda_func, node_name, keras_name):
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     input_1 = layers[node.input[1]]
+    was_converted_from_bool = False
     if input_0.dtype.is_bool:
         input_0 = tf_cast(input_0, dtype='int32', tf_name=f"{params['cleaned_name']}_bool_to_int")
+        was_converted_from_bool = True
     multiply_res = input_0 * tf_ones(shape=input_1, dtype=input_0.dtype,
                                      tf_name=f"{params['cleaned_name']}_expand_use_ones")
     # input_0.dtype == np.int32 since we can't serialize constants as int64, need to cast to true type
     if layers[node.input[0]].dtype == np.int64:
         multiply_res = tf_cast(multiply_res, tf.int64, tf_name=f"{params['cleaned_name']}_to_int64")
+    if was_converted_from_bool:
+        multiply_res = tf_cast(multiply_res, tf.bool, tf_name=f"{params['cleaned_name']}_int_to_bool")
     layers[node_name] = multiply_res
 
 

@@ -210,7 +210,7 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
             else:
                 keras_names = keras_names[0]
                 node_names.append(keras_names)
-            pattern = r'[#:]'  # Example pattern to match #, /, and :
+            pattern = r'[#:@]'  # Example pattern to match #, /, and :
             cleaned_node_name = re.sub(pattern, '_', node.name.rstrip("/").lstrip("/"))
             if len(cleaned_node_name) == 0:
                 cleaned_node_name = re.sub(pattern, '_', node_name.rstrip("/").lstrip("/"))

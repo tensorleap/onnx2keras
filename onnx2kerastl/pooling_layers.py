@@ -251,11 +251,16 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
             out = tf.transpose(topk_concat, ord_permute)
         return out
     in_shape = tf_shape(in_tensor, tf_name=f"{params['cleaned_name']}_topk_in_shape")
-    k_needed_shape = tf_concat(
-        [(in_shape)[:-1],[1]], axis=-1,tf_name=f"{params['cleaned_name']}_topk_k_needed_shape")._inferred_value
+    k_needed_shape_possible_keras_tensor = tf_concat(
+            [(in_shape)[:-1],[1]], axis=-1,tf_name=f"{params['cleaned_name']}_topk_k_needed_shape")
+
+    if hasattr(k_needed_shape_possible_keras_tensor, "_inferred_value"): #is keras tensor
+        k_needed_shape = k_needed_shape_possible_keras_tensor._inferred_value
+    else:
+        k_needed_shape = k_needed_shape_possible_keras_tensor
     k_unsqueezed = tf_ones(k_needed_shape, tf_name=f"{params['cleaned_name']}_topk_k_shape")*\
                    tf_cast(k, tf.float32, tf_name=f"{params['cleaned_name']}_topk_k_cast")
-    k_reshaped = tf_cast(k_unsqueezed, tf.float32, tf_name=f"{params['cleaned_name']}_topk_k_reshaped")
+    k_reshaped = tf_cast(k_unsqueezed, in_tensor.dtype, tf_name=f"{params['cleaned_name']}_topk_k_reshaped")
     composed_input = tf_concat([in_tensor, k_reshaped], axis=-1,
                                tf_name=f"{params['cleaned_name']}_topk_k_concat")
     lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_topk")
