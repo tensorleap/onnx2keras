@@ -104,13 +104,13 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
                 const_val = constant_value.flat[0]
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: x + const_val,
-                    name=keras_name
+                    name=params['cleaned_name']
                 )(variable_input)
             else:
                 # Embedding the constant tensor
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: x + constant_value,
-                    name=keras_name
+                    name=params['cleaned_name']
                 )(variable_input)
 
         elif not input_0_is_constant and input_1_is_constant:
@@ -123,13 +123,13 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
                 const_val = constant_value.flat[0]
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: x + const_val,
-                    name=keras_name
+                    name=params['cleaned_name']
                 )(variable_input)
             else:
                 # Embedding the constant tensor
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: x + constant_value,
-                    name=keras_name
+                    name=params['cleaned_name']
                 )(variable_input)
         else:
             # Both inputs are constants; compute the result now
@@ -179,13 +179,13 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
                 const_val = constant_value.flat[0]
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: x * const_val,
-                    name=keras_name
+                    name=params['cleaned_name']
                 )(variable_input)
             else:
                 # Cannot avoid embedding the constant tensor
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: x * constant_value,
-                    name=keras_name
+                    name=params['cleaned_name']
                 )(variable_input)
 
         elif not input_0_is_constant and input_1_is_constant:
@@ -198,13 +198,13 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
                 const_val = constant_value.flat[0]
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: x * const_val,
-                    name=keras_name
+                    name=params['cleaned_name']
                 )(variable_input)
             else:
                 # Cannot avoid embedding the constant tensor
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: x * constant_value,
-                    name=keras_name
+                    name=params['cleaned_name']
                 )(variable_input)
         else:
             # Both inputs are constants; compute the result now
@@ -253,13 +253,13 @@ def convert_elementwise_sub(node, params, layers, lambda_func, node_name, keras_
                 const_val = constant_value.flat[0]
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: const_val - x,
-                    name=keras_name
+                    name=params['cleaned_name']
                 )(variable_input)
             else:
                 # Cannot avoid embedding the constant tensor
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: constant_value - x,
-                    name=keras_name
+                    name=params['cleaned_name']
                 )(variable_input)
 
         elif not input_0_is_constant and input_1_is_constant:
@@ -272,13 +272,13 @@ def convert_elementwise_sub(node, params, layers, lambda_func, node_name, keras_
                 const_val = constant_value.flat[0]
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: x - const_val,
-                    name=keras_name
+                    name=params['cleaned_name']
                 )(variable_input)
             else:
                 # Cannot avoid embedding the constant tensor
                 layers[node_name] = keras.layers.Lambda(
                     lambda x: x - constant_value,
-                    name=keras_name
+                    name=params['cleaned_name']
                 )(variable_input)
         else:
             # Both inputs are constants; compute the result now
@@ -382,7 +382,7 @@ def convert_where(node, params, layers, lambda_func, node_name, keras_name):
                                      tf_name=f"{params['cleaned_name']}_where_1")
     else:
         layers[node_name] = tf_where(casted, layers[node.input[1]], layers[node.input[2]],
-                                     tf_name=f"{params['cleaned_name']}_where_2")
+                                         tf_name=f"{params['cleaned_name']}_where_2")
 
 
 def convert_scatter_nd(node, params, layers, lambda_func, node_name, keras_name):
