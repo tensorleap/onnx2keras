@@ -95,6 +95,39 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
             input_0 = layers[node_name + "_pre_" + rand_string]
     layers[node_name] = pooling(input_0)
 
+def convert_global_max_pool(node, params, layers, lambda_func, node_name, keras_name):
+    """
+    Convert GlobalMaxPool layer
+    :param node: current operation node
+    :param params: operation attributes
+    :param layers: available keras layers
+    :param lambda_func: function for keras Lambda layer
+    :param node_name: internal converter name
+    :param keras_name: resulting layer name
+    :return: None
+    """
+    input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
+    tensor_dim = len(input_0.shape)
+    if tensor_dim == 3:
+        global_pool = keras.layers.GlobalMaxPooling1D(data_format='channels_first',
+                                                      name=f"{params['cleaned_name']}_global_max_pool_3")
+    elif tensor_dim == 4:
+        global_pool = keras.layers.GlobalMaxPooling2D(data_format='channels_first',
+                                                      name=f"{params['cleaned_name']}_global_max_pool_4")
+    elif tensor_dim == 5:
+        global_pool = keras.layers.GlobalMaxPooling3D(data_format='channels_first',
+                                                      name=f"{params['cleaned_name']}_global_max_pool_5")
+    else:
+        raise NotImplementedError("Global max pooling of dims < 3 or dims > 5 is not supported")
+    input_0 = global_pool(input_0)
+    new_shape = input_0.shape.as_list()
+    new_shape = new_shape[1:]
+    new_shape.extend([1] * (tensor_dim - 2))
+    reshape_layer = keras.layers.Reshape(new_shape, name=f"{params['cleaned_name']}_global_max_pool_reshape")
+    input_0 = reshape_layer(input_0)
+
+    layers[node_name] = input_0
+
 
 def convert_avgpool(node, params, layers, lambda_func, node_name, keras_name):
     """
