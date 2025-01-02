@@ -1,6 +1,5 @@
 from typing import Any, Optional, List
-
-from keras.layers import Layer, TFOpLambda
+from keras.layers import Layer
 import tensorflow as tf
 import numpy as np
 
