@@ -1029,13 +1029,13 @@ files = [
 
 [[package]]
 name = "keras-data-format-converter"
-version = "0.1.18.dev1"
+version = "0.1.20"
 description = "Generates equal keras models with the desired data format"
 optional = false
 python-versions = "<3.11,>=3.8"
 files = [
-    {file = "keras_data_format_converter-0.1.18.dev1-py3-none-any.whl", hash = "sha256:6f9bc7d7252b5f0e87dda4bd1d6dacf07aea23c0a4d95b61af69f427aa38a0d0"},
-    {file = "keras_data_format_converter-0.1.18.dev1.tar.gz", hash = "sha256:fa39487e0cb4d64faf2c929cc0d27585d541532dda0e3bcd69d163b4a902fc72"},
+    {file = "keras_data_format_converter-0.1.20-py3-none-any.whl", hash = "sha256:6edde6c700b056cc567ceae6d5cb39ce0130f5f9df4762371bacc28c7c82eafb"},
+    {file = "keras_data_format_converter-0.1.20.tar.gz", hash = "sha256:bcf406c9f441cc6169a9dbeb63535c724a04a700e5268c7ff170da74b1ab45c9"},
 ]
 
 [package.dependencies]
@@ -1043,6 +1043,7 @@ libclang = "14.0.1"
 protobuf = ">=3.19.6,<=3.20.3"
 tensorflow = {version = ">=2.11.0,<3.0.0", markers = "platform_machine == \"x86_64\""}
 tensorflow-addons = {version = ">=0.19.0,<0.20.0", markers = "platform_machine == \"x86_64\""}
+tensorflow-io-gcs-filesystem = "0.34.0"
 tensorflow-macos = {version = ">=2.11.0,<3.0.0", markers = "platform_machine == \"arm64\""}
 
 [[package]]
@@ -3824,4 +3825,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8, <3.11"
-content-hash = "ce773f0c441fb2432dab367f8ccf08d1f608f2b5a6a94051c92fcd2b92c6489e"
+content-hash = "0d4f239ffbbb43695accaec7ff9524d36a66e04eb0018773e4357e2fa150a968"
