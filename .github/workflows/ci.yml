@@ -52,7 +52,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ needs.python-setup.outputs.python-version }}-1
+          key: venv-${{ runner.os }}-${{ needs.python-setup.outputs.python-version }}-2
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4.0.1
         with:
