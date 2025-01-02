@@ -2,7 +2,7 @@ from typing import List, Union, Callable
 
 import numpy as np
 import keras
-from keras.engine.keras_tensor import KerasTensor
+from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 from keras_data_format_converter import convert_channels_first_to_last
 import tensorflow as tf
 from.tfops_funcs import tf_reshape

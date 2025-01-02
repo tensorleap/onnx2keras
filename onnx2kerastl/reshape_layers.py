@@ -4,7 +4,7 @@ import keras
 import numpy as np
 import tensorflow as tf
 from keras import backend as K
-from keras.engine.keras_tensor import KerasTensor
+from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 from keras.layers import SlicingOpLambda, Lambda
 from typing import Union
 from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
