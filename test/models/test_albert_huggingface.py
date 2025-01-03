@@ -1,13 +1,13 @@
 import onnx
 import pytest
 import tensorflow as tf
-from transformers import AlbertTokenizer, TFAlbertModel
-from transformers.onnx import FeaturesManager
 from pathlib import Path
-from transformers.onnx import export, OnnxConfig
 import numpy as np
 from onnx2kerastl import onnx_to_keras
 from keras_data_format_converter import convert_channels_first_to_last
+from transformers import AlbertTokenizer, TFAlbertModel
+from transformers.onnx import FeaturesManager
+from transformers.onnx import export, OnnxConfig
 
 
 @pytest.mark.skip
