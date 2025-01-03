@@ -1063,22 +1063,25 @@ files = [
 
 [[package]]
 name = "keras-data-format-converter"
-version = "0.1.20"
+version = "0.1.20.dev2"
 description = "Generates equal keras models with the desired data format"
 optional = false
-python-versions = "<3.11,>=3.8"
+python-versions = ">=3.9,<3.11"
 files = [
-    {file = "keras_data_format_converter-0.1.20-py3-none-any.whl", hash = "sha256:6edde6c700b056cc567ceae6d5cb39ce0130f5f9df4762371bacc28c7c82eafb"},
-    {file = "keras_data_format_converter-0.1.20.tar.gz", hash = "sha256:bcf406c9f441cc6169a9dbeb63535c724a04a700e5268c7ff170da74b1ab45c9"},
+    {file = "keras_data_format_converter-0.1.20.dev2-py3-none-any.whl", hash = "sha256:7701516010cc9f3812228ff3dd87aa6c40ae7217db35d025cc9a598194847c7a"},
 ]
 
 [package.dependencies]
 libclang = "14.0.1"
 protobuf = ">=3.19.6,<=3.20.3"
-tensorflow = {version = ">=2.11.0,<3.0.0", markers = "platform_machine == \"x86_64\""}
+tensorflow = {version = ">=2.14,<=2.15", markers = "platform_machine == \"x86_64\""}
 tensorflow-addons = {version = ">=0.19.0,<0.20.0", markers = "platform_machine == \"x86_64\""}
 tensorflow-io-gcs-filesystem = "0.34.0"
-tensorflow-macos = {version = ">=2.11.0,<3.0.0", markers = "platform_machine == \"arm64\""}
+tensorflow-macos = {version = ">=2.14,<=2.15", markers = "platform_machine == \"arm64\""}
+
+[package.source]
+type = "file"
+url = "../keras-data-format-converter/dist/keras_data_format_converter-0.1.20.dev2-py3-none-any.whl"
 
 [[package]]
 name = "lazy-loader"
@@ -3841,4 +3844,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9, <3.11"
-content-hash = "036ff24bd3dc9513ab021fe7901ada9df8e38f79bb8ef431911525221a27bda8"
+content-hash = "4bb20835b3ba28fa9ce35aaa471545d5ca5383f336552460d51548d5eb94fcfd"
