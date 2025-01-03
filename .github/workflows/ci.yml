@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-2
+          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-3
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction --no-root
@@ -52,7 +52,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ needs.python-setup.outputs.python-version }}-2
+          key: venv-${{ runner.os }}-${{ needs.python-setup.outputs.python-version }}-3
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4.0.1
         with:
