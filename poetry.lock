@@ -1063,12 +1063,13 @@ files = [
 
 [[package]]
 name = "keras-data-format-converter"
-version = "0.1.20.dev2"
+version = "0.1.21"
 description = "Generates equal keras models with the desired data format"
 optional = false
-python-versions = ">=3.9,<3.11"
+python-versions = "<3.11,>=3.9"
 files = [
-    {file = "keras_data_format_converter-0.1.20.dev2-py3-none-any.whl", hash = "sha256:7701516010cc9f3812228ff3dd87aa6c40ae7217db35d025cc9a598194847c7a"},
+    {file = "keras_data_format_converter-0.1.21-py3-none-any.whl", hash = "sha256:1e2c96127715474f73986b7b81d3fef842d689f9dcefa6e33bcb04c63101c904"},
+    {file = "keras_data_format_converter-0.1.21.tar.gz", hash = "sha256:83e53bb8fcdef1f83fa965ca546a48757c2c7f07c8374353ec35607a561b43ea"},
 ]
 
 [package.dependencies]
@@ -1078,10 +1079,6 @@ tensorflow = {version = ">=2.14,<=2.15", markers = "platform_machine == \"x86_64
 tensorflow-addons = {version = ">=0.19.0,<0.20.0", markers = "platform_machine == \"x86_64\""}
 tensorflow-io-gcs-filesystem = "0.34.0"
 tensorflow-macos = {version = ">=2.14,<=2.15", markers = "platform_machine == \"arm64\""}
-
-[package.source]
-type = "file"
-url = "../keras-data-format-converter/dist/keras_data_format_converter-0.1.20.dev2-py3-none-any.whl"
 
 [[package]]
 name = "lazy-loader"
@@ -3844,4 +3841,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9, <3.11"
-content-hash = "4bb20835b3ba28fa9ce35aaa471545d5ca5383f336552460d51548d5eb94fcfd"
+content-hash = "2132653e3f2ad1d9935ed4ba8047e7dceb358b5b9a0b4dc26d9fbc358c0bb701"
