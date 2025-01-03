@@ -5,7 +5,7 @@ from keras_data_format_converter import convert_channels_first_to_last
 from onnx import helper, TensorProto, save
 import onnxruntime as rt
 from onnx2kerastl import onnx_to_keras
-
+import tensorflow as tf
 
 class BitShift():
     def __init__(self, direction):
@@ -46,7 +46,7 @@ def test_bitshift():
     input_name_2 = sess.get_inputs()[1].name
     label_name = sess.get_outputs()[0].name
     pred = sess.run([label_name], {input_name_1: x.astype(np.uint64), input_name_2: y.astype(np.uint64)})[0]
-    keras_model = onnx_to_keras(onnx_model, ['x', 'y'], name_policy='attach_weights_name').converted_model
+    keras_model = onnx_to_keras(onnx_model, ['x', 'y'], name_policy='attach_weights_name', input_types=[tf.int64, tf.int64]).converted_model
     final_k = convert_channels_first_to_last(keras_model, ['x', 'y'])
     assert (final_k([x, y])-pred).numpy().max() < 10**(-5)
 
