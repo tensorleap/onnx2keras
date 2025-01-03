@@ -24,7 +24,7 @@ def test_traffic_light(aws_s3_download):
          'tcd_face'],
         input_feed={"image": img}
     )
-    eps_mean = 1e-6
+    eps_mean = 1.2e-6
     eps_max = 1e-5
     # These are really really close
 

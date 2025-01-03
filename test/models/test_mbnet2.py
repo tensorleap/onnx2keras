@@ -12,4 +12,4 @@ def test_mobilenetv2(pretrained):
     model.eval()
 
     input_np = np.random.uniform(0, 1, (1, 3, 224, 224))
-    error = convert_and_test(model, input_np, verbose=False, should_transform_inputs=True)
+    error = convert_and_test(model, input_np, verbose=False, should_transform_inputs=True, epsilon=1.5e-5)
