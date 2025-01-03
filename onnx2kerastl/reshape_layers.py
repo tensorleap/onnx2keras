@@ -4,8 +4,8 @@ import keras
 import numpy as np
 import tensorflow as tf
 from keras import backend as K
-from tensorflow.python.keras.engine.keras_tensor import KerasTensor
-from keras.layers import SlicingOpLambda, Lambda
+from keras.src.engine.keras_tensor import KerasTensor
+from keras.src.layers import SlicingOpLambda, Lambda
 from typing import Union
 from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
 from .tfops_funcs import tf_reshape, tf_shape, tf_cast, tf_stack, tf_image_resize, tf_strided_slice,\
@@ -629,12 +629,12 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     
     if (
         resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR
-        and isinstance(resize_size, keras.engine.keras_tensor.KerasTensor)
+        and isinstance(resize_size, keras.src.engine.keras_tensor.KerasTensor)
         and nearest_mode.decode() == "floor"
     ):
         logger.warning("floor nearest mode will result in faulty conversion")
     if resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR and nearest_mode.decode() == 'floor'\
-        and not isinstance(resize_size, keras.engine.keras_tensor.KerasTensor):
+        and not isinstance(resize_size, keras.src.engine.keras_tensor.KerasTensor):
         if not isinstance(resize_size, np.ndarray) :
             resize_size = np.array(resize_size)
 

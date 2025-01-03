@@ -2,7 +2,7 @@ import io
 
 import onnx
 import torch
-from keras.layers import Lambda
+from keras.src.layers import Lambda
 from keras.models import Model
 
 from onnx2kerastl import onnx_to_keras
