@@ -34,6 +34,20 @@ jobs:
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction --no-root --with=dev
+      - name: Debug Poetry Environment
+        run: |
+          poetry env info
+          ls -l .venv/bin/pytest
+      - name: Verify Poetry Environment
+        run: poetry env list
+      - name: Check pytest permissions
+        run: |
+          ls -l .venv/bin/pytest
+          file .venv/bin/pytest
+      - name: Check Python Versions
+        run: |
+          python --version
+          .venv/bin/python --version
     outputs:
         python-version: ${{ steps.setup-python.outputs.python-version }}
   test:
@@ -53,6 +67,12 @@ jobs:
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ needs.python-setup.outputs.python-version }}-5
+      - name: Debug pytest in test job
+        run: |
+          ls -l .venv/bin/pytest || echo "pytest not found!"
+          file .venv/bin/pytest || echo "pytest file info not available!"
+      - name: Verify Poetry Environment in Test Job
+        run: poetry env list
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4.0.1
         with:
