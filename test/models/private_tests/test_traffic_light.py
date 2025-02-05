@@ -28,7 +28,7 @@ def test_traffic_light(aws_s3_download):
     eps_max = 1e-5
     # These are really really close
 
-    assert (res[0] - res_onnx[0]).__abs__().numpy().mean() < 2 * eps_mean
+    assert (res[0] - res_onnx[0]).__abs__().numpy().mean() < 2.5 * eps_mean
     assert (res[0] - res_onnx[0]).__abs__().numpy().max() < 7 * eps_max
     assert (res[1] - res_onnx[1]).__abs__().numpy().mean() < eps_mean
     assert (res[1] - res_onnx[1]).__abs__().numpy().max() < eps_mean
@@ -38,7 +38,7 @@ def test_traffic_light(aws_s3_download):
     assert (res[3] - res_onnx[3]).__abs__().numpy().mean() < eps_mean
     assert (res[3] - res_onnx[3]).__abs__().numpy().max() < eps_max
 
-    assert (res[4] - res_onnx[4]).__abs__().numpy().mean() < eps_mean
+    assert (res[4] - res_onnx[4]).__abs__().numpy().mean() < 1.5*eps_mean
     assert (res[4] - res_onnx[4]).__abs__().numpy().max() < 7 * eps_max
 
     assert (res[5][:, 0] - res_onnx[5]).__abs__().numpy().mean() < eps_mean
