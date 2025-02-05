@@ -215,22 +215,19 @@ def convert_global_avg_pool(node, params, layers, lambda_func, node_name, keras_
     tensor_dim = len(input_0.shape)
     if tensor_dim == 3:
         global_pool = keras.layers.GlobalAveragePooling1D(data_format='channels_first',
-                                                          name=f"{params['cleaned_name']}_global_avg_pool_3")
+                                                          name=f"{params['cleaned_name']}_global_avg_pool_3",
+                                                          keepdims=True)
     elif tensor_dim == 4:
         global_pool = keras.layers.GlobalAveragePooling2D(data_format='channels_first',
-                                                          name=f"{params['cleaned_name']}_global_avg_pool_4")
+                                                          name=f"{params['cleaned_name']}_global_avg_pool_4",
+                                                          keepdims=True)
     elif tensor_dim == 5:
         global_pool = keras.layers.GlobalAveragePooling3D(data_format='channels_first',
-                                                          name=f"{params['cleaned_name']}_global_avg_pool_5")
+                                                          name=f"{params['cleaned_name']}_global_avg_pool_5",
+                                                          keepdims=True)
     else:
         raise NotImplementedError("Global average pooling of dims < 3 or dims > 5 is not supported")
     input_0 = global_pool(input_0)
-    new_shape = input_0.shape.as_list()
-    new_shape = new_shape[1:]
-    new_shape.extend([1] * (tensor_dim - 2))
-    reshape_layer = keras.layers.Reshape(new_shape, name=f"{params['cleaned_name']}_global_avg_pool_reshape")
-    input_0 = reshape_layer(input_0)
-
     layers[node_name] = input_0
 
 
