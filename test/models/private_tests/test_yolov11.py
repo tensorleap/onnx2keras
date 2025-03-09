@@ -1,11 +1,10 @@
-import pathlib
 import tensorflow as tf
 import numpy as np
 import onnx
 import pytest
 from keras_data_format_converter import convert_channels_first_to_last
 from onnx2kerastl import onnx_to_keras
-from test.utils import NP_SEED, test_conversion
+from test.utils import NP_SEED
 import onnxruntime as ort
 from test.models.private_tests.aws_utils import aws_s3_download
 
