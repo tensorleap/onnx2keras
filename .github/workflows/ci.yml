@@ -37,7 +37,7 @@ jobs:
           installer-parallel: true
       - name: Load cached venv
         id: cached-poetry-dependencies
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: .venv
           key:  ${{ steps.compute-cache-key.outputs.cache_key }}
@@ -76,7 +76,7 @@ jobs:
           installer-parallel: true
       - name: Load cached venv from setup job
         id: cached-poetry-dependencies
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: .venv
           key: ${{ needs.python-setup.outputs.cache_key }}
