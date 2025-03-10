@@ -8,6 +8,7 @@ import onnxruntime as ort
 from test.models.private_tests.aws_utils import aws_s3_download
 
 
+
 @pytest.mark.parametrize('aws_s3_download', [["yolov11/", "yolov11/", False]], indirect=True)
 def test_yolov11(aws_s3_download):
     np.random.seed(seed=NP_SEED)
