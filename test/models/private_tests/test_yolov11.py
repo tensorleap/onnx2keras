@@ -1,4 +1,3 @@
-import tensorflow as tf
 import numpy as np
 import onnx
 import pytest
@@ -20,18 +19,13 @@ def test_yolov11(aws_s3_download):
     k_model = onnx_to_keras(onnx_model, input_names, name_policy='attach_weights_name', allow_partial_compilation=False)
     flipped_model = convert_channels_first_to_last(k_model.converted_model, should_transform_inputs_and_outputs=False)
     input_np = np.random.uniform(0, 1, (1, 3, 640, 640))
-    keras_res = flipped_model(input_np)
+    keras_res = flipped_model(input_np).numpy()
     ort_session = ort.InferenceSession(yolov11_model_path)
-    res_onnx = ort_session.run(
+    onnx_res = ort_session.run(
         ['output0'],
-        input_feed={input_all[0]: input_np.astype(np.float32)})
-    d_res=tf.reduce_mean(keras_res - res_onnx).numpy()
-    assert  d_res < 1e-5
-    assert  (keras_res - res_onnx).numpy().max() < 1e-3
+        input_feed={input_all[0]: input_np.astype(np.float32)})[0]
+    d_res=np.abs(onnx_res-keras_res)
+    assert  d_res.mean() < 1e-5
+    assert  d_res.max() < 1e-3
 
-
-    # print(f"results delta between model type is: {d_res}")
-    # save_model_path=yolov7_model_path.replace('.onnx','.h5')
-    # flipped_model.save(save_model_path)
-    # print(f"Model saved to {save_model_path}")
 
