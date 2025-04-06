@@ -5,15 +5,13 @@ from keras_data_format_converter import convert_channels_first_to_last
 from onnx2kerastl import onnx_to_keras
 from test.utils import NP_SEED
 import onnxruntime as ort
-# from test.models.private_tests.aws_utils import aws_s3_download
+from test.models.private_tests.aws_utils import aws_s3_download
 
 
-
-# @pytest.mark.parametrize('aws_s3_download', [["tsm/", "tsm/", False]], indirect=True)
-def test_tsm():
+@pytest.mark.parametrize('aws_s3_download', [["tsm/", "tsm/", False]], indirect=True)
+def test_tsm(aws_s3_download):
     np.random.seed(seed=NP_SEED)
-    # tsm_model_path = f'{aws_s3_download}/tsm.onnx'
-    tsm_model_path = f'/Users/amitcohen/Library/Application Support/JetBrains/PyCharmCE2024.3/scratches/tsm.onnx'
+    tsm_model_path = f'{aws_s3_download}/tsm.onnx'
     onnx_model = onnx.load(tsm_model_path)
     input_all = [_input.name for _input in onnx_model.graph.input]
     input_initializer = [node.name for node in onnx_model.graph.initializer]
@@ -27,6 +25,5 @@ def test_tsm():
         ['output'],
         input_feed={input_all[0]: input_np.astype(np.float32)})[0]
     d_res=np.abs(onnx_res-keras_res)
-    assert  d_res.mean() < 1e-5
-    assert  d_res.max() < 1e-3
-test_tsm()
+    assert  d_res.mean() < 5e-6
+    assert  d_res.max() < 1e-5
