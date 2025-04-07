@@ -18,7 +18,7 @@ def test_tsm(aws_s3_download):
     input_names = list(set(input_all) - set(input_initializer))
     k_model = onnx_to_keras(onnx_model, input_names, name_policy='attach_weights_name', allow_partial_compilation=False)
     flipped_model = convert_channels_first_to_last(k_model.converted_model, should_transform_inputs_and_outputs=False)
-    input_np = np.random.uniform(0, 1, (1, 8, 3, 256, 256))
+    input_np = np.random.uniform(0, 1, (1, 3, 8, 256, 256))
     keras_res = flipped_model(input_np).numpy()
     ort_session = ort.InferenceSession(tsm_model_path)
     onnx_res = ort_session.run(
