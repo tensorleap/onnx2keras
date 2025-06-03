@@ -23,9 +23,9 @@ def test_iconqa(aws_s3_download):
     keras_model = onnx_to_keras(onnx_model, ['img', 'question', 'choices'], name_policy='attach_weights_name',
                                 allow_partial_compilation=False).converted_model
     final_k = convert_channels_first_to_last(keras_model, should_transform_inputs_and_outputs=True)
-    final_k.save('temp.h5')
+    final_k.save('temp_old_1b.h5')
     random_d = np.random.random(size=img.shape)*50
-    loaded_model = tf.keras.models.load_model('temp.h5')
+    loaded_model = tf.keras.models.load_model('temp_old_1b.h5')
     res_perm = loaded_model([q, np.transpose(img, [0, 2, 3, 1]), c.swapaxes(1,2)])
     res_perm_2 = loaded_model([q, np.transpose(img+random_d, [0, 2, 3, 1]), c.swapaxes(1,2)])
 

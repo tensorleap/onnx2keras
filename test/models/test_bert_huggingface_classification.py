@@ -41,8 +41,8 @@ def test_bert_huggingface_classifcation():
     with torch.no_grad():
         out = model(**real_inputs)
     flipped_model = convert_channels_first_to_last(keras_model, [])
-    flipped_model.save('temp.h5')
-    model = tf.keras.models.load_model('temp.h5', custom_objects=onnx_custom_objects_map)
+    flipped_model.save('temp_old_1b.h5')
+    model = tf.keras.models.load_model('temp_old_1b.h5', custom_objects=onnx_custom_objects_map)
     flipped_otpt = model(input_np)
     assert ((flipped_otpt-out.logits.detach().numpy()).__abs__().numpy().max() < 5*10**-6)
 

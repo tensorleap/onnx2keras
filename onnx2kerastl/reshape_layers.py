@@ -27,6 +27,9 @@ def convert_transpose(node, params, layers, lambda_func, node_name, keras_name):
     """
     logger = logging.getLogger('onnx2keras.transpose')
     input_name = node.input[0]
+    if 'embed_tokens' in input_name:
+        layers[node_name] = layers[input_name].T
+        return
 
     if params['perm'][0] != 0:
         logger.warning('Can\'t permute batch dimension. Result may be wrong.')
@@ -428,17 +431,24 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     logger = logging.getLogger('onnx2keras.slice')
+    max_ends_val = 100000
 
     if params['change_ordering']:
         raise NotImplementedError("change_ordering for Slice is not implemented")
     if 'axes' in params:
         axes = list(params["axes"])
         ends = list(params["ends"])
+        if ends[0] > max_ends_val or ends[0] < max_ends_val:
+            ends = [np.int32(max_ends_val)]
         starts = list(params["starts"])
         steps = list(params.get("steps", [None] * len(axes)))
     else:
         starts = list(layers[node.input[1]])
         ends = list(layers[node.input[2]])
+        # when the 'ends' value is the int64 maximum, probably happen because [idx:] sets large end num in conversion
+        if ends[0].dtype == np.int64 and not isinstance(ends[0], KerasTensor):
+            if ends[0] > max_ends_val or ends[0] < max_ends_val:
+                ends = [np.int32(max_ends_val)]
         try:
             axes = list(layers[node.input[3]])
         except:
@@ -506,6 +516,12 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
                             input_list[axis_index]) and input_list[axis_index].dtype != tf.int32:
                         slice_index = tf_cast(slice_index, tf.int32, tf_name=f"{params['cleaned_name']}_cast")
                     res_list[axis] = slice_index
+        for vec in end_vec:
+            try:
+                if 'getitem_54' in vec.name:
+                    x=1
+            except:
+                pass
         layers[node_name] = tf_strided_slice(input_0,
                                              tf.concat([start_vec], axis=0),
                                              tf.concat([end_vec], axis=0),

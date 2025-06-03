@@ -47,8 +47,8 @@ def test_maskrcnn_eff(aws_s3_download):
     keras_model = onnx_to_keras(onnx_model, input_names=input_features, name_policy='attach_weights_name',
                                 allow_partial_compilation=False)
     final_model = convert_channels_first_to_last(keras_model.converted_model, should_transform_inputs_and_outputs=True, verbose=True)
-    # final_model.save('temp.h5')
-    # final_model = tf.keras.models.load_model('temp.h5')
+    # final_model.save('temp_old_1b.h5')
+    # final_model = tf.keras.models.load_model('temp_old_1b.h5')
     keras_output = final_model(real_img)
     fin = []
     for i in range(12):
