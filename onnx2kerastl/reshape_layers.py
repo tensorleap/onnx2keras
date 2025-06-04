@@ -428,6 +428,7 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     logger = logging.getLogger('onnx2keras.slice')
+    max_ends_val = np.iinfo(np.int32).max
 
     if params['change_ordering']:
         raise NotImplementedError("change_ordering for Slice is not implemented")
@@ -448,6 +449,11 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             steps = list(layers[node.input[4]])
         except IndexError:
             steps = list(params.get("steps", [None] * len(axes)))
+
+    # when the 'ends' value is the int64 maximum, probably happen because [idx:] sets large end num in conversion
+    if ends[0].dtype == np.int64 and not isinstance(ends[0], KerasTensor):
+        if ends[0] > max_ends_val:
+            ends = [np.int32(max_ends_val)]
     try:
         max_len = len(layers[node.input[0]].shape)
         axes_positives = [axis if axis >= 0 else max_len + axis for axis in axes]
