@@ -512,12 +512,6 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
                             input_list[axis_index]) and input_list[axis_index].dtype != tf.int32:
                         slice_index = tf_cast(slice_index, tf.int32, tf_name=f"{params['cleaned_name']}_cast")
                     res_list[axis] = slice_index
-        for vec in end_vec:
-            try:
-                if 'getitem_54' in vec.name:
-                    x=1
-            except:
-                pass
         layers[node_name] = tf_strided_slice(input_0,
                                              tf.concat([start_vec], axis=0),
                                              tf.concat([end_vec], axis=0),
