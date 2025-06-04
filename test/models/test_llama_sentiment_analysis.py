@@ -1,6 +1,7 @@
 import os.path
 
 import onnx
+import pytest
 import tensorflow as tf
 from transformers import AutoTokenizer
 import numpy as np
@@ -10,7 +11,7 @@ from onnx2kerastl.customonnxlayer import onnx_custom_objects_map
 from test.utils import export_torch_to_onnx_optimum
 
 
-# @pytest.mark.skip(reason="Fails on CI but works locally (might be too big?)")
+@pytest.mark.skip(reason="Fails on CI but works locally (might be too big?)")
 def test_llama_32_1b_inst():
     onnx_model_folder = 'onnx_model'
     onnx_path = os.path.join(onnx_model_folder, 'model.onnx')
