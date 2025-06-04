@@ -7,6 +7,7 @@ from keras.models import Model
 
 from onnx2kerastl import onnx_to_keras
 from onnx2kerastl.utils import check_torch_keras_error
+from optimum.exporters.onnx import main_export
 
 NP_SEED = 42
 
@@ -55,3 +56,33 @@ def test_conversion(onnx_model, k_model, input_variable, change_ordering=False, 
 
 def is_lambda_layers_exist(model: Model):
     return any(isinstance(layer, Lambda) for layer in model.layers)
+
+
+def export_torch_to_onnx_optimum(model_name: str, model_output_path: str, task="causal-lm"):
+    """
+    this function get a model as an input (Hugginface or local path), creates a folder and save the onnx model as output.
+    it uses the optimum library.
+    NOTE: For llama model the maximum absolute difference of the logits larget than 1e-5, it shouldnt be that important!
+    Args:
+        model_name: model path (local or HF name)
+        model_output_name: output folder path
+        task: model task
+
+    Returns:
+        creates the onnx model in the output folder path
+    """
+    main_export(
+        model_name_or_path=model_name,
+        task=task,
+        output=model_output_path,
+        opset=None,
+        device="cpu",
+        dtype=None,
+        pad_token_id=None,
+        trust_remote_code=False,
+        do_validation=True,
+        framework=None,
+        no_post_process=False,
+        model_kwargs=None,
+        atol = 1e-5
+    )

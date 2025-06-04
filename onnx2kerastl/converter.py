@@ -11,7 +11,6 @@ from typing import Optional
 import keras
 import keras.backend
 import tensorflow as tf
-from keras.layers import Lambda
 from keras.models import Model
 
 from .customonnxlayer import onnx_custom_objects_map
@@ -295,18 +294,6 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
                 keras_outputs.append(layers[layer])
 
         model = keras.models.Model(inputs=keras_inputs, outputs=keras_outputs)
-
-        # for model_layer in model.layers:
-        #     if 'identity' in model_layer.name:
-        #         trunc = False
-        #         for idx, l_input in enumerate(model_layer.input):
-        #             if l_input.dtype == tf.int64:
-        #                 trunc = True
-        #                 # model_layer.input[idx] = Lambda(lambda x: tf.cast(x, tf.int32))(l_input)
-        #                 #model_layer.input[idx] = model_layer.input[idx-1]
-        #         if trunc:
-        #             model_layer.input = model_layer.input[:-1]
-
     except Exception as e:
         if not allow_partial_compilation:
             raise

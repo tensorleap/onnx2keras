@@ -27,9 +27,6 @@ def convert_transpose(node, params, layers, lambda_func, node_name, keras_name):
     """
     logger = logging.getLogger('onnx2keras.transpose')
     input_name = node.input[0]
-    if 'embed_tokens' in input_name:
-        layers[node_name] = layers[input_name].T
-        return
 
     if params['perm'][0] != 0:
         logger.warning('Can\'t permute batch dimension. Result may be wrong.')
@@ -431,24 +428,18 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
     :return: None
     """
     logger = logging.getLogger('onnx2keras.slice')
-    max_ends_val = 100000
+    max_ends_val = np.iinfo(np.int32).max
 
     if params['change_ordering']:
         raise NotImplementedError("change_ordering for Slice is not implemented")
     if 'axes' in params:
         axes = list(params["axes"])
         ends = list(params["ends"])
-        if ends[0] > max_ends_val or ends[0] < max_ends_val:
-            ends = [np.int32(max_ends_val)]
         starts = list(params["starts"])
         steps = list(params.get("steps", [None] * len(axes)))
     else:
         starts = list(layers[node.input[1]])
         ends = list(layers[node.input[2]])
-        # when the 'ends' value is the int64 maximum, probably happen because [idx:] sets large end num in conversion
-        if ends[0].dtype == np.int64 and not isinstance(ends[0], KerasTensor):
-            if ends[0] > max_ends_val or ends[0] < max_ends_val:
-                ends = [np.int32(max_ends_val)]
         try:
             axes = list(layers[node.input[3]])
         except:
@@ -458,6 +449,11 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             steps = list(layers[node.input[4]])
         except IndexError:
             steps = list(params.get("steps", [None] * len(axes)))
+
+    # when the 'ends' value is the int64 maximum, probably happen because [idx:] sets large end num in conversion
+    if ends[0].dtype == np.int64 and not isinstance(ends[0], KerasTensor):
+        if ends[0] > max_ends_val or ends[0] < max_ends_val:
+            ends = [np.int32(max_ends_val)]
     try:
         max_len = len(layers[node.input[0]].shape)
         axes_positives = [axis if axis >= 0 else max_len + axis for axis in axes]

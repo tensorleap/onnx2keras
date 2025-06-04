@@ -686,19 +686,6 @@ def convert_or(node, params, layers, lambda_func, node_name, keras_name):
                                            tf_name=f"{params['cleaned_name']}_or")
 
 
-# def convert_trilu(node, params, layers, lambda_func, node_name, keras_name):
-#     input = layers[node.input[0]]
-#     k = 0
-#     if len(node.input) > 1:
-#         k = layers[node.input[1]]
-#
-#     if "upper" in params and not params["upper"]:
-#         result = tf.experimental.numpy.tril(input, k)
-#
-#     else:
-#         result = tf.experimental.numpy.triu(input, k)
-#     layers[node_name] = result
-
 def convert_trilu(node, params, layers, lambda_func, node_name, keras_name):
     x = layers[node.input[0]]
     k = 0
@@ -708,9 +695,9 @@ def convert_trilu(node, params, layers, lambda_func, node_name, keras_name):
             k = int(tf.keras.backend.get_value(k_tensor))
         except:
             k = 0  # fallback if symbolic
-
     upper = params.get("upper", 1)
 
+    # cannot use tf.experimental.numpy.tril/triu because this is not an eager tensor and we dont know the shape
     def trilu_fn(tensor):
         shape = tf.shape(tensor)
         m, n = shape[-2], shape[-1]
@@ -726,6 +713,7 @@ def convert_trilu(node, params, layers, lambda_func, node_name, keras_name):
 
     result = tf.keras.layers.Lambda(trilu_fn, name=keras_name)(x)
     layers[node_name] = result
+
 
 def convert_cumsum(node, params, layers, lambda_func, node_name, keras_name):
     exclusive = bool(params.get("exclusive", 0))
