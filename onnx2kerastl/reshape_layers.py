@@ -452,7 +452,7 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
 
     # when the 'ends' value is the int64 maximum, probably happen because [idx:] sets large end num in conversion
     if ends[0].dtype == np.int64 and not isinstance(ends[0], KerasTensor):
-        if ends[0] > max_ends_val or ends[0] < max_ends_val:
+        if ends[0] > max_ends_val:
             ends = [np.int32(max_ends_val)]
     try:
         max_len = len(layers[node.input[0]].shape)
