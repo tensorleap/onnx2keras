@@ -28,6 +28,7 @@ datasets = "^2.14.1"
 librosa = "^0.10.0.post2"
 onnxruntime = {version = "<=1.17.3"}
 sentencepiece ={version = "^0.1.96"}
+optimum = "^1.23.3"
 
 
 [build-system]
