@@ -18,6 +18,7 @@ class wrapper_model(torch.nn.Module):
 
 def test_dinov2():
     batch_size = 1
+    print(torch.__version__)
     dinov2_vits14 = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
     wm = wrapper_model(dinov2_vits14).to('cpu')
     wm.eval()
