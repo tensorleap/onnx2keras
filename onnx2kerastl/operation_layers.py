@@ -231,14 +231,19 @@ def convert_reduce_min(node, params, layers, lambda_func, node_name, keras_name)
         axes = params.get("axes")
     elif len(node.input) == 2:
         axes = layers.get(node.input[1])
+    else:
+        axes = None
     noop_with_empty_axes = bool(params.get("noop_with_empty_axes", False))
     keepdims = params.get("keepdims", True)
     if noop_with_empty_axes and params.get("axes") is None:
         layers[node_name] = layers[node.input[0]]
     else:
-        layers[node_name] = tf_math_reduce_min(layers[node.input[0]], axis=axes, keepdims=keepdims,
+        if axes is None:
+            layers[node_name] = tf_math_reduce_min(layers[node.input[0]], keepdims=keepdims,
                                                tf_name=f"{params['cleaned_name']}_min")
-
+        else:
+            layers[node_name] = tf_math_reduce_min(layers[node.input[0]], axis=axes, keepdims=keepdims,
+                                               tf_name=f"{params['cleaned_name']}_min")
 
 def convert_reduce_prod(node, params, layers, lambda_func, node_name, keras_name):
     """
