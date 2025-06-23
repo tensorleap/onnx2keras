@@ -79,7 +79,21 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
     dilation = params['dilations'][0] if 'dilations' in params else 1
     pads = params['pads'] if 'pads' in params else [0, 0, 0]
     strides = params['strides'] if 'strides' in params else [1, 1, 1]
-
+    auto_pad = params.get('auto_pad',"".encode()).decode()
+    if "SAME" in auto_pad:
+        input_size = np.array(input_0.shape[2:]) #Assuming NCHW
+        if None in input_size:
+            raise Exception("Conv Layers currently does not currently support auto_pad with dynamic input shape")
+        else:
+            output_size = tf.math.ceil(input_size/np.array(strides))
+            kernel_size = np.array(W.shape[2:])
+            pads = np.maximum(0, (output_size - 1) * np.array(strides) + dilation * (kernel_size - 1) + 1 - input_size).astype(int)
+        pad_before = np.floor(pads/2).astype(int)
+        pad_after = pads-pad_before
+        if "LOWER" in auto_pad:
+            #SAME LOWER means you pad more before
+            pad_after, pad_before = pad_before, pad_after
+        pads = np.column_stack((pad_before, pad_after)).ravel()
     if len(W.shape) == 5:  # 3D conv
         logger.debug('3D convolution')
         if pads[0] > 0 or pads[1] > 0 or pads[2] > 0:
