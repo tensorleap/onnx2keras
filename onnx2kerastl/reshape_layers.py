@@ -195,8 +195,6 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
                     except TypeError:
                         pass
 
-                if len(indices) == 1:
-                    indices = indices[0]
 
             if isinstance(indices, (int, np.integer)) and indices < 0:
                 indices += dim_len
