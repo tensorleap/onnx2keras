@@ -180,7 +180,10 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
             if type(indices) == int:
                 out_type = tf.int32
             else:
-                out_type = np.array(indices).dtype
+                if isinstance(indices, list):
+                    out_type = np.array(indices).dtype
+                else:
+                    out_type = indices.dtype
 
             dim_len = tf_shape(input_0, out_type=out_type,
                                tf_name=f"{params['cleaned_name']}_gather_input_shape")[axis]  # support None
