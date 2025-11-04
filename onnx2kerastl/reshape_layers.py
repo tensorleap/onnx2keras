@@ -117,6 +117,7 @@ def optimize_constant_array_for_serialization(input_0: tf.Tensor, params, indice
                     input_0 = first_row
     return input_0, indices
 
+
 def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert gather.
@@ -175,14 +176,25 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
         else:
             if tf.is_tensor(indices) and indices.dtype not in [tf.int16, tf.int32, tf.int64]:
                 indices = tf_cast(indices, tf.int32, tf_name=f"{params['cleaned_name']}_gather_cast_indices")
-            if isinstance(indices, list):
-                indices = np.array(indices)
+
             if type(indices) == int:
                 out_type = tf.int32
             else:
-                out_type = indices.dtype
+                out_type = np.array(indices).dtype
+
             dim_len = tf_shape(input_0, out_type=out_type,
                                tf_name=f"{params['cleaned_name']}_gather_input_shape")[axis]  # support None
+            if isinstance(indices, list):
+                for i in range(len(indices)):
+                    try:
+                        if indices[i] < 0:
+                            indices[i] = int(indices[i]) + dim_len
+                    except TypeError:
+                        pass
+
+                if len(indices) == 1:
+                    indices = indices[0]
+
             if isinstance(indices, (int, np.integer)) and indices < 0:
                 indices += dim_len
             if tf.is_tensor(indices):
@@ -636,7 +648,7 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
         resize_size = tf_stack(tf_resize_shapes,
                                axis=0,
                                tf_name=f"{params['cleaned_name']}_resize_stack_1")
-    
+
     if (
         resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR
         and isinstance(resize_size, keras.engine.keras_tensor.KerasTensor)
@@ -650,7 +662,7 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
 
         def target_layer(x, resize_size=resize_size):
             from tensorflow.python.ops.image_ops import resize_nearest_neighbor
-            
+
             return resize_nearest_neighbor(x, resize_size, half_pixel_centers=False)
         lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_resize_lambda")
         resized = lambda_layer(to_channel_last)
