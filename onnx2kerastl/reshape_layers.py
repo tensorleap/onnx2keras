@@ -520,6 +520,7 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
         start_vec = [0] * max_len
         end_vec = [keras_shape[i] for i in range(max_len)]
         step_vec = [1] * max_len
+        converted_to_tf_32 = False
         for axis in range(max_len):
             if axis in axes_positives:
                 axis_index = axes_positives.index(axis)
@@ -527,8 +528,24 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
                     slice_index = input_list[axis_index]
                     if input_list[axis_index] is not None and not isinstance(slice_index, int) and not is_numpy(
                             input_list[axis_index]) and input_list[axis_index].dtype != tf.int32:
+                        converted_to_tf_32 = True
                         slice_index = tf_cast(slice_index, tf.int32, tf_name=f"{params['cleaned_name']}_cast")
                     res_list[axis] = slice_index
+
+        if converted_to_tf_32:
+            def convert_item(x):
+                if isinstance(x, np.int64):
+                    x = tf.clip_by_value(x, 0, np.iinfo(np.int32).max)
+                    return np.int32(x)
+                elif isinstance(x, int):
+                    x = tf.clip_by_value(x, 0, np.iinfo(np.int32).max)
+                    return np.int32(x)
+                return x
+
+            start_vec = [convert_item(x) for x in start_vec]
+            end_vec = [convert_item(x) for x in end_vec]
+            step_vec = [convert_item(x) for x in step_vec]
+
         layers[node_name] = tf_strided_slice(input_0,
                                              tf.concat([start_vec], axis=0),
                                              tf.concat([end_vec], axis=0),
