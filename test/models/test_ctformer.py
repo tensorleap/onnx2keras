@@ -35,3 +35,6 @@ def test_ctformer(
     )[0]
     keras_preds = final_model(input_array)[0]
     assert np.abs(keras_preds - onnx_res).max() < 1e-04
+
+if __name__ == "__main__":
+    test_ctformer()
