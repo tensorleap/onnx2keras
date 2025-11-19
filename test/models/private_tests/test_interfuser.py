@@ -4,6 +4,8 @@ import onnxruntime as ort
 
 # from transformers.onnx import export, OnnxConfig
 import numpy as np
+import pytest
+
 from onnx2kerastl import onnx_to_keras
 from keras_data_format_converter import convert_channels_first_to_last
 from packaging import version
@@ -12,11 +14,10 @@ from typing import Mapping
 import urllib
 
 
-def test_interfuser():
-    import torch
-    model_name = 'interfuser'
-    MODEL_PATH = './test/interfuser/interfuser_planKD_26_3M.onnx'
-    onnx_model = onnx.load(MODEL_PATH)
+@pytest.mark.parametrize('aws_s3_download', [["interfuser/", "interfuser/", False]], indirect=True)
+def test_interfuser(aws_s3_download):
+    onnx_path = f'{aws_s3_download}/interfuser_planKD_26_3M_256.onnx'
+    onnx_model = onnx.load(onnx_path)
     output_names = ['out0', 'out1', 'out2', 'out3', 'out4', 'out5']
     input_keys = ['lidar', 'measurements',  'rgb','rgb_center','rgb_left', 'rgb_right', 'target_point']
     shapes = [
@@ -43,7 +44,7 @@ def test_interfuser():
         else:
             inputs_swapped[key] = inputs[key]
     final_model = convert_channels_first_to_last(keras_model, should_transform_inputs_and_outputs=False)
-    ort_session = ort.InferenceSession(MODEL_PATH)
+    ort_session = ort.InferenceSession(onnx_path)
     onnx_res = ort_session.run(
         output_names,
         input_feed=inputs)[0]
