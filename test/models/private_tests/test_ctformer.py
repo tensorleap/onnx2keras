@@ -1,23 +1,17 @@
 # code to proprely load data here: https://pytorch.org/hub/facebookresearch_pytorchvideo_x3d/
 import onnx
 import onnxruntime as ort
-
-# from transformers.onnx import export, OnnxConfig
 import numpy as np
+from test.models.private_tests.aws_utils import aws_s3_download
+
+import pytest
 from onnx2kerastl import onnx_to_keras
 from keras_data_format_converter import convert_channels_first_to_last
-from packaging import version
-from collections import OrderedDict
-from typing import Mapping
-import urllib
 
-
+@pytest.mark.parametrize('aws_s3_download', [["ctformer/", "ctformer/", False]], indirect=True)
 def test_ctformer(
-    onnx_path = "./test/ctformer/ctformer2.onnx",
-) -> None:
-    # if not onnx_path.exists():
-    #     raise FileNotFoundError(f"ONNX model not found: {onnx_path}")
-
+    aws_s3_download) -> None:
+    onnx_path = f'{aws_s3_download}/ctformer.onnx'
     onnx_model = onnx.load(onnx_path)
 
     rng = np.random.default_rng(seed=42)
@@ -35,6 +29,3 @@ def test_ctformer(
     )[0]
     keras_preds = final_model(input_array)[0]
     assert np.abs(keras_preds - onnx_res).max() < 1e-04
-
-if __name__ == "__main__":
-    test_ctformer()
