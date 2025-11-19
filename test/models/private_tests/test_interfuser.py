@@ -1,18 +1,12 @@
 # code to proprely load data here: https://pytorch.org/hub/facebookresearch_pytorchvideo_x3d/
 import onnx
 import onnxruntime as ort
-
-# from transformers.onnx import export, OnnxConfig
 import numpy as np
 import pytest
+from test.models.private_tests.aws_utils import aws_s3_download
 
 from onnx2kerastl import onnx_to_keras
 from keras_data_format_converter import convert_channels_first_to_last
-from packaging import version
-from collections import OrderedDict
-from typing import Mapping
-import urllib
-
 
 @pytest.mark.parametrize('aws_s3_download', [["interfuser/", "interfuser/", False]], indirect=True)
 def test_interfuser(aws_s3_download):
@@ -35,14 +29,6 @@ def test_interfuser(aws_s3_download):
     keras_model = onnx_to_keras(onnx_model, input_keys, name_policy='attach_weights_name'
                                 , allow_partial_compilation=False)
     keras_model = keras_model.converted_model
-    inps_to_swap = ['bev', 'lidar', 'rgb', 'rgb2', 'rgb_center', 'rgb_left', 'rgb_right']
-    inputs_swapped = {}
-    for key in input_keys:
-        if key in inps_to_swap:
-            permuted_input = np.transpose(inputs[key], (0,2,3,1))
-            inputs_swapped[key] = permuted_input
-        else:
-            inputs_swapped[key] = inputs[key]
     final_model = convert_channels_first_to_last(keras_model, should_transform_inputs_and_outputs=False)
     ort_session = ort.InferenceSession(onnx_path)
     onnx_res = ort_session.run(
