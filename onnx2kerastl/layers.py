@@ -18,7 +18,7 @@ from .elementwise_layers import convert_elementwise_div, convert_elementwise_add
 from .linear_layers import convert_gemm, convert_det
 from .reshape_layers import convert_transpose, convert_shape, convert_gather, convert_unsqueeze, \
     convert_concat, convert_reshape, convert_flatten, convert_slice, convert_squeeze, convert_expand, convert_resize, \
-    convert_tile, convert_gather_elements
+    convert_tile, convert_gather_elements, col2im_onnx
 from .constant_layers import convert_constant, convert_constant_of_shape, convert_one_hot
 from .normalization_layers import convert_batchnorm, convert_instancenorm, convert_dropout, convert_lrn, convert_layernorm
 from .pooling_layers import convert_avgpool, convert_global_max_pool, convert_maxpool, convert_global_avg_pool, convert_topk, convert_roi_align
@@ -154,5 +154,6 @@ AVAILABLE_CONVERTERS = {
     'If': convert_if,
     'RoiAlign': convert_roi_align,
     'Einsum': convert_einsum,
-    'LayerNormalization': convert_layernorm
+    'LayerNormalization': convert_layernorm,
+    'Col2Im': col2im_onnx,
 }

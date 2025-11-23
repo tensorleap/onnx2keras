@@ -24,6 +24,8 @@ class OnnxEinsumLayer(Layer):
             if not isinstance(constant_input, np.ndarray):
                 constant_input = np.array(constant_input)
             self.constant_input = constant_input
+        else:
+            self.constant_input = None
         self.constant_place = constant_place
 
     def call(self, inputs, *args, **kwargs):

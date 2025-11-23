@@ -748,3 +748,137 @@ def convert_gather_elements(node, params, layers, lambda_func, node_name, keras_
         return reshaped
 
     layers[node_name] = torch_gather(data_input, indices_input, axis)
+
+
+def col2im_onnx(node, params, layers, lambda_func, node_name, keras_name):
+
+    input_cols  = layers[node.input[0]]   # (N, C*kH*kW, L) KerasTensor
+    image_shape = layers[node.input[1]]   # constant [H_img, W_img]
+    block_shape = layers[node.input[2]]   # constant [kH, kW]
+
+    dilations = params.get('dilations', [1, 1])
+    pads      = params.get('pads',      [0, 0, 0, 0])  # [pt, pl, pb, pr]
+    strides   = params.get('strides',   [1, 1])
+
+    def _col2im_lambda(x):
+        """x is input_cols inside Lambda → symbolic tf.Tensor"""
+
+        input_cols_sym = x  # (N, C*kH*kW, L)
+
+        # image_shape / block_shape come from ONNX initializers
+        H_img = int(image_shape[0])
+        W_img = int(image_shape[1])
+
+        kH = int(block_shape[0])
+        kW = int(block_shape[1])
+
+        dH, dW = dilations
+        pt, pl, pb, pr = pads
+        sH, sW = strides
+
+        # -----------------------------
+        # Shapes
+        # -----------------------------
+        N  = tf.shape(input_cols_sym)[0]
+        Ck = tf.shape(input_cols_sym)[1]  # C * kH * kW
+        L  = tf.shape(input_cols_sym)[2]
+
+        C = Ck // (kH * kW)  # recover C
+
+        # Effective kernel with dilation
+        kH_eff = kH + (kH - 1) * (dH - 1)
+        kW_eff = kW + (kW - 1) * (dW - 1)
+
+        # Padded output spatial size
+        H_pad = H_img + pt + pb
+        W_pad = W_img + pl + pr
+
+        # Sliding-window grid (ONNX spec)
+        H_out = (H_pad - kH_eff) // sH + 1
+        W_out = (W_pad - kW_eff) // sW + 1
+        # Optional sanity check:
+        # tf.debugging.assert_equal(L, H_out * W_out)
+
+        # -----------------------------
+        # Reshape ONNX (N,C*kH*kW,L) → (N,C,kH,kW,H_out,W_out)
+        # -----------------------------
+        cols = tf.reshape(input_cols_sym, (N, C, kH, kW, L))
+        cols = tf.reshape(cols,          (N, C, kH, kW, H_out, W_out))
+
+        # -----------------------------
+        # Prepare accumulation buffer (no normalization)
+        # -----------------------------
+        out_pad = tf.zeros((N, C, H_pad, W_pad), dtype=cols.dtype)
+
+        # Precompute sliding indices (int32)
+        h_idx_base = tf.range(H_out, dtype=tf.int32)[None, :, None]  # (1,H_out,1)
+        w_idx_base = tf.range(W_out, dtype=tf.int32)[None, None, :]  # (1,1,W_out)
+
+        # -----------------------------
+        # Main accumulation loop (sum overlaps like nn.Fold)
+        # -----------------------------
+        for kh in range(kH):
+            for kw in range(kW):
+                # Offset inside effective kernel
+                h_off = kh * dH
+                w_off = kw * dW
+
+                # Target pixel coordinates for this kernel position
+                H_idx = h_off + h_idx_base * sH  # (1,H_out,1), int32
+                W_idx = w_off + w_idx_base * sW  # (1,1,W_out), int32
+
+                # Values: (N,C,H_out,W_out)
+                patch_vals = cols[:, :, kh, kw]
+                pv_flat = tf.reshape(patch_vals, [-1])
+
+                # -------------------------
+                # Build index tensor (N*C*H_out*W_out, 4)
+                # All int32 to avoid concat/type issues
+                # -------------------------
+                # N indices
+                NN = tf.repeat(
+                    tf.range(N, dtype=tf.int32),
+                    C * H_out * W_out
+                )[:, None]  # (?,1)
+
+                # C indices
+                CC = tf.tile(
+                    tf.repeat(
+                        tf.range(C, dtype=tf.int32),
+                        H_out * W_out
+                    )[None],
+                    [N, 1]
+                )
+                CC = tf.reshape(CC, [-1, 1])  # (?,1)
+
+                # H indices
+                HH_base = tf.repeat(tf.reshape(H_idx, [-1]), W_out)  # (H_out*W_out,)
+                HH = tf.tile(HH_base[None], [N * C, 1])
+                HH = tf.reshape(HH, [-1, 1])  # (?,1)
+                HH = tf.cast(HH, tf.int32)
+
+                # W indices
+                WW_base = tf.reshape(W_idx, [-1])  # (W_out,)
+                WW = tf.tile(WW_base, [N * C * H_out])  # (N*C*H_out*W_out,)
+                WW = tf.reshape(WW, [-1, 1])  # (?,1)
+                WW = tf.cast(WW, tf.int32)
+
+                idx = tf.concat([NN, CC, HH, WW], axis=1)  # (?,4), int32
+
+                # -------------------------
+                # Scatter-add into padded output (SUM, no normalization)
+                # -------------------------
+                out_pad = tf.tensor_scatter_nd_add(out_pad, idx, pv_flat)
+
+        # Crop padding, keep NCHW (matches torch.nn.Fold)
+        out_nchw = out_pad[:, :, pt:pt + H_img, pl:pl + W_img]
+        # If you later want NHWC for Keras, uncomment:
+        # out_nhwc = tf.transpose(out_nchw, (0, 2, 3, 1))
+        # return out_nhwc
+
+        return out_nchw
+
+    # Wrap in a Lambda and return a KERASTENSOR
+    out = tf.keras.layers.Lambda(_col2im_lambda, name=keras_name)(input_cols)
+    layers[node_name] = out
+

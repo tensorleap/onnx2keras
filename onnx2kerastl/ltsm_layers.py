@@ -141,7 +141,7 @@ def convert_gru(node, params, layers, lambda_func, node_name, keras_name):
     w = layers[node.input[1]]
     r = layers[node.input[2]]
     b = layers.get(node.input[3], np.zeros((num_directions, 6 * hidden_size), dtype=np.float32))
-    h = layers.get(node.input[5], np.zeros((1, x.shape[1], hidden_size), dtype=np.float32))
+    h = layers.get(node.input[5], np.zeros((1, x.shape[1] if x.shape[1] is not None else 1, hidden_size), dtype=np.float32))
     if isinstance(h, np.ndarray):
         tensor_h = tf.convert_to_tensor(h)
     else:
