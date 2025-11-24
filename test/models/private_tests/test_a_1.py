@@ -37,7 +37,7 @@ def test_pick_1(aws_s3_download):
     keras_model = onnx_to_keras(onnx_model, input_names, name_policy='attach_weights_name',
                                 allow_partial_compilation=False).converted_model
     final_model = convert_channels_first_to_last(keras_model, should_transform_inputs_and_outputs=False)
-    res = final_model([pick_parameters, rgb_input])
+    res = final_model([rgb_input, pick_parameters])
 
     res_onnx = session.run(output_names, {input_names[0]: rgb_input, input_names[1]: pick_parameters})
 

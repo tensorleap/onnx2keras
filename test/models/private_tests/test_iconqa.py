@@ -26,8 +26,10 @@ def test_iconqa(aws_s3_download):
     final_k.save('temp.h5')
     random_d = np.random.random(size=img.shape)*50
     loaded_model = tf.keras.models.load_model('temp.h5')
-    res_perm = loaded_model([q, np.transpose(img, [0, 2, 3, 1]), c.swapaxes(1,2)])
-    res_perm_2 = loaded_model([q, np.transpose(img+random_d, [0, 2, 3, 1]), c.swapaxes(1,2)])
+    inputs = {'choices': c.swapaxes(1,2), 'question':q, 'img':np.transpose(img, [0, 2, 3, 1])}
+    res_perm = loaded_model([inputs[inp.name] for inp in loaded_model.input])
+    inputs['img'] = np.transpose(img + random_d, [0, 2, 3, 1])
+    res_perm_2 = loaded_model([inputs[inp.name] for inp in loaded_model.input])
 
     sess = ort.InferenceSession(f'{aws_s3_download}/complete_model.onnx')
     res_onnx = sess.run(
