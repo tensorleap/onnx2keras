@@ -1695,14 +1695,14 @@ files = [
 
 [[package]]
 name = "keras-data-format-converter"
-version = "0.1.22"
+version = "0.1.24"
 description = "Generates equal keras models with the desired data format"
 optional = false
 python-versions = "<3.11,>=3.8"
 groups = ["main"]
 files = [
-    {file = "keras_data_format_converter-0.1.22-py3-none-any.whl", hash = "sha256:193477345cec20c70f22f76be49a4cb54be16512c1e524398293628ea92900c4"},
-    {file = "keras_data_format_converter-0.1.22.tar.gz", hash = "sha256:c65746aa17a7bd87b331d44a4171d943b8a70933e551cfbe4468d40968e35298"},
+    {file = "keras_data_format_converter-0.1.24-py3-none-any.whl", hash = "sha256:1e78aa5fdd766526e200205a49d10e3e0e17a9fd0eaacdfb24a94fb4f7b88d34"},
+    {file = "keras_data_format_converter-0.1.24.tar.gz", hash = "sha256:54637106a010503d0c8c038de01a1544ee2fe252aadd4a77c0f5a8c13bcf48e7"},
 ]
 
 [package.dependencies]
@@ -5934,4 +5934,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.8, <3.11"
-content-hash = "732146f5dfc8becf5f8ab348e666483456792ff1d127555f703768260a01d63b"
+content-hash = "37ed3d7594cd66b8df7b586c8c112167c8df4b742a43e415747845e09aa23b67"

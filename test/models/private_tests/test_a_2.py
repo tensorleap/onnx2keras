@@ -26,7 +26,7 @@ def test_pick_2(aws_s3_download):
     img =  np.random.random((1, 3, 512, 512)).astype(np.float32)
     pick_param = np.random.random((13)).astype(np.float32)
     pick_parameters = np.expand_dims(pick_param, axis=0)
-    res = final_model([tf.convert_to_tensor(pick_parameters), tf.convert_to_tensor(img)])
+    res = final_model([tf.convert_to_tensor(img), tf.convert_to_tensor(pick_parameters)])
 
     res_onnx = session.run(output_names, {input_names[0]: img, input_names[1]: pick_parameters})
 

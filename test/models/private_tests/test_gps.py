@@ -20,7 +20,7 @@ def test_gps(aws_s3_download):
     gps = np.random.random((1, 10, 2))
     masks = np.ones((1, 11))
     masks[:, :8] = 0
-    res = final_model([data.transpose([0, 2, 3, 4, 1]), masks, gps.transpose([0,2,1])])
+    res = final_model([data.transpose([0, 2, 3, 4, 1]), gps.transpose([0,2,1]), masks])
     sess = rt.InferenceSession(onnx_model_path)
     input_name_1 = sess.get_inputs()[0].name
     input_name_2 = sess.get_inputs()[1].name
