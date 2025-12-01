@@ -266,7 +266,7 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
     logger.debug(f'input_0: {str(input_0)}')
     logger.debug(f'input_1: {str(input_1)}')
 
-    if is_numpy(input_1):
+    if is_numpy(input_1) and input_1.shape[0] > 0:
         dims_to_set_as_zero = None
         dims_to_keep_unchanged = None
         allow_zero = params.get('allowzero', False)
