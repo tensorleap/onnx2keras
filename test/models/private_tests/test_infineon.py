@@ -3,16 +3,14 @@ import numpy as np
 import onnx
 from onnx2kerastl import onnx_to_keras
 from keras_data_format_converter import convert_channels_first_to_last
+from test.models.private_tests.aws_utils import aws_s3_download
 import pytest
-import os
 
 
-def test_infineon_ts_model():
+@pytest.mark.parametrize('aws_s3_download', [["infineon/", "infineon/", False]], indirect=True)
+def test_infineon_ts_model(aws_s3_download):
     """Test conversion of Infineon enhanced_trial_19_full_model_complete.onnx model"""
-    model_path = os.path.join(
-        os.path.dirname(__file__),
-        '../infineon_models/enhanced_trial_19_full_model_complete.onnx'
-    )
+    model_path = f'{aws_s3_download}/enhanced_trial_19_full_model_complete.onnx'
 
     # Load ONNX model
     onnx_model = onnx.load(model_path)
