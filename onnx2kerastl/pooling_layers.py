@@ -38,9 +38,22 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
         pad = 'same'
         logger.debug('Use `same` padding parameters.')
     else:
-        logger.warning('Unable to use `same` padding. Add ZeroPadding2D layer to fix shapes.')
+        logger.warning('Unable to use `same` padding. Add ZeroPadding layer to fix shapes.')
         padding_name = f"{params['cleaned_name']}_maxpool" + '_pad'
-        if len(kernel_shape) == 2:
+        if len(kernel_shape) == 1:
+            # 1D padding
+            padding = None
+            if len(pads) == 2 and (pads[0] > 0 or pads[1] > 0):
+                padding = (pads[0], pads[1])
+
+            if padding is not None:
+                padding_layer = keras.layers.ZeroPadding1D(
+                    padding=padding,
+                    name=padding_name
+                )
+                layers[padding_name] = input_0 = padding_layer(input_0)
+        elif len(kernel_shape) == 2:
+            # 2D padding
             padding = None
 
             if len(pads) == 2 and (pads[0] > 0 or pads[1] > 0):
@@ -54,13 +67,29 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
                     name=padding_name
                 )
                 layers[padding_name] = input_0 = padding_layer(input_0)
-        else:  # 3D padding
-            padding_layer = keras.layers.ZeroPadding3D(
-                padding=pads[:len(stride_shape)],
-                name=padding_name
-            )
-            layers[padding_name] = input_0 = padding_layer(input_0)
-    if len(kernel_shape) == 2:
+        else:
+            # 3D padding
+            padding = None
+            if len(pads) == 6 and any(p > 0 for p in pads):
+                # Convert ONNX pads format [x1_begin, x2_begin, x3_begin, x1_end, x2_end, x3_end]
+                # to Keras format ((x1_begin, x1_end), (x2_begin, x2_end), (x3_begin, x3_end))
+                padding = ((pads[0], pads[3]), (pads[1], pads[4]), (pads[2], pads[5]))
+
+            if padding is not None:
+                padding_layer = keras.layers.ZeroPadding3D(
+                    padding=padding,
+                    name=padding_name
+                )
+                layers[padding_name] = input_0 = padding_layer(input_0)
+    if len(kernel_shape) == 1:
+        pooling = keras.layers.MaxPooling1D(
+            pool_size=kernel_shape[0],
+            strides=stride_shape[0],
+            padding=pad,
+            name=f"{params['cleaned_name']}_maxpool",
+            data_format='channels_first'
+        )
+    elif len(kernel_shape) == 2:
         pooling = keras.layers.MaxPooling2D(
             pool_size=kernel_shape,
             strides=stride_shape,
@@ -86,7 +115,10 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
         if not np.array([output_shape[i].is_integer() for i in range(len(output_shape))]).all():
             padding = [0 if output_shape[i].is_integer() else stride_shape[i] for i in range(len(kernel_shape))]
             rand_string = ''.join(random.choices(string.ascii_uppercase + string.digits, k=3))
-            if len(kernel_shape) == 2:
+            if len(kernel_shape) == 1:
+                layers[node_name + "_pre_" + rand_string] = keras.layers.ZeroPadding1D(
+                    (0, padding[0]), name=f"{params['cleaned_name']}_pre")(input_0)
+            elif len(kernel_shape) == 2:
                 layers[node_name + "_pre_" + rand_string] = keras.layers.ZeroPadding2D(
                     ((0, padding[0]), (0, padding[1])), name=f"{params['cleaned_name']}_pre")(input_0)
             else:
