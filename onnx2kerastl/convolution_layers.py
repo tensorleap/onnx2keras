@@ -18,28 +18,32 @@ def calculate_permute_values(n_dims: int, to_channel_first: bool) -> List[int]:
 
 
 def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_channels, params):
+    rank = conv_input.shape.rank or 4
     if is_constant:
-        input_shape = tf_shape(conv_input, tf_name=f"{params['cleaned_name']}_conv_wrap_shape")
-        permuted = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=False),
+        permuted = keras.layers.Permute(calculate_permute_values(rank, to_channel_first=False),
                                         name=f"{params['cleaned_name']}_conv_wrap_permute_1")(conv_input)
         conv_res = partial_func(data_format="channels_last")(permuted)
-        result = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=True),
+        result = keras.layers.Permute(calculate_permute_values(rank, to_channel_first=True),
                                       name=f"{params['cleaned_name']}_conv_wrap_permute_2")(conv_res)
     else:
         data_fmt = keras.backend.image_data_format()
-        conv = partial_func(data_format=data_fmt)
         if data_fmt == 'channels_first':
-            channels_idx = 1
+            permuted = keras.layers.Permute(calculate_permute_values(rank, to_channel_first=False),
+                                            name=f"{params['cleaned_name']}_conv_wrap_permute_1")(conv_input)
+            conv_res = partial_func(data_format="channels_last")(permuted)
+            result = keras.layers.Permute(calculate_permute_values(rank, to_channel_first=True),
+                                          name=f"{params['cleaned_name']}_conv_wrap_permute_2")(conv_res)
         else:
+            conv = partial_func(data_format=data_fmt)
             channels_idx = -1
-        if conv_input.shape[channels_idx] is None:  # This will not serialize well unless we reshape input
-            conv_input_shape = tf_shape(conv_input, tf_name=f"{params['cleaned_name']}_conv_wrap_shape_1")
-            conv_input = tf_reshape(conv_input, [*conv_input_shape[:channels_idx], conv_channels,
-                                                 *conv_input_shape[channels_idx + 1:]],
-                                    tf_name=f"{params['cleaned_name']}_conv_wrap_reshape_2")
-        if conv_input.shape[-1] is None:
-            conv.build((None, conv_channels, *conv_input.shape[2:]))
-        result = conv(conv_input)
+            if conv_input.shape[channels_idx] is None:  # This will not serialize well unless we reshape input
+                conv_input_shape = tf_shape(conv_input, tf_name=f"{params['cleaned_name']}_conv_wrap_shape_1")
+                conv_input = tf_reshape(conv_input, [*conv_input_shape[:channels_idx], conv_channels,
+                                                     *conv_input_shape[channels_idx + 1:]],
+                                        tf_name=f"{params['cleaned_name']}_conv_wrap_reshape_2")
+            if conv_input.shape[-1] is None:
+                conv.build((None, conv_channels, *conv_input.shape[2:]))
+            result = conv(conv_input)
     return result
 
 

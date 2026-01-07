@@ -81,6 +81,8 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
                     name=padding_name
                 )
                 layers[padding_name] = input_0 = padding_layer(input_0)
+    data_fmt = keras.backend.image_data_format()
+    use_permute = False
     if len(kernel_shape) == 1:
         pooling = keras.layers.MaxPooling1D(
             pool_size=kernel_shape[0],
@@ -89,13 +91,22 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
             name=f"{params['cleaned_name']}_maxpool",
             data_format='channels_first'
         )
+    elif len(kernel_shape) == 2 and data_fmt == 'channels_first':
+        pooling = keras.layers.MaxPooling2D(
+            pool_size=kernel_shape,
+            strides=stride_shape,
+            padding=pad,
+            name=f"{params['cleaned_name']}_maxpool",
+            data_format='channels_last'
+        )
+        use_permute = True
     elif len(kernel_shape) == 2:
         pooling = keras.layers.MaxPooling2D(
             pool_size=kernel_shape,
             strides=stride_shape,
             padding=pad,
             name=f"{params['cleaned_name']}_maxpool",
-            data_format='channels_first'
+            data_format='channels_last'
         )
     else:
         pooling = keras.layers.MaxPooling3D(
@@ -125,7 +136,14 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
                 layers[node_name + "_pre_" + rand_string] = keras.layers.ZeroPadding3D(
                     ((0, padding[0]), (0, padding[1]), (0, padding[2])), name=f"{params['cleaned_name']}_pre")(input_0)
             input_0 = layers[node_name + "_pre_" + rand_string]
-    layers[node_name] = pooling(input_0)
+    if use_permute:
+        permuted = keras.layers.Permute((2, 3, 1),
+                                        name=f"{params['cleaned_name']}_maxpool_permute_1")(input_0)
+        pooled = pooling(permuted)
+        layers[node_name] = keras.layers.Permute((3, 1, 2),
+                                                 name=f"{params['cleaned_name']}_maxpool_permute_2")(pooled)
+    else:
+        layers[node_name] = pooling(input_0)
 
 def convert_global_max_pool(node, params, layers, lambda_func, node_name, keras_name):
     """
