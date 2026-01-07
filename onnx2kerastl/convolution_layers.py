@@ -28,11 +28,23 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
     else:
         data_fmt = keras.backend.image_data_format()
         if data_fmt == 'channels_first':
-            permuted = keras.layers.Permute(calculate_permute_values(rank, to_channel_first=False),
-                                            name=f"{params['cleaned_name']}_conv_wrap_permute_1")(conv_input)
-            conv_res = partial_func(data_format="channels_last")(permuted)
-            result = keras.layers.Permute(calculate_permute_values(rank, to_channel_first=True),
-                                          name=f"{params['cleaned_name']}_conv_wrap_permute_2")(conv_res)
+            if conv_input.shape[-1] is None:
+                conv = partial_func(data_format=data_fmt)
+                channels_idx = 1
+                if conv_input.shape[channels_idx] is None:  # This will not serialize well unless we reshape input
+                    conv_input_shape = tf_shape(conv_input, tf_name=f"{params['cleaned_name']}_conv_wrap_shape_1")
+                    conv_input = tf_reshape(conv_input, [*conv_input_shape[:channels_idx], conv_channels,
+                                                         *conv_input_shape[channels_idx + 1:]],
+                                            tf_name=f"{params['cleaned_name']}_conv_wrap_reshape_2")
+                if conv_input.shape[-1] is None:
+                    conv.build((None, conv_channels, *conv_input.shape[2:]))
+                result = conv(conv_input)
+            else:
+                permuted = keras.layers.Permute(calculate_permute_values(rank, to_channel_first=False),
+                                                name=f"{params['cleaned_name']}_conv_wrap_permute_1")(conv_input)
+                conv_res = partial_func(data_format="channels_last")(permuted)
+                result = keras.layers.Permute(calculate_permute_values(rank, to_channel_first=True),
+                                              name=f"{params['cleaned_name']}_conv_wrap_permute_2")(conv_res)
         else:
             conv = partial_func(data_format=data_fmt)
             channels_idx = -1
