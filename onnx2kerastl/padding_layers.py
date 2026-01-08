@@ -51,10 +51,28 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
                                                      [pads[3], pads[7]]],
                                                  tf_name=f"{params['cleaned_name']}_pad_3")
             elif pads.shape[0] == 8:
-                padding_layer = keras.layers.ZeroPadding2D(
-                    padding=((pads[2], pads[6]), (pads[3], pads[7])),
-                    name=f"{params['cleaned_name']}_pad_0"
-                )
+                # Heuristic: ONNX Pad for 4D may be NHWC (e.g. TF exports). If channels last
+                # and H/W are padded at indices 1/2, map accordingly.
+                use_nhwc = params.get('change_ordering', False)
+                if not use_nhwc and len(input_0.shape) == 4:
+                    c_last = input_0.shape[-1]
+                    h = input_0.shape[1]
+                    w = input_0.shape[2]
+                    if c_last is not None and c_last <= 4 and ((h is None or h > 4) and (w is None or w > 4)):
+                        use_nhwc = True
+
+                if use_nhwc:
+                    padding_layer = keras.layers.ZeroPadding2D(
+                        padding=((pads[1], pads[5]), (pads[2], pads[6])),
+                        name=f"{params['cleaned_name']}_pad_0",
+                        data_format="channels_last",
+                    )
+                else:
+                    padding_layer = keras.layers.ZeroPadding2D(
+                        padding=((pads[2], pads[6]), (pads[3], pads[7])),
+                        name=f"{params['cleaned_name']}_pad_0",
+                        data_format="channels_first",
+                    )
             elif pads.shape[0] == 12:  # Check for rank 6 input
                 padding_layer = keras.layers.Lambda(
                     lambda x: tf.pad(
