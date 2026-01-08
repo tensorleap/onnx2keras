@@ -443,8 +443,6 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
     logger = logging.getLogger('onnx2keras.slice')
     max_ends_val = np.iinfo(np.int32).max
 
-    if params['change_ordering']:
-        raise NotImplementedError("change_ordering for Slice is not implemented")
     if 'axes' in params:
         axes = list(params["axes"])
         ends = list(params["ends"])
@@ -462,6 +460,15 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             steps = list(layers[node.input[4]])
         except IndexError:
             steps = list(params.get("steps", [None] * len(axes)))
+
+    if params['change_ordering']:
+        input_rank = len(layers[node.input[0]].shape)
+        if input_rank >= 4:
+            perm = [0] + list(range(2, input_rank)) + [1]
+            axis_map = {old: new for new, old in enumerate(perm)}
+        else:
+            axis_map = {i: i for i in range(input_rank)}
+        axes = [axis_map[axis if axis >= 0 else input_rank + axis] for axis in axes]
 
     # when the 'ends' value is the int64 maximum, probably happen because [idx:] sets large end num in conversion
     if not isinstance(ends[0], KerasTensor):
@@ -881,4 +888,3 @@ def col2im_onnx(node, params, layers, lambda_func, node_name, keras_name):
     # Wrap in a Lambda and return a KERASTENSOR
     out = tf.keras.layers.Lambda(_col2im_lambda, name=keras_name)(input_cols)
     layers[node_name] = out
-
