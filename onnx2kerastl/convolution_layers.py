@@ -28,7 +28,7 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
     else:
         data_fmt = keras.backend.image_data_format()
         if data_fmt == 'channels_first':
-            if conv_input.shape[-1] is None:
+            if conv_input.shape[1] is None:
                 conv = partial_func(data_format=data_fmt)
                 channels_idx = 1
                 if conv_input.shape[channels_idx] is None:  # This will not serialize well unless we reshape input
