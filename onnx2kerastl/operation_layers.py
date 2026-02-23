@@ -60,7 +60,7 @@ def convert_clip(node, params, layers, lambda_func, node_name, keras_name):
     if clip_max is None:
         clip_max = tf.float32.max
 
-    if input_0.dtype == tf.int32:
+    if input_0.dtype == tf.int32 or input_0.dtype == tf.int64:
         clip_min = int(clip_min)
         clip_max = int(clip_max)
 
@@ -584,7 +584,7 @@ def convert_less(node, params, layers, lambda_func, node_name, keras_name):
         return tf.math.less(x, y)
 
     lambda_less = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_less")
-    less_output = lambda_less(input_1)
+    less_output = lambda_less(0.0) # TODO: nir - fix
     layers[node_name] = less_output
 
 

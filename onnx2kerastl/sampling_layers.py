@@ -149,6 +149,9 @@ def convert_gridsample(node, params, layers, lambda_func, node_name, keras_name)
                                   name=f"{params['cleaned_name']}_gridsample_last_permute")(tf_reshaped_results)
     layers[node_name] = ret
 
+def random_uniform_like(node, params, layers, lambda_func, node_name, keras_name):
+    ret = tf.random.uniform(tf.shape(layers[node.input[0]]))
+    layers[node_name] = ret
 
 def convert_unique(node, params, layers, lambda_func, node_name, keras_name):
     to_sort = params.get('sorted', 1) == 1
