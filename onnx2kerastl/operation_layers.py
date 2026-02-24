@@ -187,7 +187,12 @@ def convert_reduce_mean(node, params, layers, lambda_func, node_name, keras_name
 
     param_keepdims = params.get('keepdims', 1)
     keepdims = param_keepdims == 1
-    axes = params['axes']
+    if 'axes' in params:
+        axes = params['axes']
+    elif len(node.input) > 1:
+        axes = layers[node.input[1]]
+    else:
+        axes = None
     layers[node_name] = K_mean(input_0, keepdims=keepdims, axis=axes, tf_name=f"{params['cleaned_name']}_mean")
 
 
@@ -206,7 +211,14 @@ def convert_reduce_max(node, params, layers, lambda_func, node_name, keras_name)
         assert AttributeError('More than 1 input for reduce max layer.')
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
 
-    def target_layer(x, axis=params.get('axes'), keepdims=params['keepdims']):
+    if 'axes' in params:
+        axis = params['axes']
+    elif len(node.input) > 1:
+        axis = layers[node.input[1]]
+    else:
+        axis = None
+
+    def target_layer(x, axis=axis, keepdims=params['keepdims']):
         import keras.backend as K
         return K.max(x, keepdims=(keepdims == 1), axis=axis)
 
@@ -540,17 +552,21 @@ def convert_reduce_l2(node, params, layers, lambda_func, node_name, keras_name):
     :param keras_name: resulting layer name
     :return: None
     """
-    if len(node.input) != 1:
-        assert AttributeError('More than 1 input for reduce_l2 layer.')
-
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-    axis = params.get("axes", [-1])
+    if 'axes' in params:
+        axis = params['axes']
+    elif len(node.input) > 1:
+        axis = layers[node.input[1]]
+    else:
+        axis = -1
     keepdims = params.get("keepdims", 0)
+    if hasattr(axis, 'tolist'):
+        axis = axis.tolist()
+    if isinstance(axis, list) and len(axis) == 1:
+        axis = axis[0]
 
     def target_layer(x, axis=axis, keepdims=keepdims):
         import tensorflow as tf
-        if isinstance(axis, list) and len(axis) == 1:
-            axis = axis[0]
         return tf.norm(x, axis=axis, keepdims=keepdims == 1)
 
     lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_reduce_l2")
