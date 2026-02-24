@@ -45,7 +45,7 @@ def convert_gridsample(node, params, layers, lambda_func, node_name, keras_name)
         grid_index_coords = grid_index_coords + 1
     else:
         # Case when align_corners is 0
-        grid_index_coords = ((sample_grid + 1.) * max_xy - 1) / 2
+        grid_index_coords = 0.5 * (sample_grid + 1.) * (max_xy + 1) + 0.5
 
     orig_query_shape = tf_shape(grid_index_coords,
                                 tf_name=f"{params['cleaned_name']}_gridsample_coords_shape")
