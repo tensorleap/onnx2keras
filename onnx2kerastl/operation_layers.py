@@ -579,14 +579,39 @@ def convert_less(node, params, layers, lambda_func, node_name, keras_name):
         else:
             raise NotImplementedError("Casting a tensor to itself is not supported")
 
-    def target_layer(y, x=input_0):
+    def target_layer(tensors):
+        x, y = tensors
         x = tf.cast(x, y.dtype)
         return tf.math.less(x, y)
 
     lambda_less = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_less")
-    less_output = lambda_less(0.0) # TODO: nir - fix
+    less_output = lambda_less([input_0, input_1]) # TODO: nir - fix
     layers[node_name] = less_output
 
+
+# def convert_less(node, params, layers, lambda_func, node_name, keras_name):
+#     x0 = layers[node.input[0]]
+#     x1 = layers[node.input[1]]
+#
+#     # unwrap lists from multi-output nodes
+#     if isinstance(x0, (list, tuple)): x0 = x0[0]
+#     if isinstance(x1, (list, tuple)): x1 = x1[0]
+#
+#     # convert numpy to tf constant
+#     if isinstance(x0, np.ndarray): x0 = tf.constant(x0)
+#     if isinstance(x1, np.ndarray): x1 = tf.constant(x1)
+#
+#     def target_layer(tensors):
+#         a, b = tensors
+#         a = tf.cast(a, b.dtype)
+#         return tf.math.less(a, b)
+#
+#     less_output = keras.layers.Lambda(
+#         target_layer,
+#         name=f"{params['cleaned_name']}_less"
+#     )([x0, x1])
+#
+#     layers[node_name] = less_output
 
 def convert_sign(node, params, layers, lambda_func, node_name, keras_name):
     layers[node_name] = tf_math_sign(layers[node.input[0]], tf_name=f"{params['cleaned_name']}_sign")
