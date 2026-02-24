@@ -30,7 +30,7 @@ def _make_input_arrays(session, seed=42):
     return input_names, input_arrays
 
 
-def _collect_onnx_outputs(onnx_model, input_arrays, target_ops, max_per_type):
+def _collect_onnx_outputs(onnx_model, input_arrays, target_ops, max_per_type, ordered_outputs):
     model = copy.deepcopy(onnx_model)
     inferred = onnx.shape_inference.infer_shapes(model)
     value_info_map = {}
@@ -39,22 +39,27 @@ def _collect_onnx_outputs(onnx_model, input_arrays, target_ops, max_per_type):
 
     output_names = []
     output_types = []
-    op_counts = defaultdict(int)
+    op_type_map = {}
     for node in onnx_model.graph.node:
-        if node.op_type not in target_ops:
-            continue
-        if max_per_type and op_counts[node.op_type] >= max_per_type:
-            continue
         for out_name in node.output:
             if out_name:
-                vi = value_info_map.get(out_name)
-                if vi is None:
-                    continue
-                if all(o.name != out_name for o in model.graph.output):
-                    model.graph.output.append(vi)
-                output_names.append(out_name)
-                output_types.append(node.op_type)
-        op_counts[node.op_type] += 1
+                op_type_map[out_name] = node.op_type
+
+    op_counts = defaultdict(int)
+    for out_name in ordered_outputs:
+        op_type = op_type_map.get(out_name)
+        if op_type is None or op_type not in target_ops:
+            continue
+        if max_per_type and op_counts[op_type] >= max_per_type:
+            continue
+        vi = value_info_map.get(out_name)
+        if vi is None:
+            continue
+        if all(o.name != out_name for o in model.graph.output):
+            model.graph.output.append(vi)
+        output_names.append(out_name)
+        output_types.append(op_type)
+        op_counts[op_type] += 1
 
     session = ort.InferenceSession(model.SerializeToString())
     outputs = session.run(output_names, input_arrays)
@@ -64,11 +69,18 @@ def _collect_onnx_outputs(onnx_model, input_arrays, target_ops, max_per_type):
     return onnx_by_type
 
 
-def _collect_keras_outputs(keras_model, input_arrays, target_ops, max_per_type):
+def _collect_keras_outputs(keras_model, input_arrays, target_ops, max_per_type, ordered_outputs, tensor_map):
     outputs = []
     layers = []
     op_counts = defaultdict(int)
-    for layer in keras_model.layers:
+    layer_by_name = {layer.name: layer for layer in keras_model.layers}
+    for out_name in ordered_outputs:
+        keras_name = tensor_map.get(out_name)
+        if not keras_name:
+            continue
+        layer = layer_by_name.get(keras_name)
+        if layer is None:
+            continue
         mapped = _map_layer_type(layer.__class__.__name__)
         if mapped is None or mapped not in target_ops:
             continue
@@ -159,21 +171,41 @@ def main():
     session = ort.InferenceSession(args.model)
     input_names, input_arrays = _make_input_arrays(session, seed=args.seed)
 
-    target_ops = {op.strip() for op in args.ops.split(",") if op.strip()}
-    onnx_by_type = _collect_onnx_outputs(onnx_model, input_arrays, target_ops, args.max_per_type)
-
-    keras_model = onnx_to_keras(
+    response = onnx_to_keras(
         onnx_model,
         input_names,
         name_policy="attach_weights_name",
         allow_partial_compilation=False,
         verbose=False,
-    ).converted_model
+        return_tensor_map=True,
+    )
+    keras_model = response.converted_model
+    tensor_map = response.tensor_map
+    if not tensor_map:
+        print("No tensor map returned; cannot run exact comparison.")
+        return
+
+    ordered_outputs = [name for name in tensor_map.keys() if name]
+    target_ops = {op.strip() for op in args.ops.split(",") if op.strip()}
+    onnx_by_type = _collect_onnx_outputs(
+        onnx_model,
+        input_arrays,
+        target_ops,
+        args.max_per_type,
+        ordered_outputs,
+    )
     final_model = convert_channels_first_to_last(
         keras_model,
         should_transform_inputs_and_outputs=False
     )
-    keras_by_type = _collect_keras_outputs(final_model, input_arrays, target_ops, args.max_per_type)
+    keras_by_type = _collect_keras_outputs(
+        final_model,
+        input_arrays,
+        target_ops,
+        args.max_per_type,
+        ordered_outputs,
+        tensor_map,
+    )
 
     results = compare_by_type(onnx_by_type, keras_by_type)
     if not results:
