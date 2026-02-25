@@ -156,7 +156,6 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
 
     keras_middle_outputs = {}
     error_info = None
-    onnx_output_to_keras = {}
     try:
         # Convert every operation separable
         node_names = []
