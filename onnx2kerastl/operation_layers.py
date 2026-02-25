@@ -11,7 +11,7 @@ from .utils import is_numpy, ensure_tf_type, ensure_float
 from .tfops_funcs import tf_math_abs, tf_clip_by_value, tf_math_negative, K_mean, tf_math_reduce_prod, \
     tf_math_reduce_min, tf_math_pow, tf_math_sqrt, tf_cast, tf_argmax, tf_expand_dims, tf_math_reciprocal, \
     tf_logical_not, tf_math_sign, tf_math_sin, tf_math_cosh, tf_math_ceil, tf_math_acosh, tf_math_acos, \
-    tf_math_asinh, tf_math_asin, tf_math_atanh, tf_math_tan, tf_math_atan, tf_math_sinh, tf_math_less_equal, \
+    tf_math_asinh, tf_math_asin, tf_math_atanh, tf_math_tan, tf_math_atan, tf_math_sinh, tf_math_less, tf_math_less_equal, \
     tf_bitwise_invert, tf_bitwise_bitwise_and, tf_bitwise_bitwise_or, tf_bitwise_bitwise_xor, tf_cos, \
     tf_math_greater, tf_math_greater, tf_math_greater_equal, tf_logical_and, tf_math_logical_xor, tf_math_logical_or, \
     tf_argmin, tf_math_is_inf, tf_math_is_nan, tf_size, tf_not_equal, tf_where, tf_transpose, tf_gather_nd, \
@@ -585,24 +585,8 @@ def convert_not(node, params, layers, lambda_func, node_name, keras_name):
 
 
 def convert_less(node, params, layers, lambda_func, node_name, keras_name):
-    input_0 = layers[node.input[0]]
-    input_1 = layers[node.input[1]]
-
-    if input_1.dtype == input_0.dtype and not isinstance(input_0, (tf.Tensor, np.ndarray)):
-        if input_0.dtype != tf.double:
-            # To see why this is needed, see inline comments on convert_cast
-            input_0 = tf_cast(input_0, dtype=tf.double, tf_name=f"{params['cleaned_name']}_less_cast")
-        else:
-            raise NotImplementedError("Casting a tensor to itself is not supported")
-
-    def target_layer(tensors):
-        x, y = tensors
-        x = tf.cast(x, y.dtype)
-        return tf.math.less(x, y)
-
-    lambda_less = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_less")
-    less_output = lambda_less([input_0, input_1])
-    layers[node_name] = less_output
+    layers[node_name] = tf_math_less(layers[node.input[0]], layers[node.input[1]],
+                                     tf_name=f"{params['cleaned_name']}_less")
 
 
 def convert_sign(node, params, layers, lambda_func, node_name, keras_name):
