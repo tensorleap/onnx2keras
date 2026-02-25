@@ -25,7 +25,7 @@ from .pooling_layers import convert_avgpool, convert_global_max_pool, convert_ma
 from .padding_layers import convert_padding
 from .upsampling_layers import convert_upsample
 from .caffe2_layers import convert_alias_with_name, convert_resize_nearest
-from .sampling_layers import convert_gridsample, convert_range, convert_unique
+from .sampling_layers import convert_gridsample, convert_range, convert_unique, random_uniform_like
 from .fft_layers import convert_dft
 
 AVAILABLE_CONVERTERS = {
@@ -156,4 +156,5 @@ AVAILABLE_CONVERTERS = {
     'Einsum': convert_einsum,
     'LayerNormalization': convert_layernorm,
     'Col2Im': col2im_onnx,
+    'RandomUniformLike': random_uniform_like,
 }
