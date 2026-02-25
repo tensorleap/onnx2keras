@@ -31,7 +31,6 @@ if spec is not None:
 class ConvertedResponse:
     converted_model: Model
     error_info: Optional[str] = None
-    tensor_map: Optional[dict] = None
 
 
 def onnx_node_attributes_to_dict(args):
@@ -72,7 +71,7 @@ def flatten_onnx_nodes(onnx_nodes):
 
 
 def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, change_ordering=False, input_types=None,
-                  allow_partial_compilation=True, return_tensor_map=False) \
+                  allow_partial_compilation=True) \
         -> ConvertedResponse:
     """
     Convert ONNX graph to Keras model format
@@ -275,14 +274,6 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
                 node_name,
                 keras_names
             )
-            if return_tensor_map:
-                for out_name in node.output:
-                    if out_name in layers and tf.is_tensor(layers[out_name]):
-                        try:
-                            history = layers[out_name]._keras_history
-                            onnx_output_to_keras[out_name] = history[0].name
-                        except Exception:
-                            continue
             # remove node inputs
             for inp in node.input:
                 keras_middle_outputs.pop(inp, None)
@@ -411,8 +402,7 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
 
     keras.backend.set_image_data_format(keras_fmt)
 
-    tensor_map = onnx_output_to_keras if return_tensor_map else None
-    response = ConvertedResponse(model, error_info, tensor_map)
+    response = ConvertedResponse(model, error_info)
     return response
 
 
