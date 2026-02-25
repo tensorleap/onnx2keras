@@ -585,8 +585,21 @@ def convert_not(node, params, layers, lambda_func, node_name, keras_name):
 
 
 def convert_less(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = tf_math_less(layers[node.input[0]], layers[node.input[1]],
-                                     tf_name=f"{params['cleaned_name']}_less")
+    input_0 = layers[node.input[0]]
+    input_1 = layers[node.input[1]]
+
+    if input_0.dtype != input_1.dtype:
+        if input_0.dtype == tf.int64 or input_1.dtype == tf.int64:
+            target_dtype = tf.int64
+        elif input_0.dtype == tf.int32 or input_1.dtype == tf.int32:
+            target_dtype = tf.int32
+        else:
+            target_dtype = input_0.dtype
+
+        input_0 = tf_cast(input_0, target_dtype, tf_name=f"{params['cleaned_name']}_cast_x")
+        input_1 = tf_cast(input_1, target_dtype, tf_name=f"{params['cleaned_name']}_cast_y")
+
+    layers[node_name] = tf_math_less(input_0, input_1, tf_name=f"{params['cleaned_name']}_less")
 
 
 def convert_sign(node, params, layers, lambda_func, node_name, keras_name):
