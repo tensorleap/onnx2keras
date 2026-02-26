@@ -15,7 +15,7 @@ class OnnxEinsumLayer(Layer):
         constant_place: Optional[int]
     """
 
-    def __init__(self, equation: str, constant_input: Optional[List[float]], constant_place: Optional[int], **kwargs):
+    def __init__(self, equation: str, constant_input: Optional[List[float]] = None, constant_place: Optional[int] = None, **kwargs):
         super().__init__(**kwargs)
         self.equation = equation
         if constant_input is not None:
