@@ -33,7 +33,7 @@ def convert_elementwise_div(node, params, layers, lambda_func, node_name, keras_
     input_0 = layers[node.input[0]]
     input_1 = layers[node.input[1]]
 
-    try:
+    if is_numpy(input_0) or is_numpy(input_1):
         logger.debug('Divide numpy arrays.')
         div = input_0 / input_1
         if _is_integer_type(input_0.dtype) and _is_integer_type(input_1.dtype):
@@ -41,17 +41,12 @@ def convert_elementwise_div(node, params, layers, lambda_func, node_name, keras_
         if hasattr(div, 'numpy'):
             div = div.numpy()
         layers[node_name] = div
-
-    except (IndexError, ValueError):
+    else:
         logger.debug('Convert inputs to Keras/TF layers if needed.')
 
         def target_layer(x):
             import tensorflow as tf
-            layer = tf.divide(
-                x[0],
-                x[1]
-            )
-            return layer
+            return tf.divide(x[0], x[1])
 
         lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_div")
         layers[node_name] = lambda_layer([input_0, input_1])
