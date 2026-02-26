@@ -16,6 +16,7 @@ from keras.models import Model
 from .customonnxlayer import onnx_custom_layers
 from .exceptions import UnsupportedLayer, OnnxUnsupported
 from .layers import AVAILABLE_CONVERTERS
+from .tfops_funcs import tf_cast
 import re
 
 onnx_imported = False
@@ -156,7 +157,7 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
                     keras_inputs.append(layers[input_name])
 
                 if is_bool_input:
-                    layers[input_name] = tf.cast(layers[input_name], tf.bool)
+                    layers[input_name] = tf_cast(layers[input_name], tf.bool, tf_name=f"{input_name}_float_to_bool")
 
                 logger.debug('Found input {0} with shape {1}'.format(input_name, input_shape))
 
