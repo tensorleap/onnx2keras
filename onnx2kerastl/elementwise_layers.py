@@ -5,7 +5,7 @@ import logging
 from .utils import is_numpy, ensure_tf_type
 from .tfops_funcs import tf_tensor_scatter_nd_update, tf_maximum, tf_minimum, tf_cast, tf_expand_dims, tf_repeat,\
     tf_equal, tf_where, tf_round, tf_sign, tf_abs, tf_math_mod, tf_bitwise_left_shift, tf_bitwise_right_shift,\
-    tf_logical_not, tf_add
+    tf_logical_not, tf_add, tf_divide
 import tensorflow as tf
 from tensorflow.python.framework.ops import EagerTensor
 
@@ -43,14 +43,7 @@ def convert_elementwise_div(node, params, layers, lambda_func, node_name, keras_
         layers[node_name] = div
     else:
         logger.debug('Convert inputs to Keras/TF layers if needed.')
-
-        def target_layer(x):
-            import tensorflow as tf
-            return tf.divide(x[0], x[1])
-
-        lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_div")
-        layers[node_name] = lambda_layer([input_0, input_1])
-        lambda_func[keras_name] = target_layer
+        layers[node_name] = tf_divide(input_0, input_1, tf_name=f"{params['cleaned_name']}_div")
 
 
 def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_name):
