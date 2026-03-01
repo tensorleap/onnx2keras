@@ -486,6 +486,8 @@ def convert_convtranspose(node, params, layers,
     if len(W.shape) == 5:  # 3D conv
         W = W.transpose(2, 3, 4, 1, 0)
         height, width, depth, n_filters, channels = W.shape
+        strides_3d = params.get('strides', [1, 1, 1])
+        pads_3d = params.get('pads', [0, 0, 0])
 
         if has_bias:
             weights = [W, bias]
@@ -500,9 +502,9 @@ def convert_convtranspose(node, params, layers,
             layers[node_name] = GroupedConvTranspose(
                 kernel=W,
                 bias=bias if has_bias else None,
-                strides=strides,
+                strides=strides_3d,
                 dilations=params.get('dilations', [1, 1, 1]),
-                pads=pads,
+                pads=pads_3d,
                 output_padding=params.get('output_padding', [0, 0, 0]),
                 groups=n_groups,
                 data_format="channels_first",
@@ -517,7 +519,7 @@ def convert_convtranspose(node, params, layers,
         conv = keras.layers.Conv3DTranspose(
             filters=n_filters,
             kernel_size=(height, width, depth),
-            strides=strides,
+            strides=strides_3d,
             padding='valid',
             output_padding=0,
             weights=weights,
@@ -529,8 +531,8 @@ def convert_convtranspose(node, params, layers,
 
         if 'output_shape' in params and 'pads' not in params:
             logger.debug('!!!!! Paddings will be calculated automatically !!!!!')
-            pads = [strides[0] * (int(input_0.shape[2]) - 1) + 0 + (height - 1) * dilation - params['output_shape'][0],
-                    strides[1] * (int(input_0.shape[3]) - 1) + 0 + (height - 1) * dilation - params['output_shape'][1]]
+            pads_3d = [strides_3d[0] * (int(input_0.shape[2]) - 1) + 0 + (height - 1) * dilation - params['output_shape'][0],
+                       strides_3d[1] * (int(input_0.shape[3]) - 1) + 0 + (height - 1) * dilation - params['output_shape'][1]]
 
         layers[node_name] = input_0 = conv(input_0)
 
@@ -541,12 +543,12 @@ def convert_convtranspose(node, params, layers,
         if 'output_padding' in params and (params['output_padding'][0] > 0 or params['output_padding'][1] > 0):
             raise AttributeError('Cannot convert ConvTranspose2d with output_padding != 0')
 
-        if pads[0] > 0:
+        if pads_3d[0] > 0:
             logger.debug('Add cropping layer for output padding')
-            assert (len(pads) == 2 or (pads[2] == pads[0] and pads[3] == pads[1]))
+            assert (len(pads_3d) == 2 or (pads_3d[2] == pads_3d[0] and pads_3d[3] == pads_3d[1]))
 
             crop = keras.layers.Cropping2D(
-                pads[:2],
+                pads_3d[:2],
                 name=f"{params['cleaned_name']}_convtranspose" + '_crop'
             )
             layers[node_name] = crop(input_0)
