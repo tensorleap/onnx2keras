@@ -532,7 +532,7 @@ def convert_convtranspose(node, params, layers,
         if 'output_shape' in params and 'pads' not in params:
             logger.debug('!!!!! Paddings will be calculated automatically !!!!!')
             pads_3d = [strides_3d[0] * (int(input_0.shape[2]) - 1) + 0 + (height - 1) * dilation - params['output_shape'][0],
-                       strides_3d[1] * (int(input_0.shape[3]) - 1) + 0 + (height - 1) * dilation - params['output_shape'][1]]
+                       strides_3d[1] * (int(input_0.shape[3]) - 1) + 0 + (width - 1) * dilation - params['output_shape'][1]]
 
         layers[node_name] = input_0 = conv(input_0)
 
