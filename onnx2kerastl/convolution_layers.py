@@ -125,6 +125,96 @@ def grouped_conv_transpose(x, kernel=None, bias=None, kernel_shape=None, bias_sh
         raise AttributeError('GroupedConvTranspose requires kernel_shape')
 
     def target_layer(x_in):
+        def _normalize_output_padding_local(out_pad, rank):
+            if not out_pad:
+                return (0,) * rank
+            if len(out_pad) == rank:
+                return tuple(out_pad)
+            raise AttributeError('Invalid output_padding for GroupedConvTranspose')
+
+        def _normalize_pads_local(pads_val, rank):
+            if not pads_val:
+                return (0,) * (2 * rank)
+            if len(pads_val) == 2 * rank:
+                return tuple(pads_val)
+            if len(pads_val) == rank:
+                return tuple(pads_val) + tuple(pads_val)
+            raise AttributeError('Invalid pads for GroupedConvTranspose')
+
+        def _conv2d_transpose_valid_local(xv, kv):
+            in_shape = tf.shape(xv)  # [N, H, W, Cin]
+            n = in_shape[0]
+            h = in_shape[1]
+            w = in_shape[2]
+            k_h = tf.shape(kv)[0]
+            k_w = tf.shape(kv)[1]
+            out_ch = tf.shape(kv)[2]
+
+            s_h, s_w = strides
+            d_h, d_w = dilations
+            op_h, op_w = _normalize_output_padding_local(output_padding, 2)
+
+            out_h = s_h * (h - 1) + ((k_h - 1) * d_h + 1) + op_h
+            out_w = s_w * (w - 1) + ((k_w - 1) * d_w + 1) + op_w
+            output_shape = tf.stack([n, out_h, out_w, out_ch])
+
+            return tf.nn.conv2d_transpose(
+                input=xv,
+                filters=kv,
+                output_shape=output_shape,
+                strides=[1, s_h, s_w, 1],
+                padding="VALID",
+                data_format="NHWC",
+                dilations=[1, d_h, d_w, 1],
+            )
+
+        def _conv3d_transpose_valid_local(xv, kv):
+            in_shape = tf.shape(xv)  # [N, D, H, W, Cin]
+            n = in_shape[0]
+            d = in_shape[1]
+            h = in_shape[2]
+            w = in_shape[3]
+            k_d = tf.shape(kv)[0]
+            k_h = tf.shape(kv)[1]
+            k_w = tf.shape(kv)[2]
+            out_ch = tf.shape(kv)[3]
+
+            s_d, s_h, s_w = strides
+            d_d, d_h, d_w = dilations
+            op_d, op_h, op_w = _normalize_output_padding_local(output_padding, 3)
+
+            out_d = s_d * (d - 1) + ((k_d - 1) * d_d + 1) + op_d
+            out_h = s_h * (h - 1) + ((k_h - 1) * d_h + 1) + op_h
+            out_w = s_w * (w - 1) + ((k_w - 1) * d_w + 1) + op_w
+            output_shape = tf.stack([n, out_d, out_h, out_w, out_ch])
+
+            return tf.nn.conv3d_transpose(
+                input=xv,
+                filters=kv,
+                output_shape=output_shape,
+                strides=[1, s_d, s_h, s_w, 1],
+                padding="VALID",
+                data_format="NDHWC",
+                dilations=[1, d_d, d_h, d_w, 1],
+            )
+
+        def _crop_pads_2d_local(yv):
+            h0, w0, h1, w1 = _normalize_pads_local(pads, 2)
+            if h0 or w0 or h1 or w1:
+                sh = tf.shape(yv)[1]
+                sw = tf.shape(yv)[2]
+                yv = yv[:, h0:sh - h1, w0:sw - w1, :]
+            return yv
+
+        def _crop_pads_3d_local(yv):
+            d0, h0, w0, d1, h1, w1 = _normalize_pads_local(pads, 3)
+            if d0 or h0 or w0 or d1 or h1 or w1:
+                sd = tf.shape(yv)[1]
+                sh = tf.shape(yv)[2]
+                sw = tf.shape(yv)[3]
+                yv = yv[:, d0:sd - d1, h0:sh - h1, w0:sw - w1, :]
+            return yv
+
         dtype = x_in.dtype
         if kernel is None:
             kernel_t = tf.zeros(kernel_shape, dtype=dtype)
@@ -154,14 +244,14 @@ def grouped_conv_transpose(x, kernel=None, bias=None, kernel_shape=None, bias_sh
             if data_format == "channels_first":
                 x_in = tf.transpose(x_in, [0, 2, 3, 1])
             if groups == 1:
-                y = _conv2d_transpose_valid(x_in, kernel_t, strides, dilations, output_padding)
+                y = _conv2d_transpose_valid_local(x_in, kernel_t)
             else:
                 x_splits = tf.split(x_in, num_or_size_splits=groups, axis=-1)
                 k_splits = tf.split(kernel_t, num_or_size_splits=groups, axis=-1)
-                ys = [_conv2d_transpose_valid(xi, ki, strides, dilations, output_padding)
+                ys = [_conv2d_transpose_valid_local(xi, ki)
                       for xi, ki in zip(x_splits, k_splits)]
                 y = tf.concat(ys, axis=-1)
-            y = _crop_pads_2d(y, pads)
+            y = _crop_pads_2d_local(y)
             if bias_t is not None:
                 y = y + tf.reshape(bias_t, [1, 1, 1, -1])
             if data_format == "channels_first":
@@ -171,14 +261,14 @@ def grouped_conv_transpose(x, kernel=None, bias=None, kernel_shape=None, bias_sh
             if data_format == "channels_first":
                 x_in = tf.transpose(x_in, [0, 2, 3, 4, 1])
             if groups == 1:
-                y = _conv3d_transpose_valid(x_in, kernel_t, strides, dilations, output_padding)
+                y = _conv3d_transpose_valid_local(x_in, kernel_t)
             else:
                 x_splits = tf.split(x_in, num_or_size_splits=groups, axis=-1)
                 k_splits = tf.split(kernel_t, num_or_size_splits=groups, axis=-1)
-                ys = [_conv3d_transpose_valid(xi, ki, strides, dilations, output_padding)
+                ys = [_conv3d_transpose_valid_local(xi, ki)
                       for xi, ki in zip(x_splits, k_splits)]
                 y = tf.concat(ys, axis=-1)
-            y = _crop_pads_3d(y, pads)
+            y = _crop_pads_3d_local(y)
             if bias_t is not None:
                 y = y + tf.reshape(bias_t, [1, 1, 1, 1, -1])
             if data_format == "channels_first":
