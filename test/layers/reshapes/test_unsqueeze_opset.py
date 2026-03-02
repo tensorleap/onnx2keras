@@ -39,7 +39,7 @@ def test_unsqueeze_axes_as_attribute(opset_version):
     run_op_test(model, {'data': data}, ['data'])
 
 
-@pytest.mark.parametrize('axes', ([0], [2]))
+@pytest.mark.parametrize('axes', ([0], [1]))
 @pytest.mark.parametrize('opset_version', [13])
 def test_unsqueeze_axes_as_input(axes, opset_version):
     data = np.random.randn(3, 4).astype(np.float32)

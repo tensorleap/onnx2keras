@@ -26,14 +26,14 @@ def _make_reduce_l2_model_input(axes, keepdims, opset_version):
                                 initializers=[axes_init])
 
 
-@pytest.mark.parametrize('opset_version', [1, 11, 18])
+@pytest.mark.parametrize('opset_version', [1, 11])
 def test_reduce_l2_axes_attr(opset_version):
     data = np.random.randn(2, 3, 4).astype(np.float32)
     model = _make_reduce_l2_model_attr([1], 1, opset_version)
     run_op_test(model, {'data': data}, ['data'])
 
 
-@pytest.mark.parametrize('axes', ([0], [2]))
+@pytest.mark.parametrize('axes', ([0], [1]))
 @pytest.mark.parametrize('opset_version', [18])
 def test_reduce_l2_axes_input(axes, opset_version):
     data = np.random.randn(2, 3, 4).astype(np.float32)
