@@ -107,25 +107,6 @@ def _crop_pads_3d(y, pads):
     return y
 
 
-def _maybe_make_weight(value, shape, trainable, name, dtype):
-    if value is None:
-        init_value = tf.zeros(shape, dtype=dtype)
-    else:
-        if is_numpy(value) or isinstance(value, EagerTensor):
-            init_value = tf.convert_to_tensor(value)
-        else:
-            value = tf.convert_to_tensor(value)
-            try:
-                init_value = tf.convert_to_tensor(value.numpy())
-            except Exception:
-                init_value = value
-        if dtype is not None and init_value.dtype != dtype:
-            init_value = tf.cast(init_value, dtype)
-    if trainable:
-        return tf.Variable(init_value, trainable=True, name=name)
-    return init_value
-
-
 def grouped_conv_transpose(x, kernel=None, bias=None, kernel_shape=None, bias_shape=None, strides=(1, 1),
                            dilations=(1, 1), pads=None, output_padding=None, groups=1,
                            data_format="channels_first", trainable_weights=False, name=None):
@@ -145,12 +126,26 @@ def grouped_conv_transpose(x, kernel=None, bias=None, kernel_shape=None, bias_sh
 
     def target_layer(x_in):
         dtype = x_in.dtype
-        kernel_t = _maybe_make_weight(kernel, kernel_shape, trainable_weights,
-                                      None if name is None else f"{name}_kernel", dtype)
+        if kernel is None:
+            kernel_t = tf.zeros(kernel_shape, dtype=dtype)
+        else:
+            kernel_t = tf.convert_to_tensor(kernel)
+            if kernel_t.dtype != dtype:
+                kernel_t = tf.cast(kernel_t, dtype)
+            if trainable_weights:
+                kernel_t = tf.Variable(kernel_t, trainable=True,
+                                       name=None if name is None else f"{name}_kernel")
 
         if bias_shape is not None:
-            bias_t = _maybe_make_weight(bias, bias_shape, trainable_weights,
-                                        None if name is None else f"{name}_bias", dtype)
+            if bias is None:
+                bias_t = tf.zeros(bias_shape, dtype=dtype)
+            else:
+                bias_t = tf.convert_to_tensor(bias)
+                if bias_t.dtype != dtype:
+                    bias_t = tf.cast(bias_t, dtype)
+                if trainable_weights:
+                    bias_t = tf.Variable(bias_t, trainable=True,
+                                         name=None if name is None else f"{name}_bias")
         else:
             bias_t = None
 
