@@ -302,7 +302,9 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
     is_constant = is_numpy(input_0) or isinstance(input_0, EagerTensor)
     is_W_constant = is_numpy(W) or isinstance(W, EagerTensor)
     n_groups = params['group'] if 'group' in params else 1
-    dilation = params['dilations'][0] if 'dilations' in params else 1
+    dilations = params.get('dilations', [1])
+    dilation = dilations[0]
+    dilation_has_unsupported = any(v > 1 for v in dilations)
     pads = params['pads'] if 'pads' in params else [0, 0, 0]
     strides = params['strides'] if 'strides' in params else [1, 1, 1]
     auto_pad = params.get('auto_pad',"".encode()).decode()
@@ -495,7 +497,7 @@ def convert_convtranspose(node, params, layers,
             weights = [W]
 
         if n_groups > 1:
-            if dilation > 1:
+            if dilation_has_unsupported:
                 raise AttributeError('Cannot convert ConvTranspose2d with dilation_rate != 1')
             if 'output_padding' in params and any(v > 0 for v in params['output_padding']):
                 raise AttributeError('Cannot convert ConvTranspose2d with output_padding != 0')
@@ -513,7 +515,7 @@ def convert_convtranspose(node, params, layers,
             )(input_0)
             return
 
-        if dilation > 1:
+        if dilation_has_unsupported:
             raise AttributeError('Cannot convert ConvTranspose2d with dilation_rate != 1')
 
         conv = keras.layers.Conv3DTranspose(
@@ -571,7 +573,7 @@ def convert_convtranspose(node, params, layers,
             weights = [W]
 
         if n_groups > 1:
-            if dilation > 1:
+            if dilation_has_unsupported:
                 raise AttributeError('Cannot convert ConvTranspose2d with dilation_rate != 1')
             if 'output_padding' in params and any(v > 0 for v in params['output_padding']):
                 raise AttributeError('Cannot convert ConvTranspose2d with output_padding != 0')
@@ -589,7 +591,7 @@ def convert_convtranspose(node, params, layers,
             )(input_0)
             return
 
-        if dilation > 1:
+        if dilation_has_unsupported:
             raise AttributeError('Cannot convert ConvTranspose2d with dilation_rate != 1')
         if is_W_constant:
             conv = keras.layers.Conv2DTranspose(
