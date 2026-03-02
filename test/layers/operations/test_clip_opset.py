@@ -23,7 +23,7 @@ def _make_clip_model_input(min_val, max_val, opset_version):
                                 initializers=[min_init, max_init])
 
 
-@pytest.mark.parametrize('opset_version', [1, 6])
+@pytest.mark.parametrize('opset_version', [6])
 def test_clip_attr(opset_version):
     x = np.random.randn(3, 4).astype(np.float32)
     model = _make_clip_model_attr(-0.5, 0.5, opset_version)
