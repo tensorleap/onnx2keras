@@ -481,7 +481,9 @@ def convert_convtranspose(node, params, layers,
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     is_W_constant = is_numpy(W) or isinstance(W, EagerTensor)
     n_groups = params['group'] if 'group' in params else 1
-    dilation = params['dilations'][0] if 'dilations' in params else 1
+    dilations = params.get('dilations', [1])
+    dilation = dilations[0]
+    dilation_has_unsupported = any(v > 1 for v in dilations)
     pads = params['pads'] if 'pads' in params else [0, 0]
     strides = params['strides'] if 'strides' in params else [1, 1]
 
