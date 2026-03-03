@@ -16,6 +16,7 @@ from keras.models import Model
 from .customonnxlayer import onnx_custom_layers
 from .exceptions import UnsupportedLayer, OnnxUnsupported
 from .layers import AVAILABLE_CONVERTERS
+from .tfops_funcs import tf_cast
 import re
 
 onnx_imported = False
@@ -133,10 +134,13 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
         for onnx_i in onnx_inputs:
             if onnx_i.name == input_name:
                 dtype = None if input_types is None else input_types[i]
+                onnx_elem_type = onnx_i.type.tensor_type.elem_type
+                is_bool_input = dtype == tf.bool or (dtype is None and onnx_elem_type == 9)
+                input_layer_dtype = tf.float32 if is_bool_input else dtype
                 input_shape = [i.dim_value for i in onnx_i.type.tensor_type.shape.dim]
                 input_shape = [shape if shape != 0 else None for shape in input_shape]
                 if len(input_shape) <= 1:
-                    input_tensor = keras.layers.InputLayer(input_shape=input_shape, name=input_name, dtype=dtype).output
+                    input_tensor = keras.layers.InputLayer(input_shape=input_shape, name=input_name, dtype=input_layer_dtype).output
                     layers[input_name] = input_tensor[0]
                     keras_inputs.append(input_tensor)
 
@@ -145,12 +149,15 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
                     input_shape = input_shape[1:]
                     if batch_size is None:
                         layers[input_name] = keras.layers.InputLayer(
-                            input_shape=input_shape, name=input_name, dtype=dtype).output
+                            input_shape=input_shape, name=input_name, dtype=input_layer_dtype).output
                     else:
                         layers[input_name] = keras.layers.InputLayer(
-                            input_shape=input_shape, name=input_name, dtype=dtype, batch_size=batch_size).output
+                            input_shape=input_shape, name=input_name, dtype=input_layer_dtype, batch_size=batch_size).output
 
                     keras_inputs.append(layers[input_name])
+
+                if is_bool_input:
+                    layers[input_name] = tf_cast(layers[input_name], tf.bool, tf_name=f"{input_name}_float_to_bool")
 
                 logger.debug('Found input {0} with shape {1}'.format(input_name, input_shape))
 

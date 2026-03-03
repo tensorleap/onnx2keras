@@ -22,7 +22,7 @@ def test_trackon_v1_mode(aws_s3_download):
     onnx_model = onnx.load(model_path)
     keras_model = onnx_to_keras(onnx_model,
                                 input_names=["f_proj", "mask", "q_init", "spatial_memory", "context_memory", "past_occ", "past_mask", "t", "vis_threshold"],
-                                input_types=[tf.float32, tf.float32, tf.float32, tf.float32, tf.float32, tf.bool, tf.bool, tf.float32, tf.float32],
+                                #input_types=[tf.float32, tf.float32, tf.float32, tf.float32, tf.float32, tf.bool, tf.bool, tf.float32, tf.float32],
                                 name_policy='attach_weights_name',
                                 allow_partial_compilation=False).converted_model
     final_model = convert_channels_first_to_last(keras_model, should_transform_inputs_and_outputs=False, verbose=True)
@@ -32,8 +32,8 @@ def test_trackon_v1_mode(aws_s3_download):
     q_init = np.random.random((1, 880, 256)).astype(np.float32)
     spatial_memory = np.random.random((1, 880, 48, 256)).astype(np.float32)
     context_memory = np.random.random((1, 880, 48, 256)).astype(np.float32)
-    past_occ = np.ones((1, 880, 48), dtype=bool)
-    past_mask = np.ones((1, 880, 48), dtype=bool)
+    past_occ = np.ones((1, 880, 48), dtype=np.float32)
+    past_mask = np.ones((1, 880, 48), dtype=np.float32)
     t = np.random.random((1, 1)).astype(np.float32)
     vis_threshold = np.random.random((1, 1)).astype(np.float32)
 
@@ -46,8 +46,8 @@ def test_trackon_v1_mode(aws_s3_download):
         "q_init": q_init,
         "spatial_memory": spatial_memory,
         "context_memory": context_memory,
-        "past_occ": past_occ,
-        "past_mask": past_mask,
+        "past_occ": past_occ.astype(bool),
+        "past_mask": past_mask.astype(bool),
         "t": t,
         "vis_threshold": vis_threshold})
 

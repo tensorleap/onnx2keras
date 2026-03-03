@@ -10,6 +10,7 @@ __pycache__/
 dist/
 *.DS_Store
 .python-version
+poetry.lock
 test/models/custom_conversion_tests
 
 .vscode/
