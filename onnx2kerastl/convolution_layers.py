@@ -10,6 +10,274 @@ from tensorflow.python.framework.ops import EagerTensor
 from .utils import ensure_tf_type, is_numpy
 from .tfops_funcs import tf_transpose, tf_pad, tf_shape, tf_reshape
 
+
+def _normalize_output_padding(output_padding, rank):
+    if not output_padding:
+        return (0,) * rank
+    if len(output_padding) == rank:
+        return tuple(output_padding)
+    raise AttributeError('Invalid output_padding for GroupedConvTranspose')
+
+
+def _normalize_pads(pads, rank):
+    if not pads:
+        return (0,) * (2 * rank)
+    if len(pads) == 2 * rank:
+        return tuple(pads)
+    if len(pads) == rank:
+        return tuple(pads) + tuple(pads)
+    raise AttributeError('Invalid pads for GroupedConvTranspose')
+
+
+def _conv2d_transpose_valid(x, k, strides, dilations, output_padding):
+    in_shape = tf.shape(x)  # [N, H, W, Cin]
+    n = in_shape[0]
+    h = in_shape[1]
+    w = in_shape[2]
+    k_h = tf.shape(k)[0]
+    k_w = tf.shape(k)[1]
+    out_ch = tf.shape(k)[2]
+
+    s_h, s_w = strides
+    d_h, d_w = dilations
+    op_h, op_w = _normalize_output_padding(output_padding, 2)
+
+    out_h = s_h * (h - 1) + ((k_h - 1) * d_h + 1) + op_h
+    out_w = s_w * (w - 1) + ((k_w - 1) * d_w + 1) + op_w
+    output_shape = tf.stack([n, out_h, out_w, out_ch])
+
+    return tf.nn.conv2d_transpose(
+        input=x,
+        filters=k,
+        output_shape=output_shape,
+        strides=[1, s_h, s_w, 1],
+        padding="VALID",
+        data_format="NHWC",
+        dilations=[1, d_h, d_w, 1],
+    )
+
+
+def _conv3d_transpose_valid(x, k, strides, dilations, output_padding):
+    in_shape = tf.shape(x)  # [N, D, H, W, Cin]
+    n = in_shape[0]
+    d = in_shape[1]
+    h = in_shape[2]
+    w = in_shape[3]
+    k_d = tf.shape(k)[0]
+    k_h = tf.shape(k)[1]
+    k_w = tf.shape(k)[2]
+    out_ch = tf.shape(k)[3]
+
+    s_d, s_h, s_w = strides
+    d_d, d_h, d_w = dilations
+    op_d, op_h, op_w = _normalize_output_padding(output_padding, 3)
+
+    out_d = s_d * (d - 1) + ((k_d - 1) * d_d + 1) + op_d
+    out_h = s_h * (h - 1) + ((k_h - 1) * d_h + 1) + op_h
+    out_w = s_w * (w - 1) + ((k_w - 1) * d_w + 1) + op_w
+    output_shape = tf.stack([n, out_d, out_h, out_w, out_ch])
+
+    return tf.nn.conv3d_transpose(
+        input=x,
+        filters=k,
+        output_shape=output_shape,
+        strides=[1, s_d, s_h, s_w, 1],
+        padding="VALID",
+        data_format="NDHWC",
+        dilations=[1, d_d, d_h, d_w, 1],
+    )
+
+
+def _crop_pads_2d(y, pads):
+    h0, w0, h1, w1 = _normalize_pads(pads, 2)
+    if h0 or w0 or h1 or w1:
+        sh = tf.shape(y)[1]
+        sw = tf.shape(y)[2]
+        y = y[:, h0:sh - h1, w0:sw - w1, :]
+    return y
+
+
+def _crop_pads_3d(y, pads):
+    d0, h0, w0, d1, h1, w1 = _normalize_pads(pads, 3)
+    if d0 or h0 or w0 or d1 or h1 or w1:
+        sd = tf.shape(y)[1]
+        sh = tf.shape(y)[2]
+        sw = tf.shape(y)[3]
+        y = y[:, d0:sd - d1, h0:sh - h1, w0:sw - w1, :]
+    return y
+
+
+def grouped_conv_transpose(x, kernel=None, bias=None, kernel_shape=None, bias_shape=None, strides=(1, 1),
+                           dilations=(1, 1), pads=None, output_padding=None, groups=1,
+                           data_format="channels_first", trainable_weights=False, name=None):
+    strides = tuple(strides)
+    dilations = tuple(dilations)
+    pads = tuple(pads) if pads is not None else ()
+    output_padding = tuple(output_padding) if output_padding is not None else ()
+    groups = int(groups)
+
+    if kernel_shape is None and kernel is not None:
+        kernel_shape = tuple(kernel.shape)
+    if bias_shape is None and bias is not None:
+        bias_shape = tuple(bias.shape)
+
+    if kernel_shape is None:
+        raise AttributeError('GroupedConvTranspose requires kernel_shape')
+
+    def target_layer(x_in):
+        def _normalize_output_padding_local(out_pad, rank):
+            if not out_pad:
+                return (0,) * rank
+            if len(out_pad) == rank:
+                return tuple(out_pad)
+            raise AttributeError('Invalid output_padding for GroupedConvTranspose')
+
+        def _normalize_pads_local(pads_val, rank):
+            if not pads_val:
+                return (0,) * (2 * rank)
+            if len(pads_val) == 2 * rank:
+                return tuple(pads_val)
+            if len(pads_val) == rank:
+                return tuple(pads_val) + tuple(pads_val)
+            raise AttributeError('Invalid pads for GroupedConvTranspose')
+
+        def _conv2d_transpose_valid_local(xv, kv):
+            in_shape = tf.shape(xv)  # [N, H, W, Cin]
+            n = in_shape[0]
+            h = in_shape[1]
+            w = in_shape[2]
+            k_h = tf.shape(kv)[0]
+            k_w = tf.shape(kv)[1]
+            out_ch = tf.shape(kv)[2]
+
+            s_h, s_w = strides
+            d_h, d_w = dilations
+            op_h, op_w = _normalize_output_padding_local(output_padding, 2)
+
+            out_h = s_h * (h - 1) + ((k_h - 1) * d_h + 1) + op_h
+            out_w = s_w * (w - 1) + ((k_w - 1) * d_w + 1) + op_w
+            output_shape = tf.stack([n, out_h, out_w, out_ch])
+
+            return tf.nn.conv2d_transpose(
+                input=xv,
+                filters=kv,
+                output_shape=output_shape,
+                strides=[1, s_h, s_w, 1],
+                padding="VALID",
+                data_format="NHWC",
+                dilations=[1, d_h, d_w, 1],
+            )
+
+        def _conv3d_transpose_valid_local(xv, kv):
+            in_shape = tf.shape(xv)  # [N, D, H, W, Cin]
+            n = in_shape[0]
+            d = in_shape[1]
+            h = in_shape[2]
+            w = in_shape[3]
+            k_d = tf.shape(kv)[0]
+            k_h = tf.shape(kv)[1]
+            k_w = tf.shape(kv)[2]
+            out_ch = tf.shape(kv)[3]
+
+            s_d, s_h, s_w = strides
+            d_d, d_h, d_w = dilations
+            op_d, op_h, op_w = _normalize_output_padding_local(output_padding, 3)
+
+            out_d = s_d * (d - 1) + ((k_d - 1) * d_d + 1) + op_d
+            out_h = s_h * (h - 1) + ((k_h - 1) * d_h + 1) + op_h
+            out_w = s_w * (w - 1) + ((k_w - 1) * d_w + 1) + op_w
+            output_shape = tf.stack([n, out_d, out_h, out_w, out_ch])
+
+            return tf.nn.conv3d_transpose(
+                input=xv,
+                filters=kv,
+                output_shape=output_shape,
+                strides=[1, s_d, s_h, s_w, 1],
+                padding="VALID",
+                data_format="NDHWC",
+                dilations=[1, d_d, d_h, d_w, 1],
+            )
+
+        def _crop_pads_2d_local(yv):
+            h0, w0, h1, w1 = _normalize_pads_local(pads, 2)
+            if h0 or w0 or h1 or w1:
+                sh = tf.shape(yv)[1]
+                sw = tf.shape(yv)[2]
+                yv = yv[:, h0:sh - h1, w0:sw - w1, :]
+            return yv
+
+        def _crop_pads_3d_local(yv):
+            d0, h0, w0, d1, h1, w1 = _normalize_pads_local(pads, 3)
+            if d0 or h0 or w0 or d1 or h1 or w1:
+                sd = tf.shape(yv)[1]
+                sh = tf.shape(yv)[2]
+                sw = tf.shape(yv)[3]
+                yv = yv[:, d0:sd - d1, h0:sh - h1, w0:sw - w1, :]
+            return yv
+
+        dtype = x_in.dtype
+        if kernel is None:
+            kernel_t = tf.zeros(kernel_shape, dtype=dtype)
+        else:
+            kernel_t = tf.convert_to_tensor(kernel)
+            if kernel_t.dtype != dtype:
+                kernel_t = tf.cast(kernel_t, dtype)
+            if trainable_weights:
+                kernel_t = tf.Variable(kernel_t, trainable=True,
+                                       name=None if name is None else f"{name}_kernel")
+
+        if bias_shape is not None:
+            if bias is None:
+                bias_t = tf.zeros(bias_shape, dtype=dtype)
+            else:
+                bias_t = tf.convert_to_tensor(bias)
+                if bias_t.dtype != dtype:
+                    bias_t = tf.cast(bias_t, dtype)
+                if trainable_weights:
+                    bias_t = tf.Variable(bias_t, trainable=True,
+                                         name=None if name is None else f"{name}_bias")
+        else:
+            bias_t = None
+
+        rank = kernel_t.shape.rank - 2
+        if rank == 2:
+            if data_format == "channels_first":
+                x_in = tf.transpose(x_in, [0, 2, 3, 1])
+            if groups == 1:
+                y = _conv2d_transpose_valid_local(x_in, kernel_t)
+            else:
+                x_splits = tf.split(x_in, num_or_size_splits=groups, axis=-1)
+                k_splits = tf.split(kernel_t, num_or_size_splits=groups, axis=-1)
+                ys = [_conv2d_transpose_valid_local(xi, ki)
+                      for xi, ki in zip(x_splits, k_splits)]
+                y = tf.concat(ys, axis=-1)
+            y = _crop_pads_2d_local(y)
+            if bias_t is not None:
+                y = y + tf.reshape(bias_t, [1, 1, 1, -1])
+            if data_format == "channels_first":
+                y = tf.transpose(y, [0, 3, 1, 2])
+            return y
+        if rank == 3:
+            if data_format == "channels_first":
+                x_in = tf.transpose(x_in, [0, 2, 3, 4, 1])
+            if groups == 1:
+                y = _conv3d_transpose_valid_local(x_in, kernel_t)
+            else:
+                x_splits = tf.split(x_in, num_or_size_splits=groups, axis=-1)
+                k_splits = tf.split(kernel_t, num_or_size_splits=groups, axis=-1)
+                ys = [_conv3d_transpose_valid_local(xi, ki)
+                      for xi, ki in zip(x_splits, k_splits)]
+                y = tf.concat(ys, axis=-1)
+            y = _crop_pads_3d_local(y)
+            if bias_t is not None:
+                y = y + tf.reshape(bias_t, [1, 1, 1, 1, -1])
+            if data_format == "channels_first":
+                y = tf.transpose(y, [0, 4, 1, 2, 3])
+            return y
+        raise AttributeError('GroupedConvTranspose supports only 2D/3D')
+
+    return keras.layers.Lambda(target_layer, name=name)(x)
+
 def calculate_permute_values(n_dims: int, to_channel_first: bool) -> List[int]:
     if to_channel_first:
         return [n_dims - 1] + list(range(1, n_dims - 1))
@@ -76,7 +344,9 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
     is_constant = is_numpy(input_0) or isinstance(input_0, EagerTensor)
     is_W_constant = is_numpy(W) or isinstance(W, EagerTensor)
     n_groups = params['group'] if 'group' in params else 1
-    dilation = params['dilations'][0] if 'dilations' in params else 1
+    dilations = params.get('dilations', [1])
+    dilation = dilations[0]
+    dilation_has_unsupported = any(v > 1 for v in dilations)
     pads = params['pads'] if 'pads' in params else [0, 0, 0]
     strides = params['strides'] if 'strides' in params else [1, 1, 1]
     auto_pad = params.get('auto_pad',"".encode()).decode()
@@ -253,13 +523,17 @@ def convert_convtranspose(node, params, layers,
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
     is_W_constant = is_numpy(W) or isinstance(W, EagerTensor)
     n_groups = params['group'] if 'group' in params else 1
-    dilation = params['dilations'][0] if 'dilations' in params else 1
+    dilations = params.get('dilations', [1])
+    dilation = dilations[0]
+    dilation_has_unsupported = any(v > 1 for v in dilations)
     pads = params['pads'] if 'pads' in params else [0, 0]
     strides = params['strides'] if 'strides' in params else [1, 1]
 
     if len(W.shape) == 5:  # 3D conv
         W = W.transpose(2, 3, 4, 1, 0)
         height, width, depth, n_filters, channels = W.shape
+        strides_3d = params.get('strides', [1, 1, 1])
+        pads_3d = params.get('pads', [0, 0, 0])
 
         if has_bias:
             weights = [W, bias]
@@ -267,15 +541,32 @@ def convert_convtranspose(node, params, layers,
             weights = [W]
 
         if n_groups > 1:
-            raise AttributeError('Cannot convert ConvTranspose2d with groups != 1')
+            if dilation_has_unsupported:
+                raise AttributeError('Cannot convert ConvTranspose2d with dilation_rate != 1')
+            if 'output_padding' in params and any(v > 0 for v in params['output_padding']):
+                raise AttributeError('Cannot convert ConvTranspose2d with output_padding != 0')
+            layers[node_name] = grouped_conv_transpose(
+                input_0,
+                kernel=W,
+                bias=bias if has_bias else None,
+                strides=strides_3d,
+                dilations=params.get('dilations', [1, 1, 1]),
+                pads=pads_3d,
+                output_padding=params.get('output_padding', [0, 0, 0]),
+                groups=n_groups,
+                data_format="channels_first",
+                trainable_weights=False,
+                name=f"{params['cleaned_name']}_convtranspose_grouped"
+            )
+            return
 
-        if dilation > 1:
+        if dilation_has_unsupported:
             raise AttributeError('Cannot convert ConvTranspose2d with dilation_rate != 1')
 
         conv = keras.layers.Conv3DTranspose(
             filters=n_filters,
             kernel_size=(height, width, depth),
-            strides=strides,
+            strides=strides_3d,
             padding='valid',
             output_padding=0,
             weights=weights,
@@ -287,8 +578,9 @@ def convert_convtranspose(node, params, layers,
 
         if 'output_shape' in params and 'pads' not in params:
             logger.debug('!!!!! Paddings will be calculated automatically !!!!!')
-            pads = [strides[0] * (int(input_0.shape[2]) - 1) + 0 + (height - 1) * dilation - params['output_shape'][0],
-                    strides[1] * (int(input_0.shape[3]) - 1) + 0 + (height - 1) * dilation - params['output_shape'][1]]
+            pads_3d = [strides_3d[0] * (int(input_0.shape[2]) - 1) + 0 + (height - 1) * dilation - params['output_shape'][0],
+                       strides_3d[1] * (int(input_0.shape[3]) - 1) + 0 + (width - 1) * dilation - params['output_shape'][1],
+                       strides_3d[2] * (int(input_0.shape[4]) - 1) + 0 + (depth - 1) * dilation - params['output_shape'][2]]
 
         layers[node_name] = input_0 = conv(input_0)
 
@@ -299,12 +591,19 @@ def convert_convtranspose(node, params, layers,
         if 'output_padding' in params and (params['output_padding'][0] > 0 or params['output_padding'][1] > 0):
             raise AttributeError('Cannot convert ConvTranspose2d with output_padding != 0')
 
-        if pads[0] > 0:
+        if any(pads_3d):
             logger.debug('Add cropping layer for output padding')
-            assert (len(pads) == 2 or (pads[2] == pads[0] and pads[3] == pads[1]))
+            if len(pads_3d) == 3:
+                cropping = tuple(pads_3d)
+            else:
+                assert len(pads_3d) == 6
+                assert (pads_3d[3] == pads_3d[0] and pads_3d[4] == pads_3d[1] and pads_3d[5] == pads_3d[2])
+                cropping = ((pads_3d[0], pads_3d[3]),
+                            (pads_3d[1], pads_3d[4]),
+                            (pads_3d[2], pads_3d[5]))
 
-            crop = keras.layers.Cropping2D(
-                pads[:2],
+            crop = keras.layers.Cropping3D(
+                cropping,
                 name=f"{params['cleaned_name']}_convtranspose" + '_crop'
             )
             layers[node_name] = crop(input_0)
@@ -319,9 +618,26 @@ def convert_convtranspose(node, params, layers,
             weights = [W]
 
         if n_groups > 1:
-            raise AttributeError('Cannot convert ConvTranspose2d with groups != 1')
+            if dilation_has_unsupported:
+                raise AttributeError('Cannot convert ConvTranspose2d with dilation_rate != 1')
+            if 'output_padding' in params and any(v > 0 for v in params['output_padding']):
+                raise AttributeError('Cannot convert ConvTranspose2d with output_padding != 0')
+            layers[node_name] = grouped_conv_transpose(
+                input_0,
+                kernel=W,
+                bias=bias if has_bias else None,
+                strides=strides,
+                dilations=params.get('dilations', [1, 1]),
+                pads=pads,
+                output_padding=params.get('output_padding', [0, 0]),
+                groups=n_groups,
+                data_format="channels_first",
+                trainable_weights=False,
+                name=f"{params['cleaned_name']}_convtranspose_grouped"
+            )
+            return
 
-        if dilation > 1:
+        if dilation_has_unsupported:
             raise AttributeError('Cannot convert ConvTranspose2d with dilation_rate != 1')
         if is_W_constant:
             conv = keras.layers.Conv2DTranspose(
