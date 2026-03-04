@@ -223,6 +223,12 @@ def convert_elementwise_sub(node, params, layers, lambda_func, node_name, keras_
 
     try:
         if not input_0_is_constant and not input_1_is_constant:
+            if input_0.dtype != input_1.dtype:
+                input_1 = tf_cast(
+                    input_1,
+                    input_0.dtype,
+                    tf_name=f"{params['cleaned_name']}_sub_cast_rhs"
+                )
             sub = keras.layers.Subtract(name=f"{params['cleaned_name']}_sub")
             layers[node_name] = sub([input_0, input_1])
         else:
