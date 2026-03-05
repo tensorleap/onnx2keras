@@ -9,8 +9,6 @@ from keras_data_format_converter import convert_channels_first_to_last
 from onnx2kerastl import onnx_to_keras
 from test.models.private_tests.aws_utils import aws_s3_download
 
-
-MODEL_PATH = Path(__file__).resolve().parents[3] / "rtdetrv2_r18vd_120e_raw_outputs.onnx"
 INT_DTYPES = {
     "tensor(int8)": np.int8,
     "tensor(int16)": np.int16,
@@ -52,7 +50,7 @@ def test_rtdetrv2_local(aws_s3_download):
     onnx_model = onnx.load(onnx_path)
 
     rng = np.random.default_rng(seed=42)
-    session = ort.InferenceSession(str(MODEL_PATH))
+    session = ort.InferenceSession(str(onnx_path))
     input_infos = session.get_inputs()
     output_infos = session.get_outputs()
 
