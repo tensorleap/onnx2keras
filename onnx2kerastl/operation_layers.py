@@ -348,7 +348,7 @@ def convert_split(node, params, layers, lambda_func, node_name, keras_names):
                 splits = [layers[node.input[0]].shape[axis] // 2] * 2
     if not isinstance(splits, Iterable):
         # This might not work if `split` is a tensor.
-        chunk_size = K.int_size(input_0)[axis] // splits
+        chunk_size = input_0.shape[axis] // splits
         splits = (chunk_size,) * splits
     cur = 0
     for i, split in enumerate(splits):
@@ -356,7 +356,7 @@ def convert_split(node, params, layers, lambda_func, node_name, keras_names):
             node_name = params['_outputs'][i]
 
         def target_layer(x, axis=axis, start_i=cur, end_i=cur + split):
-            slices = [slice(None, None)] * len(K.int_shape(x))
+            slices = [slice(None, None)] * len(x.shape)
             slices[axis] = slice(start_i, end_i)
             return x[tuple(slices)]
 
@@ -704,7 +704,7 @@ def convert_trilu(node, params, layers, lambda_func, node_name, keras_name):
     if len(node.input) > 1:
         k_tensor = layers[node.input[1]]
         try:
-            k = int(tf.keras.backend.get_value(k_tensor))
+            k = int(k_tensor.numpy())
         except:
             k = 0  # fallback if symbolic
     upper = params.get("upper", 1)
@@ -912,13 +912,13 @@ def convert_if(node, params, layers, lambda_func, node_name, keras_name):
         else:
             then_lambda = lambda x: in_vec
         lambda_layer = tf.keras.layers.Lambda(then_lambda, name=f"{params['cleaned_name']}_if_serizlize_arr_helper")
-        if not K.is_keras_tensor(cond):
+        if not isinstance(cond, keras.KerasTensor):
             raise NotImplementedError(
                 "We do not support an if where both the then branch and the in-vector are constants")
         then_output = lambda_layer(cond)  # this assumes
     else:
         then_output = outputs[0]
-    layers[node_name] = tf.keras.backend.switch(cond, then_output, outputs[1])
+    layers[node_name] = tf.where(cond, then_output, outputs[1])
 
 
 def convert_einsum(node, params, layers, lambda_func, node_name, keras_name):

@@ -8,7 +8,6 @@ import numpy as np
 import string
 import random
 import tensorflow as tf
-import keras.backend as K
 
 
 def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
@@ -297,7 +296,7 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
     to_sort = bool(params.get('sorted', 1))
     x = layers[node.input[0]]
     k = layers[node.input[1]][0]
-    if not is_numpy(k) and not K.is_keras_tensor(k):  # Eager tensor does not serialize well
+    if not is_numpy(k) and not isinstance(k, keras.KerasTensor):  # Eager tensor does not serialize well
         k = k.numpy().astype(np.int32)
     if not largest:
         in_tensor = -x

@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 from .utils import is_numpy
 from .tfops_funcs import tf_cast, tf_one_hot
-from keras import backend as K
+import keras
 
 def convert_constant(node, params, layers, lambda_func, node_name, keras_name):
     """
@@ -25,7 +25,7 @@ def convert_constant_of_shape(node, params, layers, lambda_func, node_name, kera
 
     input_0 = layers[node.input[0]]
 
-    if not is_numpy(input_0) and not isinstance(input_0, list) and K.is_keras_tensor(input_0):
+    if not is_numpy(input_0) and not isinstance(input_0, list) and isinstance(input_0, keras.KerasTensor):
         # Boolean case
         if value.dtype == np.bool_:
             layers[node_name] = tf.fill(layers[node.input[0]], tf.constant(value.item(), dtype=tf.bool))

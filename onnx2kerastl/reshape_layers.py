@@ -3,9 +3,8 @@ import logging
 import keras
 import numpy as np
 import tensorflow as tf
-from keras import backend as K
-from keras.engine.keras_tensor import KerasTensor
-from keras.layers import SlicingOpLambda, Lambda
+from keras import KerasTensor
+from keras.layers import Lambda
 from typing import Union
 from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
 from .tfops_funcs import tf_reshape, tf_shape, tf_cast, tf_stack, tf_image_resize, tf_strided_slice,\
@@ -59,7 +58,7 @@ def convert_shape(node, params, layers, lambda_func, node_name, keras_name):
     logger.debug(np.array(input_0.shape))
     is_unknown_tensor = input_0.shape == None
     if not is_unknown_tensor and (
-            not K.is_keras_tensor(input_0) or not any([input_0.shape[i] == None for i in range(len(input_0.shape))])):
+            not isinstance(input_0, keras.KerasTensor) or not any([input_0.shape[i] == None for i in range(len(input_0.shape))])):
         shapes = []
         for i in input_0.shape:
             if i is not None:
@@ -155,7 +154,7 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
         input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
         if isinstance(layers[node.input[1]], (np.integer, int)) or \
             (not isinstance(layers[node.input[1]], np.ndarray) and \
-                K.is_keras_tensor(layers[node.input[1]])):
+                isinstance(layers[node.input[1]], keras.KerasTensor)):
             #indices are keras tensor or int
             indices = layers[node.input[1]]
         else: #indices are numpy/tf.eager
@@ -201,7 +200,7 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
             if tf.is_tensor(indices):
                 indices = tf_where(indices < 0, indices + dim_len, indices,
                                    tf_name=f"{params['cleaned_name']}_gather_indices_where")
-            if isinstance(input_0, np.ndarray) or not  K.is_keras_tensor(input_0):
+            if isinstance(input_0, np.ndarray) or not  isinstance(input_0, keras.KerasTensor):
                 if len(input_0) > OPTIMIZE_ARRAY_LENGTH:
                     input_0, indices = optimize_constant_array_for_serialization(input_0, params, indices, logger)
             layers[node_name] = tf_gather(input_0, indices, axis=axis, tf_name=f"{params['cleaned_name']}_gather")
@@ -228,7 +227,7 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
     else:
         logger.debug('Concat Keras layers.')
         if len(layer_input) > 1:
-            if not np.array([tf.is_tensor(layer_input[i]) and K.is_keras_tensor(layer_input[i]) for i in
+            if not np.array([tf.is_tensor(layer_input[i]) and isinstance(layer_input[i], keras.KerasTensor) for i in
                              range(len(layer_input))]).all() or any(
                 [layer_input[i].shape == None for i in range(len(layer_input))]):
                 try:
@@ -495,7 +494,7 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
     for i in range(len(starts)):
         for index_li in [starts, steps, ends]:
             if index_li[i] is not None and not isinstance(index_li[i], int) and not is_numpy(
-                    index_li[i]) and K.is_keras_tensor(index_li[i]):
+                    index_li[i]) and isinstance(index_li[i], keras.KerasTensor):
                 is_dynamic = True
     if not is_dynamic:
         for axis in range(max_len):
@@ -512,9 +511,11 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             sliced = layers[node.input[0]][start:end:step]
         else:
             input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-            slicing_layer = SlicingOpLambda(tf.__operators__.getitem)
-            sliced = slicing_layer(input_0, slice_spec=slice_spec_param)
-            if is_numpy(layers[node.input[0]]) and not K.is_keras_tensor(sliced):
+            slice_tuples = tuple(
+                slice(s.get('start'), s.get('stop'), s.get('step')) for s in slice_spec_param
+            )
+            sliced = input_0[slice_tuples]
+            if is_numpy(layers[node.input[0]]) and not isinstance(sliced, keras.KerasTensor):
                 sliced = sliced.numpy()
         layers[node_name] = sliced
     else:

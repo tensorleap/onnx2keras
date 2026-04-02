@@ -470,7 +470,7 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
 
         if padding:
             # find the dimension to pad and use the exact padding values
-            input_shape = np.asarray(keras.backend.int_shape(input_0))
+            input_shape = np.asarray(input_0.shape)
             partitioned_dim = np.argwhere(input_shape == channels * n_groups)[0][0]
             padding_dim = 2 if partitioned_dim == 1 else 1
             tf_padding = np.zeros((2, len(input_shape))).astype(int)
@@ -482,7 +482,7 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
         partial_conv = partial(keras.layers.Conv1D, **conv_args)
         res = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2]*n_groups, params)
         if has_bias:
-            res_shape = np.asarray(keras.backend.int_shape(res))
+            res_shape = np.asarray(res.shape)
             bias_dim = np.argwhere(res_shape == bias.shape)[0][0]
             expanded_dims = [dim for dim in range(len(res_shape)) if dim != bias_dim]
             res = res + np.expand_dims(bias, expanded_dims)
