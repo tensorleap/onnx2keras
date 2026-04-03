@@ -7,8 +7,7 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.10, <3.14"
-tensorflow = {version = "^2.21.0", markers = "platform_machine  == 'x86_64'"}
-tensorflow-macos = {version = "^2.21.0", markers = "platform_machine  == 'arm64'"}
+tensorflow = "^2.21.0"
 onnx = "^1.21.0"
 protobuf = "^6.31.0"
 numpy = "^2.3.2"
