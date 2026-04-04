@@ -44,7 +44,7 @@ def convert_gemm(node, params, layers, lambda_func, node_name, keras_name):
         if is_numpy(keras_weights[0]):
             dense = keras.layers.Dense(
                 output_channels,
-                weights=keras_weights, name=f"{params['cleaned_name']}_gemm_dense", use_bias=has_bias
+                name=f"{params['cleaned_name']}_gemm_dense", use_bias=has_bias
             )
 
             # The first input - always X
@@ -55,6 +55,8 @@ def convert_gemm(node, params, layers, lambda_func, node_name, keras_name):
                 reshape_shape = tf_concat([mid_shape, [input_channels]], axis=0, tf_name=f"{params['cleaned_name']}_concat")
                 reshaped_x = tf_reshape(layers[node.input[0]], reshape_shape, tf_name=f"{params['cleaned_name']}_reshape")
                 layers[node_name] = dense(reshaped_x)
+            # Keras 3: set weights after layer is built (weights kwarg removed from constructor)
+            dense.set_weights(keras_weights)
 
         else:
             #MatMul branch should point here. If there is a bug here - split GEMM from matmul

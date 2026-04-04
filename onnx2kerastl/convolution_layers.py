@@ -285,12 +285,15 @@ def calculate_permute_values(n_dims: int, to_channel_first: bool) -> List[int]:
         return list(range(2, n_dims)) + [1]
 
 
-def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_channels, params):
+def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_channels, params, weights=None):
     if is_constant:
         input_shape = tf_shape(conv_input, tf_name=f"{params['cleaned_name']}_conv_wrap_shape")
         permuted = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=False),
                                         name=f"{params['cleaned_name']}_conv_wrap_permute_1")(conv_input)
-        conv_res = partial_func(data_format="channels_last")(permuted)
+        conv_layer = partial_func(data_format="channels_last")
+        conv_res = conv_layer(permuted)
+        if weights is not None:
+            conv_layer.set_weights(weights)
         result = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=True),
                                       name=f"{params['cleaned_name']}_conv_wrap_permute_2")(conv_res)
     else:
@@ -308,6 +311,8 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
         if conv_input.shape[-1] is None:
             conv.build((None, conv_channels, *conv_input.shape[2:]))
         result = conv(conv_input)
+        if weights is not None:
+            conv.set_weights(weights)
     return result
 
 
@@ -385,14 +390,13 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
                      "kernel_size": (dimension, height, width),
                      "strides": (strides[0], strides[1], strides[2]),
                      "padding": 'valid',
-                     "weights": weights,
                      "use_bias": has_bias,
                      "activation": None,
                      "dilation_rate": dilation,
                      "name": f"{params['cleaned_name']}_" + 'conv',
                      "groups": n_groups}
         partial_conv = partial(keras.layers.Conv3D, **conv_args)
-        layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2]*n_groups, params)
+        layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2]*n_groups, params, weights=weights)
 
     elif len(W.shape) == 4:  # 2D conv
         logger.debug('2D convolution')
@@ -425,15 +429,14 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
                          "kernel_size": (height, width),
                          "strides": (strides[0], strides[1]),
                          "padding": 'valid',
-                         "weights": weights,
-                         "use_bias": has_bias,
+                             "use_bias": has_bias,
                          "activation": None,
                          "dilation_rate": dilation,
                          "name": f"{params['cleaned_name']}_" + 'conv',
                          "groups": n_groups}
 
             partial_conv = partial(keras.layers.Conv2D, **conv_args)
-            layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2]*n_groups, params)
+            layers[node_name] = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2]*n_groups, params, weights=weights)
         else:
             input_0_nhwc = tf_transpose(input_0, [0, 2, 3, 1],
                                         tf_name=f"{params['cleaned_name']}_" + 'conv_transpose_nhwc')
@@ -457,7 +460,6 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
         conv_args = {"filters": n_filters,
                      "kernel_size": (width),
                      "strides": (strides[0]),
-                     "weights": weights,
                      "use_bias": False,
                      "activation": None,
                      "dilation_rate": dilation,
@@ -480,7 +482,7 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
         else:
             conv_args['padding'] = 'valid'
         partial_conv = partial(keras.layers.Conv1D, **conv_args)
-        res = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2]*n_groups, params)
+        res = permute_wrap_conv_if_constant(partial_conv, input_0, is_constant, weights[0].shape[-2]*n_groups, params, weights=weights)
         if has_bias:
             res_shape = np.asarray(res.shape)
             bias_dim = np.argwhere(res_shape == bias.shape)[0][0]
@@ -569,7 +571,6 @@ def convert_convtranspose(node, params, layers,
             strides=strides_3d,
             padding='valid',
             output_padding=0,
-            weights=weights,
             use_bias=has_bias,
             activation=None,
             dilation_rate=dilation,
@@ -583,6 +584,7 @@ def convert_convtranspose(node, params, layers,
                        strides_3d[2] * (int(input_0.shape[4]) - 1) + 0 + (depth - 1) * dilation - params['output_shape'][2]]
 
         layers[node_name] = input_0 = conv(input_0)
+        conv.set_weights(weights)
 
         # Magic ad-hoc.
         # See the Keras issue: https://github.com/keras-team/keras/issues/6777
@@ -646,7 +648,6 @@ def convert_convtranspose(node, params, layers,
                 strides=strides,
                 padding='valid',
                 output_padding=0,
-                weights=weights,
                 use_bias=has_bias,
                 activation=None,
                 dilation_rate=dilation,
@@ -660,6 +661,7 @@ def convert_convtranspose(node, params, layers,
                     strides[1] * (int(input_0.shape[3]) - 1) + 0 + (height - 1) * dilation - params['output_shape'][1]]
 
             layers[node_name] = input_0 = conv(input_0)
+            conv.set_weights(weights)
         else:
             input_0_nhwc = tf.transpose(input_0, [0, 2, 3, 1])
 

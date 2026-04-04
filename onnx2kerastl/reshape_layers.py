@@ -164,12 +164,14 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
             indices = indices.tolist()
         if "is_embedding" in params:
             if len(input_0.shape) == 2:
-                emb = tf.keras.layers.Embedding(input_0.shape[0], input_0.shape[1], weights=[layers[node.input[0]]],
+                emb = tf.keras.layers.Embedding(input_0.shape[0], input_0.shape[1],
                                                 name=f"{params['cleaned_name']}_gather_emb")
+                emb_weights = [layers[node.input[0]]]
                 if isinstance(indices, list):
                     layers[node_name] = emb(np.array(indices))
                 else:
                     layers[node_name] = emb(indices)
+                emb.set_weights(emb_weights)
             else:
                 raise AttributeError("Cannot transform gather into embedding with non 2D array")
         else:

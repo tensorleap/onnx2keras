@@ -2,28 +2,115 @@ import numpy as np
 import tensorflow as tf
 from typing import Callable
 from keras import backend as K
+import keras
 import logging
 logger = logging.getLogger('onnx2keras.tfops_funcs')
 
 layer_names_counter = {}
 
 
+def _is_keras_tensor(x):
+    return isinstance(x, keras.KerasTensor)
+
+
+def _has_keras_tensor(*args, **kwargs):
+    """Check if any argument (nested in lists/tuples) is a KerasTensor."""
+    for a in args:
+        if _is_keras_tensor(a):
+            return True
+        if isinstance(a, (list, tuple)):
+            for item in a:
+                if _is_keras_tensor(item):
+                    return True
+    for v in kwargs.values():
+        if _is_keras_tensor(v):
+            return True
+        if isinstance(v, (list, tuple)):
+            for item in v:
+                if _is_keras_tensor(item):
+                    return True
+    return False
+
+
+def _set_layer_name(result, tf_name):
+    """Set the layer name on the operation that produced this tensor (Keras 2/3 compatible)."""
+    if isinstance(result, (tf.Tensor, np.ndarray)):
+        return
+    try:
+        # Keras 3: use _keras_history
+        op = result._keras_history.operation
+        if op is not None:
+            op._name = tf_name
+    except (AttributeError, TypeError):
+        try:
+            # Keras 2 fallback: use .node.layer
+            result.node.layer._name = tf_name
+        except (AttributeError, TypeError):
+            pass
+
+
 def named_tfop(func: Callable):
     def wrapped_function(*args, tf_name=None, **kwargs):
-        result = func(*args, **kwargs)
-        if tf_name is None or tf_name=="" or not isinstance(tf_name, str):
-            raise ValueError(f"The layer {result.node.layer} with name"
-                             f" {result.node.layer.name} was provided with an empty or None Name")
-        if not isinstance(result, (tf.Tensor, np.ndarray)):
-            if tf_name not in layer_names_counter:
-                layer_names_counter[tf_name] = 0
+        if tf_name is None or tf_name == "" or not isinstance(tf_name, str):
+            tf_name = func.__name__ if hasattr(func, '__name__') else "unnamed_op"
+
+        if not _has_keras_tensor(*args, **kwargs):
+            # No KerasTensors — call directly (numpy/eager mode)
+            return func(*args, **kwargs)
+
+        # Try calling the TF op directly (works for most ops in Keras 3 with TF backend)
+        try:
+            result = func(*args, **kwargs)
+        except (ValueError, TypeError) as e:
+            if "KerasTensor" in str(e):
+                # Op doesn't support KerasTensors — wrap in Lambda
+                # Collect KerasTensor inputs and non-tensor args
+                kt_inputs = []
+                kt_indices = []
+                for i, a in enumerate(args):
+                    if _is_keras_tensor(a):
+                        kt_indices.append(('arg', i))
+                        kt_inputs.append(a)
+                    elif isinstance(a, (list, tuple)):
+                        for j, item in enumerate(a):
+                            if _is_keras_tensor(item):
+                                kt_indices.append(('list_arg', i, j))
+                                kt_inputs.append(item)
+
+                frozen_args = list(args)
+                frozen_kwargs = dict(kwargs)
+
+                def lambda_fn(*inputs):
+                    restored_args = list(frozen_args)
+                    input_idx = 0
+                    for idx_info in kt_indices:
+                        if idx_info[0] == 'arg':
+                            restored_args[idx_info[1]] = inputs[input_idx]
+                            input_idx += 1
+                        elif idx_info[0] == 'list_arg':
+                            lst = list(restored_args[idx_info[1]])
+                            lst[idx_info[2]] = inputs[input_idx]
+                            restored_args[idx_info[1]] = lst
+                            input_idx += 1
+                    return func(*restored_args, **frozen_kwargs)
+
+                layer = keras.layers.Lambda(lambda_fn, name=tf_name)
+                if len(kt_inputs) == 1:
+                    result = layer(kt_inputs[0])
+                else:
+                    result = layer(kt_inputs)
+                return result
             else:
-                layer_names_counter[tf_name] = layer_names_counter[tf_name] + 1
-                tf_name = tf_name + f"_{layer_names_counter[tf_name]}"
-                if not isinstance(result, (tf.Tensor, np.ndarray)):
-                    logger.debug(f"The op {result.node.layer.symbol} with name"
-                                     f"{result.node.layer.name} has a duplicate name {tf_name}")
-            result.node.layer._name = tf_name
+                raise
+
+        # Deduplicate names
+        if tf_name not in layer_names_counter:
+            layer_names_counter[tf_name] = 0
+        else:
+            layer_names_counter[tf_name] += 1
+            tf_name = f"{tf_name}_{layer_names_counter[tf_name]}"
+
+        _set_layer_name(result, tf_name)
         return result
     return wrapped_function
 
@@ -39,7 +126,7 @@ tf_multiply = named_tfop(tf.multiply)
 tf_clip_by_value = named_tfop(tf.clip_by_value)
 tf_math_negative = named_tfop(tf.math.negative)
 tf_tensor_scatter_nd_update = named_tfop(tf.tensor_scatter_nd_update)
-K_mean = named_tfop(K.mean)
+K_mean = named_tfop(tf.math.reduce_mean)
 tf_math_reduce_prod = named_tfop(tf.math.reduce_prod)
 tf_math_reduce_min = named_tfop(tf.math.reduce_min)
 tf_math_pow = named_tfop(tf.math.pow)

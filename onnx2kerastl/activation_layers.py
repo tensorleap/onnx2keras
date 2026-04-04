@@ -240,7 +240,6 @@ def convert_softmax(node, params, layers, lambda_func, node_name, keras_name):
     axis = params.get('axis', keras.layers.Softmax.__init__.__defaults__[0])
     softmax_layer = keras.layers.Softmax(axis=axis, name=f"{params['cleaned_name']}_softmax")
     layers[node_name] = softmax_layer(input_0)
-    layers[node_name].set_shape(layers[node_name].shape)
 
 
 def convert_prelu(node, params, layers, lambda_func, node_name, keras_name):
@@ -271,8 +270,9 @@ def convert_prelu(node, params, layers, lambda_func, node_name, keras_name):
     # for case when W.shape (n,). When activation is used for single dimension vector.
     shared_axes = shared_axes if len(W.shape) > 1 else None
 
-    prelu = keras.layers.PReLU(weights=[W], shared_axes=shared_axes, name=f"{params['cleaned_name']}_prelu")
+    prelu = keras.layers.PReLU(shared_axes=shared_axes, name=f"{params['cleaned_name']}_prelu")
     layers[node_name] = prelu(input_0)
+    prelu.set_weights([W])
 
 
 def convert_hard_sigmoid(node, params, layers, lambda_func, node_name, keras_name):

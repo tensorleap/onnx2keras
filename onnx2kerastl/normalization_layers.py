@@ -48,17 +48,18 @@ def convert_batchnorm(node, params, layers, lambda_func, node_name, keras_name):
         bn = keras.layers.BatchNormalization(
             axis=1, momentum=momentum, epsilon=eps,
             center=False, scale=False,
-            weights=weights,
+
             name=f"{params['cleaned_name']}_bn"
         )
     else:
         bn = keras.layers.BatchNormalization(
             axis=1, momentum=momentum, epsilon=eps,
-            weights=weights,
+
             name=f"{params['cleaned_name']}_bn"
         )
 
     layers[node_name] = bn(input_0)
+    bn.set_weights(weights)
 
 
 def convert_instancenorm(node, params, layers, lambda_func, node_name, keras_name):
