@@ -301,6 +301,7 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
         if needs_build_fix:
             build_shape = (None, *permuted.shape[1:-1], expected_ch)
             conv_layer.build(build_shape)
+            conv_layer.input_spec = None
         conv_res = conv_layer(permuted)
         if weights is not None:
             conv_layer.set_weights(weights)
@@ -321,12 +322,14 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
 
         if conv_input.shape[channels_idx] is not None and conv_input.shape[channels_idx] != expected_in_channels:
             # Static shape disagrees with weights — the upstream layer (e.g. concat via
-            # _TFOpLayer) may have wrong static shape. Force-build conv with correct channels.
+            # _TFOpLayer) may have wrong static shape. Force-build conv with correct channels
+            # and clear input_spec so conv(conv_input) doesn't reject the mismatched shape.
             if data_fmt == 'channels_first':
                 build_shape = (None, expected_in_channels, *conv_input.shape[2:])
             else:
                 build_shape = (None, *conv_input.shape[1:-1], expected_in_channels)
             conv.build(build_shape)
+            conv.input_spec = None
         result = conv(conv_input)
         if weights is not None:
             conv.set_weights(weights)
