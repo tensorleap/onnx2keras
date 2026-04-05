@@ -293,7 +293,12 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
         conv_layer = partial_func(data_format="channels_last")
         conv_res = conv_layer(permuted)
         if weights is not None:
-            conv_layer.set_weights(weights)
+            try:
+                conv_layer.set_weights(weights)
+            except ValueError:
+                expected_shapes = [w.shape for w in conv_layer.get_weights()]
+                reshaped = [w.reshape(es) if w.shape != es else w for w, es in zip(weights, expected_shapes)]
+                conv_layer.set_weights(reshaped)
         result = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=True),
                                       name=f"{params['cleaned_name']}_conv_wrap_permute_2")(conv_res)
     else:
@@ -308,11 +313,19 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
             conv_input = tf_reshape(conv_input, [*conv_input_shape[:channels_idx], conv_channels,
                                                  *conv_input_shape[channels_idx + 1:]],
                                     tf_name=f"{params['cleaned_name']}_conv_wrap_reshape_2")
-        if conv_input.shape[-1] is None:
+        if conv_input.shape[-1] is None and weights is None:
             conv.build((None, conv_channels, *conv_input.shape[2:]))
         result = conv(conv_input)
         if weights is not None:
-            conv.set_weights(weights)
+            try:
+                conv.set_weights(weights)
+            except ValueError:
+                # Keras 3 grouped conv may expect different weight shape; try reshaping
+                expected_shapes = [w.shape for w in conv.get_weights()]
+                reshaped = []
+                for w, es in zip(weights, expected_shapes):
+                    reshaped.append(w.reshape(es) if w.shape != es else w)
+                conv.set_weights(reshaped)
     return result
 
 
