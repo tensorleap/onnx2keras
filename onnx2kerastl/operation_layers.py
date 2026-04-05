@@ -332,14 +332,17 @@ def convert_split(node, params, layers, lambda_func, node_name, keras_names):
     axis = params.get("axis", 0)
     try:  # onnx opset12
         splits = params["split"]
-    except KeyError as e:  # onnx opset 14
+    except KeyError as e:  # onnx opset 14+
         if len(node.input) > 1:
             splits = layers[node.input[1]]
         else:
-            if layers[node.input[0]].shape[axis] % 2 != 0:
-                raise AttributeError("No splits supplied to the split block but there are uneven number of channels")
-            else:
-                splits = [layers[node.input[0]].shape[axis] // 2] * 2
+            num_outputs = params.get("num_outputs", 2)
+            dim_size = layers[node.input[0]].shape[axis]
+            if dim_size % num_outputs != 0:
+                raise AttributeError(
+                    f"No splits supplied to the split block but axis {axis} dimension {dim_size} "
+                    f"is not evenly divisible by num_outputs={num_outputs}")
+            splits = [dim_size // num_outputs] * num_outputs
     if not isinstance(splits, Iterable):
         # This might not work if `split` is a tensor.
         chunk_size = input_0.shape[axis] // splits

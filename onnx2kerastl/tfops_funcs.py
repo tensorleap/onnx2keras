@@ -81,12 +81,30 @@ class _TFOpLayer(keras.layers.Layer):
         return self._func(*restored_args, **restored_kwargs)
 
     def compute_output_shape(self, input_shape):
-        # When multiple inputs are given as a list, input_shape is a list of shapes.
-        # Most TF ops produce a single output; return the first input's shape as
-        # a reasonable default (handles elementwise ops, reductions, etc.)
-        if isinstance(input_shape, list):
-            return input_shape[0]
-        return input_shape
+        # Infer the output shape by tracing the function with concrete TensorSpecs.
+        try:
+            if isinstance(input_shape, list):
+                specs = [tf.TensorSpec(shape=s, dtype=tf.float32) for s in input_shape]
+            else:
+                specs = tf.TensorSpec(shape=input_shape, dtype=tf.float32)
+
+            @tf.function
+            def _trace(x):
+                if isinstance(x, (list, tuple)):
+                    return self.call(list(x))
+                return self.call(x)
+
+            concrete = _trace.get_concrete_function(specs)
+            out_shape = concrete.output_shapes
+            # out_shape may be a TensorShape or a tuple/list of TensorShapes
+            if isinstance(out_shape, (list, tuple)):
+                return out_shape[0]
+            return out_shape
+        except Exception:
+            # Fallback: return the first input shape unchanged
+            if isinstance(input_shape, list):
+                return input_shape[0]
+            return input_shape
 
     def get_config(self):
         config = super().get_config()

@@ -25,4 +25,5 @@ def test_nms():
         "https://storage.googleapis.com/example-datasets-47ml982d/onnx2kerras/nms/nms_out.npy",
         "nms_out.npy")
     results = np.load('nms_out.npy')
-    assert len(set(keras_res[..., 0].numpy()).intersection(set(results))) == len(results) == keras_res.shape[0]
+    keras_vals = keras_res.numpy().flatten()
+    assert len(set(keras_vals).intersection(set(results))) == len(results) == len(keras_vals)
