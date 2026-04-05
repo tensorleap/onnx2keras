@@ -209,7 +209,8 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
                 else:
                     output = output.replace(":", "_")
                     keras_names.append(output)
-            keras_names = [k.lstrip("/") for k in keras_names]
+            # Keras 3 forbids '/' in layer names; sanitize keras_names
+            keras_names = [k.lstrip("/").replace("/", "_") for k in keras_names]
             if len(node.output) != 1:
                 logger.warning('Trying to convert multi-output node')
                 node_params['_outputs'] = list(node.output)
@@ -217,7 +218,7 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
             else:
                 keras_names = keras_names[0]
                 node_names.append(keras_names)
-            pattern = r'[#:@]'  # Example pattern to match #, /, and :
+            pattern = r'[#:@/]'  # Pattern to match #, /, :, and @
             cleaned_node_name = re.sub(pattern, '_', node.name.rstrip("/").lstrip("/"))
             if len(cleaned_node_name) == 0:
                 cleaned_node_name = re.sub(pattern, '_', node_name.rstrip("/").lstrip("/"))

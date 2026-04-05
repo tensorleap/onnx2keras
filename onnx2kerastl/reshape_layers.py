@@ -342,7 +342,9 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                     logger.debug('Target shape :')
                     logger.debug(np.int32(input_1[1:]))
                     if len(np.int32(input_1[1:])) == 1 and np.int32(input_1[1:])[0] == -1:
-                        if input_0.shape.rank == 1:
+                        # Keras 3: shape may be a tuple; use len() for rank
+                        shape_rank = getattr(input_0.shape, 'rank', None) or len(input_0.shape)
+                        if shape_rank == 1:
                             input_0 = tf_expand_dims(input_0, 0, tf_name=f"{params['cleaned_name']}_expand_dims")
                         logger.debug('The first argument is Keras/tf layer. Apply keras.Flatten.')
                         flatten = keras.layers.Reshape(target_shape=input_1[1:],
@@ -422,12 +424,32 @@ def convert_flatten(node, params, layers, lambda_func, node_name, keras_name):
 
     logger.debug('Convert inputs to Keras/TF layers if needed.')
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-    input_dims = tf_shape(input_0, tf_name=f"{params['cleaned_name']}_shape")
     flatten_axis = params.get('axis', 1)
-    reshaped_input = tf_reshape(input_0, [tf.reduce_prod(input_dims[:flatten_axis]),
-                                          tf.reduce_prod(input_dims[flatten_axis:])],
-                                tf_name=f"{params['cleaned_name']}_flatten")
-    layers[node_name] = reshaped_input
+    if flatten_axis == 1:
+        # Standard flatten from axis 1 — use Keras Flatten layer
+        layers[node_name] = keras.layers.Flatten(
+            name=f"{params['cleaned_name']}_flatten")(input_0)
+    else:
+        # Non-standard flatten axis: compute target shape as [-1, prod(shape[axis:])]
+        # Use Reshape with -1 for the batch portion
+        input_shape = input_0.shape  # static shape
+        if all(d is not None for d in input_shape[flatten_axis:]):
+            import numpy as np
+            tail = int(np.prod(input_shape[flatten_axis:]))
+            layers[node_name] = keras.layers.Reshape(
+                (-1, tail),
+                name=f"{params['cleaned_name']}_flatten")(input_0)
+        else:
+            # Dynamic shape fallback: use a Lambda layer
+            import numpy as np
+            def _flatten_dynamic(x, axis=flatten_axis):
+                shape = tf.shape(x)
+                before = tf.reduce_prod(shape[:axis])
+                after = tf.reduce_prod(shape[axis:])
+                return tf.reshape(x, [before, after])
+            layers[node_name] = keras.layers.Lambda(
+                _flatten_dynamic,
+                name=f"{params['cleaned_name']}_flatten")(input_0)
 
 
 def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
@@ -577,7 +599,7 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
     nearest_mode = params.get('nearest_mode', b'round_prefer_floor')
     if len(node.input) == 4:
         sizes = layers[node.input[3]]
-    if roi:
+    if roi is not None and (not hasattr(roi, 'size') or roi.size > 0):
         raise Exception("Resize with roi not supported")
     if params['mode'] == b'nearest':
         resize_method = tf.image.ResizeMethod.NEAREST_NEIGHBOR
@@ -599,7 +621,7 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
                                            name=f"{params['cleaned_name']}_resize_channels_last")(input_tensor)  # (B, W, H, C)
     shape = tf_cast(tf_shape(input_tensor, tf_name=f"{params['cleaned_name']}_resize_shape"), tf.int32,
                     tf_name=f"{params['cleaned_name']}_resize_cast")
-    if shape.shape != 4:
+    if rank != 4:
       raise Exception("resize layer for input tensor with rank != 4 is not supported")
     if isinstance(sizes, KerasTensor) or isinstance(scales, KerasTensor):
         tf_resize_shapes = tf_zeros_like(shape, tf_name=f"{params['cleaned_name']}_resize_zeros_like")
@@ -647,11 +669,14 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
         if len(scales) > 0:
             for i, axis in enumerate(axes):
                 if scales[i] != 1:
-                    tf_resize_shapes[axis - 2] = tf_cast(scales[i] * tf_cast(tf_resize_shapes[axis - 2],
-                                                                             tf.float32,
-                                                                             tf_name=f"{params['cleaned_name']}_resize_cast_5_ax_{i}"),
-                                                         tf.int32,
-                                                         tf_name=f"{params['cleaned_name']}_resize_cast_6_ax_{i}")
+                    tf_resize_shapes[axis - 2] = tf_cast(
+                        tf_multiply(float(scales[i]),
+                                    tf_cast(tf_resize_shapes[axis - 2],
+                                            tf.float32,
+                                            tf_name=f"{params['cleaned_name']}_resize_cast_5_ax_{i}"),
+                                    tf_name=f"{params['cleaned_name']}_resize_multiply_2_ax_{i}"),
+                        tf.int32,
+                        tf_name=f"{params['cleaned_name']}_resize_cast_6_ax_{i}")
         else:
             for i, axis in enumerate(axes):
                 if sizes[i] != input_tensor.shape[axis]:
@@ -662,12 +687,12 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
 
     if (
         resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR
-        and isinstance(resize_size, keras.engine.keras_tensor.KerasTensor)
+        and isinstance(resize_size, KerasTensor)
         and nearest_mode.decode() == "floor"
     ):
         logger.warning("floor nearest mode will result in faulty conversion")
     if resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR and nearest_mode.decode() == 'floor'\
-        and not isinstance(resize_size, keras.engine.keras_tensor.KerasTensor):
+        and not isinstance(resize_size, KerasTensor):
         if not isinstance(resize_size, np.ndarray) :
             resize_size = np.array(resize_size)
 

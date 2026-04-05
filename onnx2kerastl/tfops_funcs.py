@@ -116,6 +116,8 @@ def named_tfop(func: Callable):
     def wrapped_function(*args, tf_name=None, **kwargs):
         if tf_name is None or tf_name == "" or not isinstance(tf_name, str):
             tf_name = func.__name__ if hasattr(func, '__name__') else "unnamed_op"
+        # Keras 3 forbids '/' in layer names; sanitize
+        tf_name = tf_name.replace("/", "_")
 
         if not _has_keras_tensor(*args, **kwargs):
             # No KerasTensors — call directly (numpy/eager mode)
