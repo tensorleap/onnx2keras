@@ -320,7 +320,8 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                 input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
                 input_0_shape = input_0.shape
                 if len(input_0_shape) > 0:
-                    first_mismatch = np.argmin(np.array(input_0_shape[:len(input_1)]) == input_1)
+                    min_len = min(len(input_0_shape), len(input_1))
+                    first_mismatch = np.argmin(np.array(input_0_shape[:min_len]) == input_1[:min_len])
                 else:  # does not need to reshape dynamicalyy (skip next section)
                     first_mismatch = 0
                 if (input_1 == None).any() and (np.array(input_0_shape) == None).any() and len(input_1) < len(
