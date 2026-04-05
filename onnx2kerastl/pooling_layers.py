@@ -3,7 +3,7 @@ import logging
 
 from .utils import ensure_tf_type, is_numpy
 from .tfops_funcs import tf_reshape, tf_rank, tf_concat, tf_shape, tf_cast, tf_image_crop_and_resize, tf_ones, \
-    tf_nn_avg_pool, tf_nn_max_pool
+    tf_nn_avg_pool, tf_nn_max_pool, tf_strided_slice
 import numpy as np
 import string
 import random
@@ -107,13 +107,22 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
             name=f"{params['cleaned_name']}_maxpool",
             data_format='channels_last'
         )
+    elif len(kernel_shape) == 3 and data_fmt == 'channels_first':
+        pooling = keras.layers.MaxPooling3D(
+            pool_size=kernel_shape,
+            strides=stride_shape,
+            padding=pad,
+            name=f"{params['cleaned_name']}_maxpool",
+            data_format='channels_last'
+        )
+        use_permute = True
     else:
         pooling = keras.layers.MaxPooling3D(
             pool_size=kernel_shape,
             strides=stride_shape,
             padding=pad,
             name=f"{params['cleaned_name']}_maxpool",
-            data_format='channels_first'
+            data_format='channels_last'
         )
     ceil_mode = params.get('ceil_mode', False)
     if ceil_mode:
@@ -136,10 +145,16 @@ def convert_maxpool(node, params, layers, lambda_func, node_name, keras_name):
                     ((0, padding[0]), (0, padding[1]), (0, padding[2])), name=f"{params['cleaned_name']}_pre")(input_0)
             input_0 = layers[node_name + "_pre_" + rand_string]
     if use_permute:
-        permuted = keras.layers.Permute((2, 3, 1),
+        if len(kernel_shape) == 2:
+            perm_to_last = (2, 3, 1)
+            perm_to_first = (3, 1, 2)
+        else:  # 3D
+            perm_to_last = (2, 3, 4, 1)
+            perm_to_first = (4, 1, 2, 3)
+        permuted = keras.layers.Permute(perm_to_last,
                                         name=f"{params['cleaned_name']}_maxpool_permute_1")(input_0)
         pooled = pooling(permuted)
-        layers[node_name] = keras.layers.Permute((3, 1, 2),
+        layers[node_name] = keras.layers.Permute(perm_to_first,
                                                  name=f"{params['cleaned_name']}_maxpool_permute_2")(pooled)
     else:
         layers[node_name] = pooling(input_0)
@@ -303,56 +318,43 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
     else:
         in_tensor = x
 
-    def target_layer(composed_input, to_sort=to_sort, axis=axis):
-        in_tensor = composed_input[..., :-1]
-        k = composed_input[..., -1]
-        for i in range(len(k.shape)):
-            k = k[0]
-        k = tf.cast(k, tf.int32)
-        rank = len(in_tensor.shape)
+    in_rank = len(in_tensor.shape)
+    pos_axis = axis if axis > 0 else in_rank - 1
+    k_int = int(k) if is_numpy(k) else k
 
-        if axis >= rank - 1 or axis == -1:
-            permuted = in_tensor
+    def topk_fn(x, k_val=k_int, to_sort=to_sort, axis=pos_axis):
+        rank = len(x.shape)
+        if axis >= rank - 1:
+            permuted = x
         else:
-            ord_permute = np.arange(rank)
+            ord_permute = list(range(rank))
             ord_permute[axis] = rank - 1
             ord_permute[-1] = axis
-            permuted = tf.transpose(in_tensor, ord_permute)
+            permuted = tf.transpose(x, ord_permute)
 
-        topk_res = tf.math.top_k(permuted, k=k, sorted=to_sort)
+        topk_res = tf.math.top_k(permuted, k=k_val, sorted=to_sort)
         values_pre_permute = topk_res[0]
         indices_pre_permute = topk_res[1]
         topk_concat = tf.stack([values_pre_permute, tf.cast(indices_pre_permute, tf.float32)])
-        if axis >= rank - 1 or axis == -1:
+        if axis >= rank - 1:
             out = topk_concat
         else:
-            ord_permute = [0] + (ord_permute + 1).tolist()
-            out = tf.transpose(topk_concat, ord_permute)
+            inv_perm = [0] + [p + 1 for p in ord_permute]
+            out = tf.transpose(topk_concat, inv_perm)
         return out
-    in_shape = tf_shape(in_tensor, tf_name=f"{params['cleaned_name']}_topk_in_shape")
-    k_needed_shape_possible_keras_tensor = tf_concat(
-            [(in_shape)[:-1],[1]], axis=-1,tf_name=f"{params['cleaned_name']}_topk_k_needed_shape")
 
-    if hasattr(k_needed_shape_possible_keras_tensor, "_inferred_value"): #is keras tensor
-        k_needed_shape = k_needed_shape_possible_keras_tensor._inferred_value
-    else:
-        k_needed_shape = k_needed_shape_possible_keras_tensor
-    k_unsqueezed = tf_ones(k_needed_shape, tf_name=f"{params['cleaned_name']}_topk_k_shape")*\
-                   tf_cast(k, tf.float32, tf_name=f"{params['cleaned_name']}_topk_k_cast")
-    k_reshaped = tf_cast(k_unsqueezed, in_tensor.dtype, tf_name=f"{params['cleaned_name']}_topk_k_reshaped")
-    composed_input = tf_concat([in_tensor, k_reshaped], axis=-1,
-                               tf_name=f"{params['cleaned_name']}_topk_k_concat")
-    lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_topk")
-    result = lambda_layer(composed_input)
-    pos_axis = axis if axis > 0 else in_shape.shape[0]-1
-    new_shape = tf_concat([in_shape[:pos_axis], [k], in_shape[pos_axis+1:]], axis=-1,
-                          tf_name=f"{params['cleaned_name']}_topk_output_shape")
-    values = tf_reshape(result[0], new_shape,
+    lambda_layer = keras.layers.Lambda(topk_fn, name=f"{params['cleaned_name']}_topk")
+    result = lambda_layer(in_tensor)
+    # result[0] = values, result[1] = indices (as float)
+    # Use static shape to build output shape
+    static_shape = list(in_tensor.shape)
+    static_shape[pos_axis] = k_int
+    values = tf_reshape(result[0], [-1] + static_shape[1:],
                         tf_name=f"{params['cleaned_name']}_topk_values_reshape")
     indices = tf_reshape(tf_cast(result[1],
                                  tf.int32,
                                  tf_name=f"{params['cleaned_name']}_topk_indices_cast"),
-                         new_shape,
+                         [-1] + static_shape[1:],
                          tf_name=f"{params['cleaned_name']}_topk_indices_reshape")
     if not largest:
         out_tensor = -values

@@ -15,11 +15,11 @@ class SplitSection(torch.nn.Module):
         return torch.split(x, [5, 5], dim=-1)
 
 
-@pytest.mark.parametrize('opset_version', [12, 14])
+@pytest.mark.parametrize('opset_version', [18, 25])
 def test_split_v8(opset_version):
     model = SplitSection()
     inpt = torch.ones([1, 10, 10])
-    torch.onnx.export(model, inpt, 'split_model.onnx', opset_version=opset_version)
+    torch.onnx.export(model, inpt, 'split_model.onnx', opset_version=opset_version, input_names=['tensor'])
     onnx_model = onnx.load('split_model.onnx')
     keras_model = onnx_to_keras(onnx_model, ['tensor'], name_policy='attach_weights_name').converted_model
     final_model = convert_channels_first_to_last(keras_model, ['tensor'])

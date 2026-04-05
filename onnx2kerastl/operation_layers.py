@@ -15,7 +15,7 @@ from .tfops_funcs import tf_math_abs, tf_clip_by_value, tf_math_negative, K_mean
     tf_bitwise_invert, tf_bitwise_bitwise_and, tf_bitwise_bitwise_or, tf_bitwise_bitwise_xor, tf_cos, \
     tf_math_greater, tf_math_greater, tf_math_greater_equal, tf_logical_and, tf_math_logical_xor, tf_math_logical_or, \
     tf_argmin, tf_math_is_inf, tf_math_is_nan, tf_size, tf_not_equal, tf_where, tf_transpose, tf_gather_nd, \
-    tf_multiply, tf_image_non_max_suppression, tf_ones_like, tf_stack, tf_concat
+    tf_multiply, tf_image_non_max_suppression, tf_ones_like, tf_stack, tf_concat, tf_math_cumsum
 
 # Handle python 2.7 import error
 try:
@@ -643,7 +643,8 @@ def convert_less_equal(node, params, layers, lambda_func, node_name, keras_name)
 
 
 def convert_bitwise_not(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = tf_bitwise_invert(tf.cast(layers[node.input[0]], tf.int32),
+    layers[node_name] = tf_bitwise_invert(tf_cast(layers[node.input[0]], tf.int32,
+                                                   tf_name=f"{params['cleaned_name']}_bitwise_not_cast"),
                                           tf_name=f"{params['cleaned_name']}_bitwise_not")
 
 
@@ -724,8 +725,9 @@ def convert_trilu(node, params, layers, lambda_func, node_name, keras_name):
 def convert_cumsum(node, params, layers, lambda_func, node_name, keras_name):
     exclusive = bool(params.get("exclusive", 0))
     reverse = bool(params.get("reverse", 0))
-    layers[node_name] = tf.math.cumsum(layers[node.input[0]], layers[node.input[1]],
-                                       exclusive=exclusive, reverse=reverse)
+    layers[node_name] = tf_math_cumsum(layers[node.input[0]], layers[node.input[1]],
+                                       exclusive=exclusive, reverse=reverse,
+                                       tf_name=f"{params['cleaned_name']}_cumsum")
 
 
 def convert_is_inf(node, params, layers, lambda_func, node_name, keras_name):
@@ -739,7 +741,11 @@ def convert_is_nan(node, params, layers, lambda_func, node_name, keras_name):
 
 
 def convert_size(node, params, layers, lambda_func, node_name, keras_name):
-    layers[node_name] = tf_size(layers[node.input[0]], tf_name=f"{params['cleaned_name']}_size")
+    input_0 = layers[node.input[0]]
+    if isinstance(input_0, keras.KerasTensor):
+        layers[node_name] = keras.ops.size(input_0)
+    else:
+        layers[node_name] = tf_size(input_0, tf_name=f"{params['cleaned_name']}_size")
 
 
 def convert_non_zero(node, params, layers, lambda_func, node_name, keras_name):

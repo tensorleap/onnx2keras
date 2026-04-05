@@ -67,7 +67,7 @@ class OneHot():
                 helper.make_tensor_value_info("one_hot_encoded", TensorProto.INT64, output_shape)
             ]
 
-        ))
+        ), opset_imports=[helper.make_opsetid("", 18)])
         return model
 
 

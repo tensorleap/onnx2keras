@@ -1,7 +1,7 @@
 import keras
 import tensorflow as tf
 from .tfops_funcs import tf_shape, tf_expand_dims, tf_cast, tf_reshape,\
-    tf_math_minimum, tf_math_maximum, tf_range, tf_gather, tf_size, tf_math_floor, tf_concat
+    tf_math_minimum, tf_math_maximum, tf_range, tf_gather, tf_size, tf_math_floor, tf_concat, tf_strided_slice
 
 
 def convert_range(node, params, layers, lambda_func, node_name, keras_name):
@@ -187,12 +187,20 @@ def convert_unique(node, params, layers, lambda_func, node_name, keras_name):
 
     lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_unique")
     lambda_res = lambda_layer(lambda_input)
-    rev_idx = lambda_res[:rev_idx_length]
+    # Use tf_strided_slice instead of Python slicing to avoid KerasTensor __getitem__ issues
+    rev_idx = tf_strided_slice(lambda_res, [0], [rev_idx_length],
+                                tf_name=f"{params['cleaned_name']}_unique_rev_idx_slice")
     lambda_length = tf_size(lambda_res, tf_name=f"{params['cleaned_name']}_unique_size_2")
     remainder = tf_cast((lambda_length - rev_idx_length) / 3, tf.int32, tf_name=f"{params['cleaned_name']}_unique_cast1")  # not working need to fix
-    count = tf_cast(lambda_res[-remainder:], tf.int32, tf_name=f"{params['cleaned_name']}_unique_cast2")
-    idx = tf_cast(lambda_res[-2 * remainder:-remainder], tf.int32, tf_name=f"{params['cleaned_name']}_unique_cast3")
-    res = tf_cast(lambda_res[-3 * remainder:-2 * remainder], tf.int32, tf_name=f"{params['cleaned_name']}_unique_cast4")
+    count = tf_cast(tf_strided_slice(lambda_res, [lambda_length - remainder], [lambda_length],
+                                      tf_name=f"{params['cleaned_name']}_unique_count_slice"),
+                    tf.int32, tf_name=f"{params['cleaned_name']}_unique_cast2")
+    idx = tf_cast(tf_strided_slice(lambda_res, [lambda_length - 2 * remainder], [lambda_length - remainder],
+                                    tf_name=f"{params['cleaned_name']}_unique_idx_slice"),
+                  tf.int32, tf_name=f"{params['cleaned_name']}_unique_cast3")
+    res = tf_cast(tf_strided_slice(lambda_res, [lambda_length - 3 * remainder], [lambda_length - 2 * remainder],
+                                    tf_name=f"{params['cleaned_name']}_unique_res_slice"),
+                  tf.int32, tf_name=f"{params['cleaned_name']}_unique_cast4")
     layers[keras_name[0]] = res
     layers[keras_name[1]] = idx
     layers[keras_name[2]] = rev_idx

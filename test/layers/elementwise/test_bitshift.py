@@ -34,7 +34,7 @@ class BitShift():
                 helper.make_tensor_value_info("bitshifted", TensorProto.UINT64, named_input)
             ]
 
-        ))
+        ), opset_imports=[helper.make_opsetid("", 25)])
         return model
 
 

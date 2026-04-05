@@ -87,6 +87,9 @@ def check_torch_keras_error(model, k_model, input_np, epsilon=1e-5, change_order
         # to proper work with Lambda layers that transpose weights based on image_data_format
         keras.backend.set_image_data_format("channels_last")
 
+        # Convert model from channels_first to channels_last including inputs/outputs
+        k_model = convert_channels_first_to_last(k_model, should_transform_inputs_and_outputs=True)
+
         _input_np = []
         for i in input_np:
             axes = list(range(len(i.shape)))
@@ -99,10 +102,11 @@ def check_torch_keras_error(model, k_model, input_np, epsilon=1e-5, change_order
         if not isinstance(keras_output, list):
             keras_output = [keras_output]
 
-        # change image data format if output shapes are different (e.g. the same for global_avgpool2d)
+        # The model now outputs in channels_last format, transpose back to channels_first for comparison
         _koutput = []
         for i, k in enumerate(keras_output):
-            if k.shape != pytorch_output[i].shape:
+            if len(k.shape) > 2:
+                # channels_last -> channels_first
                 axes = list(range(len(k.shape)))
                 axes = axes[0:1] + axes[-1:] + axes[1:-1]
                 k = np.transpose(k, axes)

@@ -1,6 +1,7 @@
 import logging
 
 import keras
+import numpy as np
 import tensorflow as tf
 
 from .utils import ensure_tf_type
@@ -272,7 +273,11 @@ def convert_prelu(node, params, layers, lambda_func, node_name, keras_name):
 
     prelu = keras.layers.PReLU(shared_axes=shared_axes, name=f"{params['cleaned_name']}_prelu")
     layers[node_name] = prelu(input_0)
-    W = W.reshape(prelu.get_weights()[0].shape)
+    target_shape = prelu.get_weights()[0].shape
+    if hasattr(W, 'numpy'):
+        W = W.numpy().reshape(target_shape)
+    else:
+        W = np.reshape(W, target_shape)
     prelu.set_weights([W])
 
 

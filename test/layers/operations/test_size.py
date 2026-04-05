@@ -26,7 +26,7 @@ class OnnxSize():
                 helper.make_tensor_value_info("test_out", TensorProto.INT64, [])
             ]
 
-        ))
+        ), opset_imports=[helper.make_opsetid("", 25)])
         return model
 
 

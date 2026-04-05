@@ -21,7 +21,8 @@ def convert_constant(node, params, layers, lambda_func, node_name, keras_name):
 def convert_constant_of_shape(node, params, layers, lambda_func, node_name, keras_name):
     value = params.get('value')
     if value is None:
-        raise NotImplementedError("ConstantOfShape should have a value param")
+        # Per ONNX spec, default value is 0.0 (float32) when not specified
+        value = np.array([0.0], dtype=np.float32)
 
     input_0 = layers[node.input[0]]
 
@@ -41,15 +42,46 @@ def convert_constant_of_shape(node, params, layers, lambda_func, node_name, kera
 
 
 
+class _OneHotLayer(keras.layers.Layer):
+    """Custom layer for one_hot that properly reports output shape."""
+    def __init__(self, depth, on_value, off_value, axis=-1, **kwargs):
+        super().__init__(**kwargs)
+        self.depth = depth
+        self.on_value = on_value
+        self.off_value = off_value
+        self.axis = axis
+
+    def call(self, x):
+        return tf.one_hot(x, depth=self.depth, on_value=self.on_value,
+                          off_value=self.off_value, axis=self.axis)
+
+    def compute_output_shape(self, input_shape):
+        input_shape = list(input_shape)
+        if self.axis == -1:
+            return tuple(input_shape + [self.depth])
+        else:
+            return tuple(input_shape[:self.axis] + [self.depth] + input_shape[self.axis:])
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'depth': self.depth,
+            'on_value': self.on_value,
+            'off_value': self.off_value,
+            'axis': self.axis,
+        })
+        return config
+
+
 def convert_one_hot(node, params, layers, lambda_func, node_name, keras_name):
     axis = params.get('axis', -1)
-    layers[node_name] = tf_one_hot(indices=tf_cast(layers[node.input[0]],
-                                                   tf.int64,
-                                                   tf_name=f"{params['cleaned_name']}_onehot_cast"),
-                                   depth=int(layers[node.input[1]]),
-                                   off_value=layers[node.input[2]][0],
-                                   on_value=layers[node.input[2]][1],
-                                   axis=axis,
-                                   tf_name=f"{params['cleaned_name']}_onehot"
-                                   )
+    depth = int(layers[node.input[1]])
+    off_value = float(layers[node.input[2]][0])
+    on_value = float(layers[node.input[2]][1])
+    indices = tf_cast(layers[node.input[0]], tf.int32,
+                      tf_name=f"{params['cleaned_name']}_onehot_cast")
+
+    one_hot_layer = _OneHotLayer(depth=depth, on_value=on_value, off_value=off_value,
+                                  axis=axis, name=f"{params['cleaned_name']}_onehot")
+    layers[node_name] = one_hot_layer(indices)
 

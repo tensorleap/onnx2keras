@@ -64,6 +64,7 @@ class _TFOpLayer(keras.layers.Layer):
         if not isinstance(inputs, (list, tuple)):
             inputs = [inputs]
         restored_args = list(self._frozen_args)
+        restored_kwargs = dict(self._frozen_kwargs)
         input_idx = 0
         for idx_info in self._kt_indices:
             if idx_info[0] == 'arg':
@@ -74,9 +75,17 @@ class _TFOpLayer(keras.layers.Layer):
                 lst[idx_info[2]] = inputs[input_idx]
                 restored_args[idx_info[1]] = lst
                 input_idx += 1
-        return self._func(*restored_args, **self._frozen_kwargs)
+            elif idx_info[0] == 'kwarg':
+                restored_kwargs[idx_info[1]] = inputs[input_idx]
+                input_idx += 1
+        return self._func(*restored_args, **restored_kwargs)
 
     def compute_output_shape(self, input_shape):
+        # When multiple inputs are given as a list, input_shape is a list of shapes.
+        # Most TF ops produce a single output; return the first input's shape as
+        # a reasonable default (handles elementwise ops, reductions, etc.)
+        if isinstance(input_shape, list):
+            return input_shape[0]
         return input_shape
 
     def get_config(self):
@@ -112,6 +121,10 @@ def named_tfop(func: Callable):
                             if _is_keras_tensor(item):
                                 kt_indices.append(('list_arg', i, j))
                                 kt_inputs.append(item)
+                for key, val in kwargs.items():
+                    if _is_keras_tensor(val):
+                        kt_indices.append(('kwarg', key))
+                        kt_inputs.append(val)
 
                 frozen_args = list(args)
                 frozen_kwargs = dict(kwargs)
@@ -237,3 +250,4 @@ tf_nn_avg_pool = named_tfop(tf.nn.avg_pool)
 tf_nn_max_pool = named_tfop(tf.nn.max_pool)
 tf_linalg_matmul = named_tfop(tf.linalg.matmul)
 tf_divide = named_tfop(tf.divide)
+tf_subtract = named_tfop(tf.subtract)

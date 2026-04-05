@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 from .utils import ensure_tf_type
-from .tfops_funcs import tf_math_reduce_mean, tf_math_reduce_variance, tf_sqrt, tf_rank, tf_concat, tf_reshape
+from .tfops_funcs import tf_math_reduce_mean, tf_math_reduce_variance, tf_sqrt, tf_rank, tf_concat, tf_reshape, tf_subtract
 
 
 def convert_batchnorm(node, params, layers, lambda_func, node_name, keras_name):
@@ -92,7 +92,7 @@ def convert_instancenorm(node, params, layers, lambda_func, node_name, keras_nam
     dim_ones = (1,) * (dims_x - 2)
     scale = np.reshape(scale, (-1, *dim_ones))
     bias = np.reshape(bias, (-1, *dim_ones))
-    layers[node_name] = tf.subtract(input_0, mean) * scale / tf_sqrt(var + epsilon, tf_name=f"{params['cleaned_name']}_sqrt")\
+    layers[node_name] = tf_subtract(input_0, mean, tf_name=f"{params['cleaned_name']}_subtract") * scale / tf_sqrt(var + epsilon, tf_name=f"{params['cleaned_name']}_sqrt")\
                         + bias
 
 
