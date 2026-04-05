@@ -92,7 +92,7 @@ def convert_instancenorm(node, params, layers, lambda_func, node_name, keras_nam
     dim_ones = (1,) * (dims_x - 2)
     scale = np.reshape(scale, (-1, *dim_ones))
     bias = np.reshape(bias, (-1, *dim_ones))
-    layers[node_name] = (input_0 - mean) * scale / tf_sqrt(var + epsilon, tf_name=f"{params['cleaned_name']}_sqrt")\
+    layers[node_name] = tf.subtract(input_0, mean) * scale / tf_sqrt(var + epsilon, tf_name=f"{params['cleaned_name']}_sqrt")\
                         + bias
 
 

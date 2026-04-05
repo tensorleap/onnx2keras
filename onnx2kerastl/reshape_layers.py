@@ -740,7 +740,7 @@ def convert_gather_elements(node, params, layers, lambda_func, node_name, keras_
     def torch_gather(x, indices, gather_axis):
         all_indices = tf_where(tf_fill(indices.shape, True, tf_name=f"{params['cleaned_name']}_gather_fill"),
                                tf_name=f"{params['cleaned_name']}_gather_where")
-        gather_locations = tf_reshape(indices, [indices.shape.num_elements()],
+        gather_locations = tf_reshape(indices, [int(np.prod(indices.shape))],
                                       tf_name=f"{params['cleaned_name']}_gather_reshape")
 
         gather_indices = []

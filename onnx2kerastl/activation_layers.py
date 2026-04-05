@@ -272,6 +272,7 @@ def convert_prelu(node, params, layers, lambda_func, node_name, keras_name):
 
     prelu = keras.layers.PReLU(shared_axes=shared_axes, name=f"{params['cleaned_name']}_prelu")
     layers[node_name] = prelu(input_0)
+    W = W.reshape(prelu.get_weights()[0].shape)
     prelu.set_weights([W])
 
 

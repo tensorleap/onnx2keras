@@ -327,8 +327,10 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
 
         import numpy as np
         conf = model.get_config()
+        # Keras 3: config may nest layers under conf['config']['layers']
+        conf_layers = conf.get('layers') or conf.get('config', {}).get('layers', [])
 
-        for layer in conf['layers']:
+        for layer in conf_layers:
             if layer['config'] and 'shared_axes' in layer['config']:
                 # TODO: check axes first (if it's not 4D tensor)
                 layer['config']['shared_axes'] = [1, 2]
@@ -359,7 +361,7 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
                     axis = axis[0]
                 layer['config']['axis'] = change_ord_axes_map.get(axis, layer['config']['axis'])
 
-        for layer in conf['layers']:
+        for layer in conf_layers:
             if 'function' in layer['config'] and layer['config']['function'][1] is not None:
                 kerasf = list(layer['config']['function'])
                 dargs = list(kerasf[1])
@@ -397,10 +399,10 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
         keras.backend.set_image_data_format('channels_last')
         model_tf_ordering = keras.models.Model.from_config(conf, custom_objects=onnx_custom_layers)
 
-        for dst_layer, src_layer, conf in zip(model_tf_ordering.layers, model.layers, conf['layers']):
+        for dst_layer, src_layer, conf_layer in zip(model_tf_ordering.layers, model.layers, conf_layers):
             W = src_layer.get_weights()
             # TODO: check axes first (if it's not 4D tensor)
-            if conf['config'] and 'shared_axes' in conf['config']:
+            if conf_layer['config'] and 'shared_axes' in conf_layer['config']:
                 W[0] = W[0].transpose(1, 2, 0)
             dst_layer.set_weights(W)
 

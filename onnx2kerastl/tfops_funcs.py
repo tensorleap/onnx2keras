@@ -49,6 +49,42 @@ def _set_layer_name(result, tf_name):
             pass
 
 
+class _TFOpLayer(keras.layers.Layer):
+    """Wraps a TF function as a Keras Layer. Unlike Lambda, call() receives real
+    tensors (not KerasTensors) so any TF op can be used inside."""
+
+    def __init__(self, func, frozen_args, frozen_kwargs, kt_indices, **kwargs):
+        super().__init__(**kwargs)
+        self._func = func
+        self._frozen_args = frozen_args
+        self._frozen_kwargs = frozen_kwargs
+        self._kt_indices = kt_indices
+
+    def call(self, inputs):
+        if not isinstance(inputs, (list, tuple)):
+            inputs = [inputs]
+        restored_args = list(self._frozen_args)
+        input_idx = 0
+        for idx_info in self._kt_indices:
+            if idx_info[0] == 'arg':
+                restored_args[idx_info[1]] = inputs[input_idx]
+                input_idx += 1
+            elif idx_info[0] == 'list_arg':
+                lst = list(restored_args[idx_info[1]])
+                lst[idx_info[2]] = inputs[input_idx]
+                restored_args[idx_info[1]] = lst
+                input_idx += 1
+        return self._func(*restored_args, **self._frozen_kwargs)
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+    def get_config(self):
+        config = super().get_config()
+        config['func_name'] = getattr(self._func, '__name__', str(self._func))
+        return config
+
+
 def named_tfop(func: Callable):
     def wrapped_function(*args, tf_name=None, **kwargs):
         if tf_name is None or tf_name == "" or not isinstance(tf_name, str):
@@ -63,8 +99,8 @@ def named_tfop(func: Callable):
             result = func(*args, **kwargs)
         except (ValueError, TypeError) as e:
             if "KerasTensor" in str(e):
-                # Op doesn't support KerasTensors — wrap in Lambda
-                # Collect KerasTensor inputs and non-tensor args
+                # Op doesn't support KerasTensors — wrap in a Layer subclass
+                # (not Lambda, because Lambda traces with KerasTensors too)
                 kt_inputs = []
                 kt_indices = []
                 for i, a in enumerate(args):
@@ -80,21 +116,7 @@ def named_tfop(func: Callable):
                 frozen_args = list(args)
                 frozen_kwargs = dict(kwargs)
 
-                def lambda_fn(*inputs):
-                    restored_args = list(frozen_args)
-                    input_idx = 0
-                    for idx_info in kt_indices:
-                        if idx_info[0] == 'arg':
-                            restored_args[idx_info[1]] = inputs[input_idx]
-                            input_idx += 1
-                        elif idx_info[0] == 'list_arg':
-                            lst = list(restored_args[idx_info[1]])
-                            lst[idx_info[2]] = inputs[input_idx]
-                            restored_args[idx_info[1]] = lst
-                            input_idx += 1
-                    return func(*restored_args, **frozen_kwargs)
-
-                layer = keras.layers.Lambda(lambda_fn, name=tf_name)
+                layer = _TFOpLayer(func, frozen_args, frozen_kwargs, kt_indices, name=tf_name)
                 if len(kt_inputs) == 1:
                     result = layer(kt_inputs[0])
                 else:
