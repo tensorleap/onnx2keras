@@ -123,7 +123,28 @@ class _TFOpLayer(keras.layers.Layer):
                 self._frozen_args = saved_args
                 self._frozen_kwargs = saved_kwargs
         except Exception:
-            # Fallback: return the first input shape unchanged
+            # Fallback: for concat, compute concatenated shape; for others return first input
+            func_name = getattr(self._func, '__name__', '')
+            if func_name == 'concat' and isinstance(input_shape, list) and len(input_shape) >= 2:
+                # Determine axis from frozen_kwargs or frozen_args
+                axis = self._frozen_kwargs.get('axis')
+                if axis is None:
+                    for a in self._frozen_args:
+                        if isinstance(a, (int, np.integer)):
+                            axis = int(a)
+                if axis is not None:
+                    axis = int(axis)
+                if axis is not None:
+                    result = list(input_shape[0])
+                    if axis < 0:
+                        axis = len(result) + axis
+                    if 0 <= axis < len(result):
+                        dims = [s[axis] for s in input_shape]
+                        if all(d is not None for d in dims):
+                            result[axis] = sum(dims)
+                        else:
+                            result[axis] = None
+                    return tuple(result)
             if isinstance(input_shape, list):
                 return input_shape[0]
             return input_shape

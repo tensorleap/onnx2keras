@@ -6,6 +6,39 @@ import tensorflow as tf
 from keras import KerasTensor
 from keras.layers import Lambda
 from typing import Union
+
+
+class NearestResizeLayer(keras.layers.Layer):
+    """Serializable nearest-neighbor resize layer (replaces Lambda closure).
+
+    Uses TF's resize_nearest_neighbor during conversion (tolerates wrong static
+    shapes from upstream _TFOpLayer), but stores params for engine reconstruction.
+    """
+
+    def __init__(self, target_height, target_width, half_pixel_centers=False, **kwargs):
+        super().__init__(**kwargs)
+        self.target_height = int(target_height)
+        self.target_width = int(target_width)
+        self.half_pixel_centers = half_pixel_centers
+
+    def call(self, x):
+        from tensorflow.python.ops.image_ops import resize_nearest_neighbor
+        return resize_nearest_neighbor(
+            x, [self.target_height, self.target_width],
+            half_pixel_centers=self.half_pixel_centers)
+
+    def compute_output_shape(self, input_shape):
+        # input is NHWC: (batch, H, W, C)
+        return (input_shape[0], self.target_height, self.target_width, input_shape[3])
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'target_height': self.target_height,
+            'target_width': self.target_width,
+            'half_pixel_centers': self.half_pixel_centers,
+        })
+        return config
 from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
 from .tfops_funcs import tf_reshape, tf_shape, tf_cast, tf_stack, tf_image_resize, tf_strided_slice,\
     tf_squeeze, tf_transpose, tf_where, tf_gather, tf_range, tf_reduce_sum, tf_abs, tf_expand_dims, tf_concat, \
@@ -709,15 +742,11 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
         if not isinstance(resize_size, np.ndarray):
             resize_size = np.array(resize_size)
 
-        # Encode resize_size in the Lambda name so the engine can reconstruct it
         resize_h, resize_w = int(resize_size[0]), int(resize_size[1])
-        def target_layer(x, resize_size=resize_size):
-            from tensorflow.python.ops.image_ops import resize_nearest_neighbor
-            return resize_nearest_neighbor(x, resize_size, half_pixel_centers=False)
-        lambda_layer = keras.layers.Lambda(
-            target_layer,
-            name=f"{params['cleaned_name']}_resize_{resize_h}x{resize_w}_lambda")
-        resized = lambda_layer(to_channel_last)
+        resize_layer = NearestResizeLayer(
+            resize_h, resize_w,
+            name=f"{params['cleaned_name']}_resize_{resize_h}x{resize_w}")
+        resized = resize_layer(to_channel_last)
     else:
         # Use keras.ops.image.resize for static sizes (correct shape propagation)
         method_map = {
