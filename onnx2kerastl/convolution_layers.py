@@ -308,30 +308,21 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
             channels_idx = 1
         else:
             channels_idx = -1
-        if conv_input.shape[channels_idx] is None:  # This will not serialize well unless we reshape input
+        # Determine correct input channels from weights if available
+        expected_in_channels = conv_channels
+        if weights is not None:
+            grp = getattr(conv, 'groups', 1)
+            expected_in_channels = weights[0].shape[-2] * grp
+
+        if conv_input.shape[channels_idx] is None or conv_input.shape[channels_idx] != expected_in_channels:
+            # Reshape input to match expected channels (dynamic shape or shape mismatch)
             conv_input_shape = tf_shape(conv_input, tf_name=f"{params['cleaned_name']}_conv_wrap_shape_1")
-            conv_input = tf_reshape(conv_input, [*conv_input_shape[:channels_idx], conv_channels,
+            conv_input = tf_reshape(conv_input, [*conv_input_shape[:channels_idx], expected_in_channels,
                                                  *conv_input_shape[channels_idx + 1:]],
                                     tf_name=f"{params['cleaned_name']}_conv_wrap_reshape_2")
-        if conv_input.shape[-1] is None:
-            # Build with correct channels: from weights if available, else conv_channels
-            build_channels = conv_channels
-            if weights is not None:
-                # Weight shape is (H, W, in_channels_per_group, out_channels) for channels_first
-                n_groups = conv._init_kwargs.get('groups', 1) if hasattr(conv, '_init_kwargs') else getattr(conv, 'groups', 1)
-                build_channels = weights[0].shape[-2] * n_groups
-            conv.build((None, build_channels, *conv_input.shape[2:]))
         result = conv(conv_input)
         if weights is not None:
-            try:
-                conv.set_weights(weights)
-            except ValueError:
-                # Keras 3 grouped conv may expect different weight shape; try reshaping
-                expected_shapes = [w.shape for w in conv.get_weights()]
-                reshaped = []
-                for w, es in zip(weights, expected_shapes):
-                    reshaped.append(w.reshape(es) if w.shape != es else w)
-                conv.set_weights(reshaped)
+            conv.set_weights(weights)
     return result
 
 
