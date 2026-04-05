@@ -666,25 +666,37 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
                                axis=0,
                                tf_name=f"{params['cleaned_name']}_resize_stack")
     else:
-        tf_resize_shapes = [shape[i] for i in range(2, 4)] # (W, H) for input tensor of shape [B, C, W, H]
+        # Use static shape when available (avoids _TFOpLayer shape propagation issues)
+        static_shape = input_tensor.shape
+        if all(s is not None for s in static_shape[2:4]):
+            tf_resize_shapes = [int(static_shape[2]), int(static_shape[3])]
+        else:
+            tf_resize_shapes = [shape[i] for i in range(2, 4)]
         if len(scales) > 0:
             for i, axis in enumerate(axes):
                 if scales[i] != 1:
-                    tf_resize_shapes[axis - 2] = tf_cast(
-                        tf_multiply(float(scales[i]),
-                                    tf_cast(tf_resize_shapes[axis - 2],
-                                            tf.float32,
-                                            tf_name=f"{params['cleaned_name']}_resize_cast_5_ax_{i}"),
-                                    tf_name=f"{params['cleaned_name']}_resize_multiply_2_ax_{i}"),
-                        tf.int32,
-                        tf_name=f"{params['cleaned_name']}_resize_cast_6_ax_{i}")
+                    if isinstance(tf_resize_shapes[axis - 2], (int, np.integer)):
+                        tf_resize_shapes[axis - 2] = int(float(scales[i]) * tf_resize_shapes[axis - 2])
+                    else:
+                        tf_resize_shapes[axis - 2] = tf_cast(
+                            tf_multiply(float(scales[i]),
+                                        tf_cast(tf_resize_shapes[axis - 2],
+                                                tf.float32,
+                                                tf_name=f"{params['cleaned_name']}_resize_cast_5_ax_{i}"),
+                                        tf_name=f"{params['cleaned_name']}_resize_multiply_2_ax_{i}"),
+                            tf.int32,
+                            tf_name=f"{params['cleaned_name']}_resize_cast_6_ax_{i}")
         else:
             for i, axis in enumerate(axes):
                 if sizes[i] != input_tensor.shape[axis]:
                     tf_resize_shapes[axis - 2] = int(sizes[i])
-        resize_size = tf_stack(tf_resize_shapes,
-                               axis=0,
-                               tf_name=f"{params['cleaned_name']}_resize_stack_1")
+        # Use static list if all values are ints, otherwise stack
+        if all(isinstance(s, (int, np.integer)) for s in tf_resize_shapes):
+            resize_size = tf_resize_shapes
+        else:
+            resize_size = tf_stack(tf_resize_shapes,
+                                   axis=0,
+                                   tf_name=f"{params['cleaned_name']}_resize_stack_1")
 
     if (
         resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR
