@@ -290,15 +290,19 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
         input_shape = tf_shape(conv_input, tf_name=f"{params['cleaned_name']}_conv_wrap_shape")
         permuted = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=False),
                                         name=f"{params['cleaned_name']}_conv_wrap_permute_1")(conv_input)
+        # Reshape if channels mismatch (channels_last: channels at -1)
+        if weights is not None:
+            grp_val = partial_func.keywords.get('groups', 1)
+            expected_ch = weights[0].shape[-2] * grp_val
+            if permuted.shape[-1] is not None and permuted.shape[-1] != expected_ch:
+                target = [-1 if s is None else s for s in permuted.shape]
+                target[-1] = expected_ch
+                permuted = tf_reshape(permuted, target,
+                                      tf_name=f"{params['cleaned_name']}_conv_wrap_reshape_ch")
         conv_layer = partial_func(data_format="channels_last")
         conv_res = conv_layer(permuted)
         if weights is not None:
-            try:
-                conv_layer.set_weights(weights)
-            except ValueError:
-                expected_shapes = [w.shape for w in conv_layer.get_weights()]
-                reshaped = [w.reshape(es) if w.shape != es else w for w, es in zip(weights, expected_shapes)]
-                conv_layer.set_weights(reshaped)
+            conv_layer.set_weights(weights)
         result = keras.layers.Permute(calculate_permute_values(len(input_shape), to_channel_first=True),
                                       name=f"{params['cleaned_name']}_conv_wrap_permute_2")(conv_res)
     else:
