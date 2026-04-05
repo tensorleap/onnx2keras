@@ -80,26 +80,48 @@ class _TFOpLayer(keras.layers.Layer):
                 input_idx += 1
         return self._func(*restored_args, **restored_kwargs)
 
+    @staticmethod
+    def _sanitize_arg(arg):
+        """Replace KerasTensors with concrete zeros for shape tracing."""
+        if _is_keras_tensor(arg):
+            shape = [1 if d is None else d for d in arg.shape]
+            return tf.zeros(shape, dtype=arg.dtype)
+        if isinstance(arg, (list, tuple)):
+            sanitized = [_TFOpLayer._sanitize_arg(a) for a in arg]
+            return type(arg)(sanitized)
+        return arg
+
     def compute_output_shape(self, input_shape):
-        # Infer the output shape by tracing the function with concrete TensorSpecs.
+        """Infer output shape by running the function with concrete zero tensors."""
         try:
+            # Build concrete input tensors from input_shape
             if isinstance(input_shape, list):
-                specs = [tf.TensorSpec(shape=s, dtype=tf.float32) for s in input_shape]
+                concrete_inputs = [tf.zeros([1 if d is None else d for d in s]) for s in input_shape]
             else:
-                specs = tf.TensorSpec(shape=input_shape, dtype=tf.float32)
+                concrete_inputs = tf.zeros([1 if d is None else d for d in input_shape])
 
-            @tf.function
-            def _trace(x):
-                if isinstance(x, (list, tuple)):
-                    return self.call(list(x))
-                return self.call(x)
+            # Sanitize frozen_args: replace any remaining KerasTensors with zeros
+            saved_args = self._frozen_args
+            saved_kwargs = self._frozen_kwargs
+            self._frozen_args = [self._sanitize_arg(a) for a in self._frozen_args]
+            self._frozen_kwargs = {k: self._sanitize_arg(v) for k, v in self._frozen_kwargs.items()}
 
-            concrete = _trace.get_concrete_function(specs)
-            out_shape = concrete.output_shapes
-            # out_shape may be a TensorShape or a tuple/list of TensorShapes
-            if isinstance(out_shape, (list, tuple)):
-                return out_shape[0]
-            return out_shape
+            try:
+                if isinstance(concrete_inputs, list):
+                    result = self.call(concrete_inputs)
+                else:
+                    result = self.call(concrete_inputs)
+                out_shape = result.shape
+                # Replace concrete dims that were 1 (from None) back to None
+                out_list = list(out_shape)
+                ref_shape = input_shape[0] if isinstance(input_shape, list) else input_shape
+                for i, d in enumerate(ref_shape):
+                    if d is None and i < len(out_list):
+                        out_list[i] = None
+                return tuple(out_list)
+            finally:
+                self._frozen_args = saved_args
+                self._frozen_kwargs = saved_kwargs
         except Exception:
             # Fallback: return the first input shape unchanged
             if isinstance(input_shape, list):
