@@ -716,10 +716,21 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
         lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_resize_lambda")
         resized = lambda_layer(to_channel_last)
     else:
-        resized = tf_image_resize(to_channel_last,
-                                  size=resize_size,
-                                  method=resize_method,
-                                  tf_name=f"{params['cleaned_name']}_image_resize")
+        # Use keras.ops.image.resize for static sizes (correct shape propagation)
+        method_map = {
+            tf.image.ResizeMethod.NEAREST_NEIGHBOR: 'nearest',
+            tf.image.ResizeMethod.BILINEAR: 'bilinear',
+            tf.image.ResizeMethod.BICUBIC: 'bicubic',
+        }
+        if all(isinstance(s, (int, np.integer)) for s in resize_size) and resize_method in method_map:
+            resized = keras.ops.image.resize(
+                to_channel_last, tuple(int(s) for s in resize_size),
+                interpolation=method_map[resize_method])
+        else:
+            resized = tf_image_resize(to_channel_last,
+                                      size=resize_size,
+                                      method=resize_method,
+                                      tf_name=f"{params['cleaned_name']}_image_resize")
     to_channel_first = keras.layers.Permute((3, 1, 2),
                                             name=f"{params['cleaned_name']}_resize_channels_first")(resized)
     layers[node_name] = to_channel_first
