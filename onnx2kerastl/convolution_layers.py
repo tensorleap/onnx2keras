@@ -313,8 +313,14 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
             conv_input = tf_reshape(conv_input, [*conv_input_shape[:channels_idx], conv_channels,
                                                  *conv_input_shape[channels_idx + 1:]],
                                     tf_name=f"{params['cleaned_name']}_conv_wrap_reshape_2")
-        if conv_input.shape[-1] is None and weights is None:
-            conv.build((None, conv_channels, *conv_input.shape[2:]))
+        if conv_input.shape[-1] is None:
+            # Build with correct channels: from weights if available, else conv_channels
+            build_channels = conv_channels
+            if weights is not None:
+                # Weight shape is (H, W, in_channels_per_group, out_channels) for channels_first
+                n_groups = conv._init_kwargs.get('groups', 1) if hasattr(conv, '_init_kwargs') else getattr(conv, 'groups', 1)
+                build_channels = weights[0].shape[-2] * n_groups
+            conv.build((None, build_channels, *conv_input.shape[2:]))
         result = conv(conv_input)
         if weights is not None:
             try:
