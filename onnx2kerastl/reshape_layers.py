@@ -709,10 +709,15 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
         if not isinstance(resize_size, np.ndarray):
             resize_size = np.array(resize_size)
 
+        # Store resize_size in Lambda arguments for engine to reconstruct
+        resize_h, resize_w = int(resize_size[0]), int(resize_size[1])
         def target_layer(x, resize_size=resize_size):
             from tensorflow.python.ops.image_ops import resize_nearest_neighbor
             return resize_nearest_neighbor(x, resize_size, half_pixel_centers=False)
-        lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_resize_lambda")
+        lambda_layer = keras.layers.Lambda(
+            target_layer,
+            arguments={'resize_h': resize_h, 'resize_w': resize_w},
+            name=f"{params['cleaned_name']}_resize_lambda")
         resized = lambda_layer(to_channel_last)
     else:
         # Use keras.ops.image.resize for static sizes (correct shape propagation)
