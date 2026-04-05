@@ -706,18 +706,14 @@ def convert_resize(node, params, layers, lambda_func, node_name, keras_name):
         logger.warning("floor nearest mode will result in faulty conversion")
     if resize_method == tf.image.ResizeMethod.NEAREST_NEIGHBOR and nearest_mode.decode() == 'floor'\
         and not isinstance(resize_size, KerasTensor):
-        # Use keras.ops.image.resize instead of Lambda closure (serializable for engine rebuild)
-        if all(isinstance(s, (int, np.integer)) for s in resize_size):
-            resized = keras.ops.image.resize(
-                to_channel_last, tuple(int(s) for s in resize_size), interpolation='nearest')
-        else:
-            if not isinstance(resize_size, np.ndarray):
-                resize_size = np.array(resize_size)
-            def target_layer(x, resize_size=resize_size):
-                from tensorflow.python.ops.image_ops import resize_nearest_neighbor
-                return resize_nearest_neighbor(x, resize_size, half_pixel_centers=False)
-            lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_resize_lambda")
-            resized = lambda_layer(to_channel_last)
+        if not isinstance(resize_size, np.ndarray):
+            resize_size = np.array(resize_size)
+
+        def target_layer(x, resize_size=resize_size):
+            from tensorflow.python.ops.image_ops import resize_nearest_neighbor
+            return resize_nearest_neighbor(x, resize_size, half_pixel_centers=False)
+        lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_resize_lambda")
+        resized = lambda_layer(to_channel_last)
     else:
         # Use keras.ops.image.resize for static sizes (correct shape propagation)
         method_map = {
