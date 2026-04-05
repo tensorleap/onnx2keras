@@ -316,9 +316,11 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
 
         if conv_input.shape[channels_idx] is None or conv_input.shape[channels_idx] != expected_in_channels:
             # Reshape input to match expected channels (dynamic shape or shape mismatch)
-            conv_input_shape = tf_shape(conv_input, tf_name=f"{params['cleaned_name']}_conv_wrap_shape_1")
-            conv_input = tf_reshape(conv_input, [*conv_input_shape[:channels_idx], expected_in_channels,
-                                                 *conv_input_shape[channels_idx + 1:]],
+            # Build target shape list using static shape with corrected channels
+            ndim = len(conv_input.shape)
+            target_shape = [-1 if s is None else s for s in conv_input.shape]
+            target_shape[channels_idx] = expected_in_channels
+            conv_input = tf_reshape(conv_input, target_shape,
                                     tf_name=f"{params['cleaned_name']}_conv_wrap_reshape_2")
         result = conv(conv_input)
         if weights is not None:
