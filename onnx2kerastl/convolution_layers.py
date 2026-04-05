@@ -297,8 +297,7 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
             if permuted.shape[-1] is not None and permuted.shape[-1] != expected_ch:
                 target = [-1 if s is None else s for s in permuted.shape]
                 target[-1] = expected_ch
-                permuted = tf_reshape(permuted, target,
-                                      tf_name=f"{params['cleaned_name']}_conv_wrap_reshape_ch")
+                permuted = keras.ops.reshape(permuted, target)
         conv_layer = partial_func(data_format="channels_last")
         conv_res = conv_layer(permuted)
         if weights is not None:
@@ -319,13 +318,11 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
             expected_in_channels = weights[0].shape[-2] * grp
 
         if conv_input.shape[channels_idx] is None or conv_input.shape[channels_idx] != expected_in_channels:
-            # Reshape input to match expected channels (dynamic shape or shape mismatch)
-            # Build target shape list using static shape with corrected channels
-            ndim = len(conv_input.shape)
+            # Reshape input to match expected channels — use keras.ops.reshape
+            # (not tf_reshape/named_tfop which may not update static shape)
             target_shape = [-1 if s is None else s for s in conv_input.shape]
             target_shape[channels_idx] = expected_in_channels
-            conv_input = tf_reshape(conv_input, target_shape,
-                                    tf_name=f"{params['cleaned_name']}_conv_wrap_reshape_2")
+            conv_input = keras.ops.reshape(conv_input, target_shape)
         result = conv(conv_input)
         if weights is not None:
             conv.set_weights(weights)
