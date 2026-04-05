@@ -294,11 +294,13 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
         if weights is not None:
             grp_val = partial_func.keywords.get('groups', 1)
             expected_ch = weights[0].shape[-2] * grp_val
-            if permuted.shape[-1] is not None and permuted.shape[-1] != expected_ch:
-                target = [-1 if s is None else s for s in permuted.shape]
-                target[-1] = expected_ch
-                permuted = keras.ops.reshape(permuted, target)
+            needs_build_fix = (permuted.shape[-1] is not None and permuted.shape[-1] != expected_ch)
+        else:
+            needs_build_fix = False
         conv_layer = partial_func(data_format="channels_last")
+        if needs_build_fix:
+            build_shape = (None, *permuted.shape[1:-1], expected_ch)
+            conv_layer.build(build_shape)
         conv_res = conv_layer(permuted)
         if weights is not None:
             conv_layer.set_weights(weights)
@@ -317,12 +319,14 @@ def permute_wrap_conv_if_constant(partial_func, conv_input, is_constant, conv_ch
             grp = getattr(conv, 'groups', 1)
             expected_in_channels = weights[0].shape[-2] * grp
 
-        if conv_input.shape[channels_idx] is None or conv_input.shape[channels_idx] != expected_in_channels:
-            # Reshape input to match expected channels — use keras.ops.reshape
-            # (not tf_reshape/named_tfop which may not update static shape)
-            target_shape = [-1 if s is None else s for s in conv_input.shape]
-            target_shape[channels_idx] = expected_in_channels
-            conv_input = keras.ops.reshape(conv_input, target_shape)
+        if conv_input.shape[channels_idx] is not None and conv_input.shape[channels_idx] != expected_in_channels:
+            # Static shape disagrees with weights — the upstream layer (e.g. concat via
+            # _TFOpLayer) may have wrong static shape. Force-build conv with correct channels.
+            if data_fmt == 'channels_first':
+                build_shape = (None, expected_in_channels, *conv_input.shape[2:])
+            else:
+                build_shape = (None, *conv_input.shape[1:-1], expected_in_channels)
+            conv.build(build_shape)
         result = conv(conv_input)
         if weights is not None:
             conv.set_weights(weights)
