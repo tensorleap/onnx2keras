@@ -5,7 +5,7 @@ import logging
 from .utils import is_numpy, ensure_tf_type
 from .tfops_funcs import tf_tensor_scatter_nd_update, tf_maximum, tf_minimum, tf_cast, tf_expand_dims, tf_repeat,\
     tf_equal, tf_where, tf_round, tf_sign, tf_abs, tf_math_mod, tf_bitwise_left_shift, tf_bitwise_right_shift,\
-    tf_logical_not, tf_add, tf_divide
+    tf_logical_not, tf_add, tf_divide, tf_multiply, tf_subtract
 import tensorflow as tf
 from tensorflow.python.framework.ops import EagerTensor
 
@@ -95,11 +95,13 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
                     name=params['cleaned_name']
                 )(variable_input)
             else:
-                # Embedding the constant tensor
-                layers[node_name] = keras.layers.Lambda(
-                    lambda x: x + constant_value,
-                    name=params['cleaned_name']
-                )(variable_input)
+                # Non-uniform constant: use tf op so constant is a proper
+                # layer input rather than a pickled Lambda closure
+                # (closures with big np arrays make .h5 save/load very slow).
+                layers[node_name] = tf_add(
+                    variable_input, constant_value,
+                    tf_name=params['cleaned_name'],
+                )
 
         elif not input_0_is_constant and input_1_is_constant:
             # input_0 is variable, input_1 is constant
@@ -114,11 +116,12 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
                     name=params['cleaned_name']
                 )(variable_input)
             else:
-                # Embedding the constant tensor
-                layers[node_name] = keras.layers.Lambda(
-                    lambda x: x + constant_value,
-                    name=params['cleaned_name']
-                )(variable_input)
+                # Non-uniform constant: use tf op so constant is a proper
+                # layer input rather than a pickled Lambda closure.
+                layers[node_name] = tf_add(
+                    variable_input, constant_value,
+                    tf_name=params['cleaned_name'],
+                )
         else:
             # Both inputs are constants; compute the result now
             layers[node_name] = input_0 + input_1
@@ -170,11 +173,12 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
                     name=params['cleaned_name']
                 )(variable_input)
             else:
-                # Cannot avoid embedding the constant tensor
-                layers[node_name] = keras.layers.Lambda(
-                    lambda x: x * constant_value,
-                    name=params['cleaned_name']
-                )(variable_input)
+                # Non-uniform constant: use tf op so constant is a proper
+                # layer input rather than a pickled Lambda closure.
+                layers[node_name] = tf_multiply(
+                    variable_input, constant_value,
+                    tf_name=params['cleaned_name'],
+                )
 
         elif not input_0_is_constant and input_1_is_constant:
             # input_0 is variable, input_1 is constant
@@ -189,11 +193,12 @@ def convert_elementwise_mul(node, params, layers, lambda_func, node_name, keras_
                     name=params['cleaned_name']
                 )(variable_input)
             else:
-                # Cannot avoid embedding the constant tensor
-                layers[node_name] = keras.layers.Lambda(
-                    lambda x: x * constant_value,
-                    name=params['cleaned_name']
-                )(variable_input)
+                # Non-uniform constant: use tf op so constant is a proper
+                # layer input rather than a pickled Lambda closure.
+                layers[node_name] = tf_multiply(
+                    variable_input, constant_value,
+                    tf_name=params['cleaned_name'],
+                )
         else:
             # Both inputs are constants; compute the result now
             layers[node_name] = input_0 * input_1
@@ -250,11 +255,12 @@ def convert_elementwise_sub(node, params, layers, lambda_func, node_name, keras_
                     name=params['cleaned_name']
                 )(variable_input)
             else:
-                # Cannot avoid embedding the constant tensor
-                layers[node_name] = keras.layers.Lambda(
-                    lambda x: constant_value - x,
-                    name=params['cleaned_name']
-                )(variable_input)
+                # Non-uniform constant: use tf op so constant is a proper
+                # layer input rather than a pickled Lambda closure.
+                layers[node_name] = tf_subtract(
+                    constant_value, variable_input,
+                    tf_name=params['cleaned_name'],
+                )
 
         elif not input_0_is_constant and input_1_is_constant:
             # input_0 is variable, input_1 is constant: variable - constant
@@ -269,11 +275,12 @@ def convert_elementwise_sub(node, params, layers, lambda_func, node_name, keras_
                     name=params['cleaned_name']
                 )(variable_input)
             else:
-                # Cannot avoid embedding the constant tensor
-                layers[node_name] = keras.layers.Lambda(
-                    lambda x: x - constant_value,
-                    name=params['cleaned_name']
-                )(variable_input)
+                # Non-uniform constant: use tf op so constant is a proper
+                # layer input rather than a pickled Lambda closure.
+                layers[node_name] = tf_subtract(
+                    variable_input, constant_value,
+                    tf_name=params['cleaned_name'],
+                )
         else:
             # Both inputs are constants; compute the result now
             layers[node_name] = input_0 - input_1
