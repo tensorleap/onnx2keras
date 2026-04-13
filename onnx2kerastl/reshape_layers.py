@@ -350,7 +350,7 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                     elif len(input_1) == 1 and input_1[0] == -1:
                         layers[node_name] = tf_reshape(input_0, [-1], tf_name=f"{params['cleaned_name']}_reshape_1")
                     else:
-                        if len(input_0.shape) == 0 or (
+                        if len(input_0.shape) ==0 or dims_to_set_as_zero is not None or dims_to_keep_unchanged is not None or (
                                 input_0.shape[0] != input_1[0] and input_1[0] != 0):  # keras reshape don't work
                             new_shape = input_1.copy()
                             if dims_to_set_as_zero is not None:

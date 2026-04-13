@@ -9,6 +9,100 @@ from .utils import ensure_tf_type
 from .tfops_funcs import tf_cast, tf_squeeze, tf_transpose, tf_expand_dims
 
 
+def _get_lstm_direction(params):
+    direction = params.get('direction', 'forward')
+    if isinstance(direction, bytes):
+        direction = direction.decode("utf-8")
+    return direction
+
+
+def _prepare_lstm_weights(weights, hidden_size):
+    return np.concatenate([
+        weights[0:hidden_size, :],
+        weights[2 * hidden_size:3 * hidden_size, :],
+        weights[3 * hidden_size:4 * hidden_size, :],
+        weights[hidden_size:2 * hidden_size, :],
+    ]).transpose()
+
+
+def _prepare_lstm_bias(weights_b, hidden_size):
+    weights_b_part1 = weights_b[:4 * hidden_size]
+    weights_b_part2 = weights_b[4 * hidden_size:]
+    bias1 = np.concatenate([
+        weights_b_part1[0:hidden_size],
+        weights_b_part1[2 * hidden_size:3 * hidden_size],
+        weights_b_part1[3 * hidden_size:4 * hidden_size],
+        weights_b_part1[hidden_size:2 * hidden_size],
+    ]).transpose()
+    bias2 = np.concatenate([
+        weights_b_part2[0:hidden_size],
+        weights_b_part2[2 * hidden_size:3 * hidden_size],
+        weights_b_part2[3 * hidden_size:4 * hidden_size],
+        weights_b_part2[hidden_size:2 * hidden_size],
+    ]).transpose()
+    return bias1 + bias2
+
+
+def _get_lstm_states(layers, node, input_tensor, params, num_directions):
+    if len(node.input) <= 5 or node.input[5] == '':
+        initial_h_state = tf.zeros(
+            (num_directions, tf.shape(input_tensor)[0], params['hidden_size']),
+            dtype=input_tensor.dtype
+        )
+    else:
+        initial_h_state = tf_cast(
+            ensure_tf_type(layers[node.input[5]]),
+            input_tensor.dtype,
+            tf_name=f"{params['cleaned_name']}_lstm_cast_h"
+        )
+
+    if len(node.input) <= 6 or node.input[6] == '':
+        initial_c_state = tf.zeros(
+            (num_directions, tf.shape(input_tensor)[0], params['hidden_size']),
+            dtype=input_tensor.dtype
+        )
+    else:
+        initial_c_state = tf_cast(
+            ensure_tf_type(layers[node.input[6]]),
+            input_tensor.dtype,
+            tf_name=f"{params['cleaned_name']}_lstm_cast_c"
+        )
+
+    if num_directions == 1:
+        initial_h_state = tf_squeeze(
+            initial_h_state, axis=0, tf_name=f"{params['cleaned_name']}_lstm_squeeze_h"
+        )
+        initial_c_state = tf_squeeze(
+            initial_c_state, axis=0, tf_name=f"{params['cleaned_name']}_lstm_squeeze_c"
+        )
+
+    return initial_h_state, initial_c_state
+
+
+def _sequence_to_onnx_output(sequence_tensor, num_directions, hidden_size, cleaned_name):
+    if num_directions == 1:
+        sequence_tensor = tf_expand_dims(
+            tf_transpose(sequence_tensor, perm=[1, 0, 2], tf_name=f"{cleaned_name}_lstm_transpose"),
+            axis=1,
+            tf_name=f"{cleaned_name}_lstm_expand_dims"
+        )
+        return sequence_tensor
+
+    forward_sequence = sequence_tensor[:, :, :hidden_size]
+    backward_sequence = sequence_tensor[:, :, hidden_size:]
+    forward_sequence = tf_transpose(
+        forward_sequence, perm=[1, 0, 2], tf_name=f"{cleaned_name}_lstm_forward_transpose"
+    )
+    backward_sequence = tf_transpose(
+        backward_sequence, perm=[1, 0, 2], tf_name=f"{cleaned_name}_lstm_backward_transpose"
+    )
+    return tf.stack([forward_sequence, backward_sequence], axis=1, name=f"{cleaned_name}_lstm_stack")
+
+
+def _states_to_onnx_output(states, cleaned_name, suffix):
+    return tf.stack(states, axis=0, name=f"{cleaned_name}_lstm_{suffix}_state_stack")
+
+
 def convert_lstm(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert convolution layer
@@ -24,66 +118,56 @@ def convert_lstm(node, params, layers, lambda_func, node_name, keras_name):
 
     if node.input[4] != '':
         raise UnsupportedLayer('LSTM with non default sequence_lens')
-    if 'direction' in params:
-        direction = params['direction']
-        if isinstance(direction, bytes):
-            direction = direction.decode("utf-8")
-        if direction != 'forward':
-            raise UnsupportedLayer(f"LSTM with {direction} direction")
+    direction = _get_lstm_direction(params)
+    if direction not in {'forward', 'bidirectional'}:
+        raise UnsupportedLayer(f"LSTM with {direction} direction")
     should_return_state = len(node.output) == 3
+    num_directions = 2 if direction == 'bidirectional' else 1
     input_tensor = tf_transpose(ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name[0]),
                                 perm=[1, 0, 2],
                                 tf_name=f"{params['cleaned_name']}_lstm_first_transpose")
-    weights_w = layers[node.input[1]][0]
-    weights_r = layers[node.input[2]][0]
-    weights_b = layers[node.input[3]][0]
+    weights_w = layers[node.input[1]]
+    weights_r = layers[node.input[2]]
+    if len(node.input) > 3 and node.input[3] != '':
+        weights_b = layers[node.input[3]]
+    else:
+        weights_b = np.zeros((num_directions, 8 * params['hidden_size']), dtype=np.float32)
 
-    initial_h_state = tf_cast(tf_squeeze(ensure_tf_type(layers[node.input[5]]),
-                                         axis=0,
-                                         tf_name=f"{params['cleaned_name']}_lstm_squeeze_h"
-                                         ),
-                              input_tensor.dtype,
-                              tf_name=f"{params['cleaned_name']}_lstm_cast_h")
-    initial_c_state = tf_cast(
-        tf_squeeze(
-            ensure_tf_type(layers[node.input[6]]),
-            axis=0,
-            tf_name=f"{params['cleaned_name']}_lstm_squeeze_c"), input_tensor.dtype,
-        tf_name=f"{params['cleaned_name']}_lstm_cast_c")
+    initial_h_state, initial_c_state = _get_lstm_states(layers, node, input_tensor, params, num_directions)
 
     tf.keras.backend.set_image_data_format("channels_last")
     hidden_size = params['hidden_size']
-    lstm_layer = OnnxLSTM(hidden_size, return_sequences=True, return_lstm_state=should_return_state)
+    lstm_layer = OnnxLSTM(
+        hidden_size,
+        return_sequences=True,
+        return_lstm_state=should_return_state,
+        direction=direction
+    )
     res = lstm_layer(input_tensor, initial_h_state, initial_c_state)
-    # prepare the keras lstm weights from the onnx inputs:
-    w1 = np.concatenate([weights_w[0:hidden_size, :], weights_w[2 * hidden_size:3 * hidden_size, :],
-                         weights_w[3 * hidden_size:4 * hidden_size, :],
-                         weights_w[hidden_size:2 * hidden_size, :]]).transpose()
-    w2 = np.concatenate([weights_r[0:hidden_size, :], weights_r[2 * hidden_size:3 * hidden_size, :],
-                         weights_r[3 * hidden_size:4 * hidden_size, :],
-                         weights_r[hidden_size:2 * hidden_size, :]]).transpose()
-    weights_b_part1 = weights_b[:w2.shape[1]]
-    weights_b_part2 = weights_b[w2.shape[1]:]
-    bias1 = np.concatenate([weights_b_part1[0:hidden_size], weights_b_part1[2 * hidden_size:3 * hidden_size],
-                            weights_b_part1[3 * hidden_size:4 * hidden_size],
-                            weights_b_part1[hidden_size:2 * hidden_size]]).transpose()
-    bias2 = np.concatenate([weights_b_part2[0:hidden_size], weights_b_part2[2 * hidden_size:3 * hidden_size],
-                            weights_b_part2[3 * hidden_size:4 * hidden_size],
-                            weights_b_part2[hidden_size:2 * hidden_size]]).transpose()
-    bias = bias1 + bias2
-    res.node.layer.set_weights([w1, w2, bias])
+
+    keras_weights = []
+    for direction_idx in range(num_directions):
+        keras_weights.extend([
+            _prepare_lstm_weights(weights_w[direction_idx], hidden_size),
+            _prepare_lstm_weights(weights_r[direction_idx], hidden_size),
+            _prepare_lstm_bias(weights_b[direction_idx], hidden_size),
+        ])
+    lstm_layer.set_weights(keras_weights)
     tf.keras.backend.set_image_data_format("channels_first")
+
     if should_return_state:
-        c_out = res[:, -1, :]
-        h_out = res[:, 0, :]
-
-        # the shapes of the hidden and cell should be [num_directions, batch_size, hidden_size]
-        # for now we support only direction=forward so num_direction = 1 and we add directions dimension,
-        # if we support direction=bidirectional we should handle it well in the lstm layer and probably remove the
-        # expand dims here
-        c_out = tf.expand_dims(c_out, 0)
-        h_out = tf.expand_dims(h_out, 0)
-
+        if num_directions == 1:
+            h_out = tf_expand_dims(res[:, 0, :], axis=0, tf_name=f"{params['cleaned_name']}_lstm_h_expand_dims")
+            c_out = tf_expand_dims(res[:, -1, :], axis=0, tf_name=f"{params['cleaned_name']}_lstm_c_expand_dims")
+        else:
+            h_concat = res[:, 0, :]
+            c_concat = res[:, -1, :]
+            h_out = _states_to_onnx_output(
+                [h_concat[:, :hidden_size], h_concat[:, hidden_size:]], params['cleaned_name'], "h"
+            )
+            c_out = _states_to_onnx_output(
+                [c_concat[:, :hidden_size], c_concat[:, hidden_size:]], params['cleaned_name'], "c"
+            )
         lstm_tensor = res[:, 1:-1, :]
     else:
         lstm_tensor = res
@@ -108,11 +192,9 @@ def convert_lstm(node, params, layers, lambda_func, node_name, keras_name):
 
     lstm_tensor = lstm_tensor_dense
 
-    lstm_tensor_in_onnx_order = tf_transpose(lstm_tensor, perm=[1, 0, 2],
-                                             tf_name=f"{params['cleaned_name']}_lstm_transpose")
-    lstm_tensor_in_onnx_order = tf_expand_dims(lstm_tensor_in_onnx_order, axis=1,
-                                               tf_name=f"{params['cleaned_name']}_lstm_expand_dims")
-    layers[node_name] = lstm_tensor_in_onnx_order
+    layers[node_name] = _sequence_to_onnx_output(
+        lstm_tensor, num_directions, hidden_size, params['cleaned_name']
+    )
 
 
 def convert_gru(node, params, layers, lambda_func, node_name, keras_name):
