@@ -348,7 +348,9 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
     lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_topk")
     result = lambda_layer(composed_input)
     pos_axis = axis if axis > 0 else in_shape.shape[0]-1
-    new_shape = tf_concat([in_shape[:pos_axis], [k], in_shape[pos_axis+1:]], axis=-1,
+    k_1d = [int(k)] if (is_numpy(k) or isinstance(k, (int, np.integer))) else \
+           tf.reshape(tf.cast(k, tf.int32), [1])
+    new_shape = tf_concat([in_shape[:pos_axis], k_1d, in_shape[pos_axis+1:]], axis=-1,
                           tf_name=f"{params['cleaned_name']}_topk_output_shape")
     values = tf_reshape(result[0], new_shape,
                         tf_name=f"{params['cleaned_name']}_topk_values_reshape")

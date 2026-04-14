@@ -75,6 +75,8 @@ def convert_elementwise_add(node, params, layers, lambda_func, node_name, keras_
                 # Use TensorFlow add to handle shape differences
                 layers[node_name] = tf_add(input_0, input_1, tf_name=f"{params['cleaned_name']}_add")
             else:
+                if input_0.dtype != input_1.dtype:
+                    input_1 = tf_cast(input_1, input_0.dtype, tf_name=f"{params['cleaned_name']}_cast_dtype")
                 # Use Keras Add layer
                 layers[node_name] = keras.layers.Add(name=f"{params['cleaned_name']}_add")([input_0, input_1])
         else:
