@@ -1,18 +1,19 @@
 import os
-import tempfile
 
 import numpy as np
 import onnx
 import onnxruntime as ort
+import pytest
 import tensorflow as tf
 
 from keras_data_format_converter import convert_channels_first_to_last
 from onnx2kerastl import onnx_to_keras
+from test.models.private_tests.aws_utils import aws_s3_download
 
-ONNX_MODEL_PATH = "/Users/tomkoren/Downloads/cascade_rcnn_crack_b4.onnx"
 
-
-def test_cascade_rcnn_crack():
+@pytest.mark.parametrize('aws_s3_download', [["cascade_rcnn_crack/", "cascade_rcnn_crack/", False]], indirect=True)
+def test_cascade_rcnn_crack(aws_s3_download):
+    ONNX_MODEL_PATH = f'{aws_s3_download}/cascade_rcnn_full_dynamic_raw.onnx'
     onnx_model = onnx.load(ONNX_MODEL_PATH)
 
     session = ort.InferenceSession(ONNX_MODEL_PATH)
@@ -38,10 +39,9 @@ def test_cascade_rcnn_crack():
         keras_model, should_transform_inputs_and_outputs=False
     )
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        h5_path = os.path.join(tmpdir, "temp.h5")
-        final_model.save(h5_path)
-        loaded_model = tf.keras.models.load_model(h5_path)
+    h5_path = os.path.splitext(ONNX_MODEL_PATH)[0] + ".h5"
+    final_model.save(h5_path)
+    loaded_model = tf.keras.models.load_model(h5_path)
 
     onnx_outputs = session.run(output_names, input_feed=input_arrays)
     keras_inputs = [input_arrays[name] for name in input_names]
@@ -74,7 +74,5 @@ def test_cascade_rcnn_crack():
         max_error = float(diff.max())
         assert mean_error < 1.0, f"Output {i} sorted mean error {mean_error:.4f} exceeds threshold"
         assert max_error < 10.0, f"Output {i} sorted max error {max_error:.4f} exceeds threshold"
+        print("valid conversion")
 
-
-if __name__ == "__main__":
-    test_cascade_rcnn_crack()
