@@ -94,3 +94,72 @@ def test_rtdetrv2_local(aws_s3_download):
         max_error = diff.max()
         assert mean_error < 1e-4, f"Output {i} mean error {mean_error} exceeds threshold"
         assert max_error < 1e-3, f"Output {i} max error {max_error} exceeds threshold"
+
+
+def _fix_double_constants(model):
+    from onnx import numpy_helper, TensorProto
+    for node in model.graph.node:
+        if node.op_type == "Constant":
+            for attr in node.attribute:
+                if attr.name == "value" and attr.t.data_type == TensorProto.DOUBLE:
+                    arr = numpy_helper.to_array(attr.t).astype(np.float32)
+                    attr.t.CopyFrom(numpy_helper.from_array(arr, name=attr.t.name))
+                    attr.t.data_type = TensorProto.FLOAT
+    return model
+
+
+def test_rtdetr_client_local():
+    onnx_path = "/Users/ranhomri/repos/hub/RT-DETR/client_format_structure.onnx"
+    onnx_model = _fix_double_constants(onnx.load(onnx_path))
+
+    rng = np.random.default_rng(seed=42)
+    session = ort.InferenceSession(onnx_model.SerializeToString())
+    input_infos = session.get_inputs()
+    output_infos = session.get_outputs()
+
+    input_names = [info.name for info in input_infos]
+    input_arrays = {info.name: _build_random_input(info, rng) for info in input_infos}
+    output_names = [info.name for info in output_infos]
+
+    keras_model = onnx_to_keras(
+        onnx_model,
+        input_names,
+        name_policy="attach_weights_name",
+        allow_partial_compilation=False,
+    ).converted_model
+    final_model = convert_channels_first_to_last(
+        keras_model, should_transform_inputs_and_outputs=False
+    )
+
+    onnx_outputs = session.run(output_names, input_feed=input_arrays)
+    keras_inputs = [input_arrays[name] for name in input_names]
+    keras_outputs = final_model(keras_inputs)
+
+    if not isinstance(keras_outputs, (list, tuple)):
+        keras_outputs = [keras_outputs]
+
+    assert len(keras_outputs) == len(onnx_outputs)
+
+    for i, (keras_out, onnx_out) in enumerate(zip(keras_outputs, onnx_outputs)):
+        keras_np = keras_out.numpy() if hasattr(keras_out, "numpy") else keras_out
+        if onnx_out.dtype == bool or keras_np.dtype == bool:
+            assert np.array_equal(keras_np, onnx_out), f"Output {i} boolean mismatch"
+            continue
+
+        if np.issubdtype(onnx_out.dtype, np.integer) and np.issubdtype(
+            keras_np.dtype, np.integer
+        ):
+            assert np.array_equal(keras_np, onnx_out), f"Output {i} integer mismatch"
+            continue
+
+        diff = np.abs(keras_np - onnx_out)
+        mean_error = diff.mean()
+        max_error = diff.max()
+        assert mean_error < 1e-4, f"Output {i} mean error {mean_error} exceeds threshold"
+        assert max_error < 1e-3, f"Output {i} max error {max_error} exceeds threshold"
+
+    print("valid conversion")
+
+
+if __name__ == "__main__":
+    test_rtdetr_client_local()
