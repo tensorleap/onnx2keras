@@ -96,24 +96,16 @@ def test_rtdetrv2_local(aws_s3_download):
         assert max_error < 1e-3, f"Output {i} max error {max_error} exceeds threshold"
 
 
-def _fix_double_constants(model):
-    from onnx import numpy_helper, TensorProto
-    for node in model.graph.node:
-        if node.op_type == "Constant":
-            for attr in node.attribute:
-                if attr.name == "value" and attr.t.data_type == TensorProto.DOUBLE:
-                    arr = numpy_helper.to_array(attr.t).astype(np.float32)
-                    attr.t.CopyFrom(numpy_helper.from_array(arr, name=attr.t.name))
-                    attr.t.data_type = TensorProto.FLOAT
-    return model
-
-
 def test_rtdetr_client_local():
+    # TODO: ORT fails to load this model due to a type mismatch in the Where op
+    # (/model/decoder/Where): one branch produces float32 (from Log) while the
+    # other is a float64 constant (inf). The Where op requires both tensor inputs
+    # to share the same type. The model needs to be fixed before this test can run.
     onnx_path = "/Users/ranhomri/repos/hub/RT-DETR/client_format_structure.onnx"
-    onnx_model = _fix_double_constants(onnx.load(onnx_path))
+    onnx_model = onnx.load(onnx_path)
 
     rng = np.random.default_rng(seed=42)
-    session = ort.InferenceSession(onnx_model.SerializeToString())
+    session = ort.InferenceSession(onnx_path)
     input_infos = session.get_inputs()
     output_infos = session.get_outputs()
 
