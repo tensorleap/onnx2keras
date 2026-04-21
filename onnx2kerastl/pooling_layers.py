@@ -3,7 +3,7 @@ import logging
 
 from .utils import ensure_tf_type, is_numpy
 from .tfops_funcs import tf_reshape, tf_rank, tf_concat, tf_shape, tf_cast, tf_image_crop_and_resize, tf_ones, \
-    tf_nn_avg_pool, tf_nn_max_pool
+    tf_nn_avg_pool, tf_nn_max_pool, tf_pad, tf_where
 import numpy as np
 import string
 import random
@@ -334,7 +334,9 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
     k_needed_shape_possible_keras_tensor = tf_concat(
             [(in_shape)[:-1],[1]], axis=-1,tf_name=f"{params['cleaned_name']}_topk_k_needed_shape")
 
-    if hasattr(k_needed_shape_possible_keras_tensor, "_inferred_value"): #is keras tensor
+    if hasattr(k_needed_shape_possible_keras_tensor, "_inferred_value") \
+            and k_needed_shape_possible_keras_tensor._inferred_value is not None \
+            and all(d is not None for d in k_needed_shape_possible_keras_tensor._inferred_value):
         k_needed_shape = k_needed_shape_possible_keras_tensor._inferred_value
     else:
         k_needed_shape = k_needed_shape_possible_keras_tensor
@@ -346,7 +348,9 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
     lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_topk")
     result = lambda_layer(composed_input)
     pos_axis = axis if axis > 0 else in_shape.shape[0]-1
-    new_shape = tf_concat([in_shape[:pos_axis], [k], in_shape[pos_axis+1:]], axis=-1,
+    k_1d = [int(k)] if (is_numpy(k) or isinstance(k, (int, np.integer))) else \
+           tf.reshape(tf.cast(k, tf.int32), [1])
+    new_shape = tf_concat([in_shape[:pos_axis], k_1d, in_shape[pos_axis+1:]], axis=-1,
                           tf_name=f"{params['cleaned_name']}_topk_output_shape")
     values = tf_reshape(result[0], new_shape,
                         tf_name=f"{params['cleaned_name']}_topk_values_reshape")
@@ -382,7 +386,17 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
         sampling_ratio = int((output_height + output_width) / 2)
         adaptive_ratio = True
 
+    # ONNX RoiAlign opset >= 16 supports coordinate_transformation_mode.
+    # 'half_pixel' (the new default) shifts input coordinates by -0.5 before the
+    # spatial-scale math; 'output_half_pixel' (legacy) leaves them untouched.
+    coordinate_transformation_mode = params.get('coordinate_transformation_mode', b'output_half_pixel')
+    if isinstance(coordinate_transformation_mode, bytes):
+        coordinate_transformation_mode = coordinate_transformation_mode.decode('utf-8')
+
     rois = rois * spatial_scale
+    if coordinate_transformation_mode == 'half_pixel':
+        rois = rois - 0.5
+
     box_ind = tf_cast(batch_indices, tf.int32, tf_name=f"{params['cleaned_name']}_roi_cast_batch")
     if keras.backend.image_data_format() == 'channels_first':
         fm_shape = tf_shape(feature_map, tf_name=f"{params['cleaned_name']}_roi_hw")[2:]  # H, W
@@ -425,6 +439,53 @@ def convert_roi_align(node, params, layers, lambda_func, node_name, keras_name):
             dtype=tf.float32,
             tf_name=f"{params['cleaned_name']}_roi_cast_crop_4"
         )
+    elif coordinate_transformation_mode == 'half_pixel':
+        # Bin-center correction (so tf.image.crop_and_resize sample positions
+        # match ONNX's (i+0.5)/crop_size bin centers) PLUS edge-replication
+        # padding so out-of-bounds samples behave like ONNX's edge-clamping
+        # rather than tf's extrapolation_value=0.
+        # Pad feature map by 1 pixel on H/W (NCHW) with SYMMETRIC mode (replicates
+        # the edge pixel for size-1 padding) and shift the ROI coords by +1.
+        feature_map = tf_pad(
+            feature_map,
+            [[0, 0], [0, 0], [1, 1], [1, 1]],
+            mode='SYMMETRIC',
+            tf_name=f"{params['cleaned_name']}_roi_edge_pad",
+        )
+        x0 = x0 + 1.0
+        y0 = y0 + 1.0
+        x1 = x1 + 1.0
+        y1 = y1 + 1.0
+        # padded dims = (H+2, W+2); normalize by (padded - 1) = (H+1, W+1).
+        fm_shape = tf_shape(feature_map, tf_name=f"{params['cleaned_name']}_roi_hw_padded")[2:]
+
+        crop_w = output_width * sampling_ratio
+        crop_h = output_height * sampling_ratio
+        spacing_w = (x1 - x0) / tf_cast(crop_w, dtype=tf.float32,
+                                        tf_name=f"{params['cleaned_name']}_roi_cast_crop_w")
+        spacing_h = (y1 - y0) / tf_cast(crop_h, dtype=tf.float32,
+                                        tf_name=f"{params['cleaned_name']}_roi_cast_crop_h")
+        fm_shape_1 = tf_cast(fm_shape[1] - 1, dtype=tf.float32, tf_name=f"{params['cleaned_name']}_roi_cast_fm_1")
+        fm_shape_0 = tf_cast(fm_shape[0] - 1, dtype=tf.float32, tf_name=f"{params['cleaned_name']}_roi_cast_fm_0")
+        nx0 = (x0 + spacing_w / 2) / fm_shape_1
+        ny0 = (y0 + spacing_h / 2) / fm_shape_0
+        nw = spacing_w * tf_cast(crop_w - 1, dtype=tf.float32,
+                                 tf_name=f"{params['cleaned_name']}_roi_cast_crop_w_1") / fm_shape_1
+        nh = spacing_h * tf_cast(crop_h - 1, dtype=tf.float32,
+                                 tf_name=f"{params['cleaned_name']}_roi_cast_crop_h_1") / fm_shape_0
+        # ONNX RoiAlign with adaptive sampling sets bin_grid_h = ceil(roi_h/output_h);
+        # for zero-area (or negative-area) ROIs that's 0 and the output is 0/max(count,1) = 0.
+        # The padding above samples the padded edge for those cases — wrong.
+        # Force normalized box coords > 1 for invalid ROIs so tf.image.crop_and_resize
+        # returns extrapolation_value=0 (matches ONNX). Cost: a couple of N-element ops.
+        roi_w = x1 - x0  # (+1 shift cancels)
+        roi_h = y1 - y0
+        invalid = (roi_w <= 0) | (roi_h <= 0)
+        sentinel = tf.constant(5.0, dtype=nx0.dtype)
+        nx0 = tf_where(invalid, sentinel, nx0,
+                       tf_name=f"{params['cleaned_name']}_roi_invalid_nx0")
+        ny0 = tf_where(invalid, sentinel, ny0,
+                       tf_name=f"{params['cleaned_name']}_roi_invalid_ny0")
     else:
         roi_width = x1 - x0
         roi_height = y1 - y0

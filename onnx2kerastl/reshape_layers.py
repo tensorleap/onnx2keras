@@ -204,6 +204,25 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
             if isinstance(input_0, np.ndarray) or not  K.is_keras_tensor(input_0):
                 if len(input_0) > OPTIMIZE_ARRAY_LENGTH:
                     input_0, indices = optimize_constant_array_for_serialization(input_0, params, indices, logger)
+                    # If the constant is still large AND is a rank-2 axis-0 gather,
+                    # wrap it in Embedding so the constant is stored as a model
+                    # weight (fast .h5 save/load) instead of being inlined into
+                    # the layer config via tf.gather's TFOpLambda.
+                    if (axis == 0
+                            and len(input_0.shape) == 2
+                            and all(d is not None for d in input_0.shape)
+                            and int(np.prod(input_0.shape)) > OPTIMIZE_ARRAY_LENGTH):
+                        weights_np = input_0 if isinstance(input_0, np.ndarray) else input_0.numpy()
+                        emb = tf.keras.layers.Embedding(
+                            input_dim=int(weights_np.shape[0]),
+                            output_dim=int(weights_np.shape[1]),
+                            weights=[weights_np],
+                            trainable=False,
+                            name=f"{params['cleaned_name']}_gather_emb",
+                        )
+                        idx_t = indices if tf.is_tensor(indices) else np.asarray(indices)
+                        layers[node_name] = emb(idx_t)
+                        return
             layers[node_name] = tf_gather(input_0, indices, axis=axis, tf_name=f"{params['cleaned_name']}_gather")
 
 

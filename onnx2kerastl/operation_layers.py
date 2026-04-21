@@ -839,9 +839,6 @@ def convert_nms(node, params, layers, lambda_func, node_name, keras_name):
 
     batch_size = boxes.shape[0]
 
-    if batch_size is None:
-        raise AttributeError("Onnx2kerras: NMS conversion does not support dynamic batch."
-                             "Please change batch to static or remove NMS from model")
     center_point_box = params.get("center_point_box", 0)
     if center_point_box != 0:
         raise AttributeError("Onnx2kerras: We do not support the center_point_box parameter")
@@ -858,28 +855,110 @@ def convert_nms(node, params, layers, lambda_func, node_name, keras_name):
         if isinstance(score_threshold, np.ndarray):
             score_threshold = score_threshold[0]
     num_classes = scores.shape[1]
-    all_results = []
     try:
         iou_threshold = iou_threshold[0]
-    except IndexError:  # iou threshold is already a scalar
+    except IndexError:
         pass
-    for batch in range(batch_size):
-        for c_class in range(num_classes):
-            indices = tf_image_non_max_suppression(boxes=boxes[batch],
-                                                   scores=scores[batch, c_class],
-                                                   max_output_size=tf.cast(max_output_size[0], tf.int32),
-                                                   iou_threshold=iou_threshold,
-                                                   score_threshold=score_threshold,
-                                                   tf_name=f"{params['cleaned_name']}_nms_{batch}_{c_class}")
-            ones_indices = tf_ones_like(indices, tf_name=f"{params['cleaned_name']}_nms_ones_{batch}_{c_class}")
-            class_tensor = c_class * ones_indices
-            batch_tensor = batch * ones_indices
-            res = tf_stack([batch_tensor, class_tensor, indices], axis=-1
-                           , tf_name=f"{params['cleaned_name']}_nms_stack_{batch}_{c_class}")
-            all_results.append(res)
-    layers[node_name] = tf_cast(tf_concat(all_results, axis=0, tf_name=f"{params['cleaned_name']}_nms_concat"),
-                                dtype=tf.int64,
-                                tf_name=f"{params['cleaned_name']}_nms_cast")
+
+    max_output_size_tensor = tf.cast(max_output_size[0], tf.int32)
+
+    if batch_size is not None:
+        all_results = []
+        for batch in range(batch_size):
+            for c_class in range(num_classes):
+                indices = tf_image_non_max_suppression(boxes=boxes[batch],
+                                                       scores=scores[batch, c_class],
+                                                       max_output_size=max_output_size_tensor,
+                                                       iou_threshold=iou_threshold,
+                                                       score_threshold=score_threshold,
+                                                       tf_name=f"{params['cleaned_name']}_nms_{batch}_{c_class}")
+                ones_indices = tf_ones_like(indices, tf_name=f"{params['cleaned_name']}_nms_ones_{batch}_{c_class}")
+                class_tensor = c_class * ones_indices
+                batch_tensor = batch * ones_indices
+                res = tf_stack([batch_tensor, class_tensor, indices], axis=-1,
+                               tf_name=f"{params['cleaned_name']}_nms_stack_{batch}_{c_class}")
+                all_results.append(res)
+        layers[node_name] = tf_cast(tf_concat(all_results, axis=0, tf_name=f"{params['cleaned_name']}_nms_concat"),
+                                    dtype=tf.int64,
+                                    tf_name=f"{params['cleaned_name']}_nms_cast")
+    else:
+        _max_out = int(max_output_size[0])
+        _iou_thr = float(iou_threshold)
+        _score_thr = float(score_threshold)
+        _num_classes_static = num_classes
+
+        def dynamic_nms(inputs):
+            boxes_in, scores_in = inputs
+            batch_sz = tf.shape(boxes_in)[0]
+            ta = tf.TensorArray(dtype=tf.int64, size=0, dynamic_size=True, infer_shape=False)
+
+            if _num_classes_static is not None:
+                def body(i, write_idx, ta):
+                    for c_class in range(_num_classes_static):
+                        idx = tf.image.non_max_suppression(
+                            boxes=boxes_in[i],
+                            scores=scores_in[i, c_class],
+                            max_output_size=_max_out,
+                            iou_threshold=_iou_thr,
+                            score_threshold=_score_thr,
+                        )
+                        n = tf.shape(idx)[0]
+                        row = tf.stack([
+                            tf.fill([n], tf.cast(i, tf.int64)),
+                            tf.fill([n], tf.cast(c_class, tf.int64)),
+                            tf.cast(idx, tf.int64),
+                        ], axis=-1)
+                        ta = ta.write(write_idx + c_class, row)
+                    return i + 1, write_idx + _num_classes_static, ta
+
+                _, _, ta = tf.while_loop(
+                    lambda i, _wi, _ta: i < batch_sz,
+                    body,
+                    [tf.constant(0), tf.constant(0), ta],
+                    shape_invariants=[tf.TensorShape([]), tf.TensorShape([]), tf.TensorShape(None)],
+                )
+            else:
+                num_cls = tf.shape(scores_in)[1]
+
+                def inner_body(j, i, write_idx, ta):
+                    idx = tf.image.non_max_suppression(
+                        boxes=boxes_in[i],
+                        scores=scores_in[i, j],
+                        max_output_size=_max_out,
+                        iou_threshold=_iou_thr,
+                        score_threshold=_score_thr,
+                    )
+                    n = tf.shape(idx)[0]
+                    row = tf.stack([
+                        tf.fill([n], tf.cast(i, tf.int64)),
+                        tf.fill([n], tf.cast(j, tf.int64)),
+                        tf.cast(idx, tf.int64),
+                    ], axis=-1)
+                    return j + 1, i, write_idx + 1, ta.write(write_idx, row)
+
+                def outer_body(i, write_idx, ta):
+                    _, _, write_idx, ta = tf.while_loop(
+                        lambda j, _i, _wi, _ta: j < num_cls,
+                        inner_body,
+                        [tf.constant(0), i, write_idx, ta],
+                        shape_invariants=[
+                            tf.TensorShape([]), tf.TensorShape([]),
+                            tf.TensorShape([]), tf.TensorShape(None),
+                        ],
+                    )
+                    return i + 1, write_idx, ta
+
+                _, _, ta = tf.while_loop(
+                    lambda i, _wi, _ta: i < batch_sz,
+                    outer_body,
+                    [tf.constant(0), tf.constant(0), ta],
+                    shape_invariants=[tf.TensorShape([]), tf.TensorShape([]), tf.TensorShape(None)],
+                )
+
+            return tf.ensure_shape(ta.concat(), [None, 3])
+
+        nms_layer = keras.layers.Lambda(dynamic_nms, name=f"{params['cleaned_name']}_nms_dynamic")
+        layers[node_name] = nms_layer([boxes, scores])
 
 
 def convert_if(node, params, layers, lambda_func, node_name, keras_name):
