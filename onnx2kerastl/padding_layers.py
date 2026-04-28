@@ -4,6 +4,27 @@ from .utils import ensure_tf_type
 from .utils import is_numpy
 from .tfops_funcs import tf_pad
 import tensorflow as tf
+import numpy as np
+
+
+def _pads_indicate_nhwc_spatial_only(pads):
+    """
+    ONNX Pad pads length 8: [begin_0..3, end_0..3] per axis.
+    Typical NHWC 2D spatial pad touches axes 1 (H) and 2 (W), not axis 3 (C).
+    Typical NCHW spatial pad touches axes 2 (H) and 3 (W), not axis 1 (C).
+    """
+    try:
+        p = np.asarray(pads)
+    except (TypeError, ValueError):
+        return False
+    if p.size != 8:
+        return False
+    p = p.astype(np.int64, copy=False)
+    totals = p[:4] + p[4:]
+    t0, t1, t2, t3 = int(totals[0]), int(totals[1]), int(totals[2]), int(totals[3])
+    if t0 != 0:
+        return False
+    return t3 == 0 and t1 > 0 and t2 > 0
 
 
 def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
@@ -59,6 +80,8 @@ def convert_padding(node, params, layers, lambda_func, node_name, keras_name):
                     h = input_0.shape[1]
                     w = input_0.shape[2]
                     if c_last is not None and c_last <= 4 and ((h is None or h > 4) and (w is None or w > 4)):
+                        use_nhwc = True
+                    elif is_numpy(pads) and _pads_indicate_nhwc_spatial_only(pads):
                         use_nhwc = True
 
                 if use_nhwc:
