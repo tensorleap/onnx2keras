@@ -251,6 +251,17 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
                              range(len(layer_input))]).all() or any(
                 [layer_input[i].shape == None for i in range(len(layer_input))]):
                 try:
+                    # Filter out zero-element non-tensor inputs (e.g. [[]] from an empty
+                    # ONNX initializer with shape (1,0)). They contribute nothing to the
+                    # concat result but their rank often differs from the live tensor inputs,
+                    # causing a rank-mismatch error when the layer is replayed explicitly.
+                    non_empty = [inp for inp in layer_input
+                                 if tf.is_tensor(inp) or np.asarray(inp).size > 0]
+                    if non_empty:
+                        layer_input = non_empty
+                    if len(layer_input) == 1:
+                        layers[node_name] = layer_input[0]
+                        return
                     layers[node_name] = tf_concat(layer_input, axis=params['axis'],
                                                   tf_name=f"{params['cleaned_name']}_concat")
                 except Exception as ex:
