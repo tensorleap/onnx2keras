@@ -251,13 +251,22 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
                              range(len(layer_input))]).all() or any(
                 [layer_input[i].shape == None for i in range(len(layer_input))]):
                 try:
-                    # Filter out zero-element non-tensor inputs (e.g. [[]] from an empty
-                    # ONNX initializer with shape (1,0)). They contribute nothing to the
-                    # concat result but their rank often differs from the live tensor inputs,
-                    # causing a rank-mismatch error when the layer is replayed explicitly.
-                    non_empty = [inp for inp in layer_input
-                                 if tf.is_tensor(inp) or np.asarray(inp).size > 0]
-                    if non_empty:
+                    # Filter out zero-element constant inputs. An EagerTensor with shape
+                    # e.g. (1, 0, 4) serialises via .numpy().tolist() to [[]], which loses
+                    # the trailing dimension and is later deserialised as shape (1, 0) —
+                    # causing a rank mismatch when the layer is replayed by the engine.
+                    # KerasTensors (symbolic nodes) are always kept regardless of shape.
+                    def _is_zero_element_constant(inp):
+                        if K.is_keras_tensor(inp):
+                            return False
+                        if tf.is_tensor(inp):
+                            return inp.numpy().size == 0
+                        return np.asarray(inp).size == 0
+
+                    non_empty = [inp for inp in layer_input if not _is_zero_element_constant(inp)]
+                    if non_empty and len(non_empty) < len(layer_input):
+                        logger.info('Filtered %d zero-element constant input(s) from concat "%s"',
+                                    len(layer_input) - len(non_empty), node_name)
                         layer_input = non_empty
                     if len(layer_input) == 1:
                         layers[node_name] = layer_input[0]
