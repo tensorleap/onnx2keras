@@ -7,7 +7,7 @@ from onnx2kerastl import onnx_to_keras
 
 ONNX_PATH = "rfdetr-base.onnx"
 
-
+import tensorflow as tf
 def test_rfdetr_base_local():
     onnx_model = onnx.load(ONNX_PATH)
 
@@ -30,6 +30,8 @@ def test_rfdetr_base_local():
         keras_model, should_transform_inputs_and_outputs=False
     )
 
+    final_model.save('yipi.h5')
+    reraise = tf.keras.models.load_model('yipi.h5')
     onnx_outputs = session.run(output_names, input_feed=input_arrays)
     keras_inputs = [input_arrays[name] for name in input_names]
     keras_outputs = final_model(keras_inputs)
