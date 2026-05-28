@@ -219,8 +219,12 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
                 node_names.append(keras_names)
             pattern = r'[#:@]'  # Example pattern to match #, /, and :
             cleaned_node_name = re.sub(pattern, '_', node.name.rstrip("/").lstrip("/"))
+            while cleaned_node_name and not (cleaned_node_name[0].isalpha() or cleaned_node_name[0].isdigit() or cleaned_node_name[0] == '.'):
+                cleaned_node_name = cleaned_node_name[1:]
             if len(cleaned_node_name) == 0:
                 cleaned_node_name = re.sub(pattern, '_', node_name.rstrip("/").lstrip("/"))
+                while cleaned_node_name and not (cleaned_node_name[0].isalpha() or cleaned_node_name[0].isdigit() or cleaned_node_name[0] == '.'):
+                    cleaned_node_name = cleaned_node_name[1:]
             node_params['cleaned_name'] = f'{cleaned_node_name}_tl'
             logger.debug('######')
             logger.debug(f"{node_index/len(onnx_nodes):.1%} completed")
