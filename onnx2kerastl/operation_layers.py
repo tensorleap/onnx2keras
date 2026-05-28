@@ -390,7 +390,7 @@ def convert_cast(node, params, layers, lambda_func, node_name, keras_name):
             5: np.int16,
             6: np.int32,
             7: np.int64,
-            9: np.bool,
+            9: np.bool_,
             10: np.float16,
             11: np.double,
         }
