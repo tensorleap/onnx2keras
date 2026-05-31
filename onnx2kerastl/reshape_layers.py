@@ -7,7 +7,7 @@ from keras import backend as K
 from keras.engine.keras_tensor import KerasTensor
 from keras.layers import SlicingOpLambda, Lambda
 from typing import Union
-from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
+from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one, squeeze_batch_if_uniform
 from .tfops_funcs import tf_reshape, tf_shape, tf_cast, tf_stack, tf_image_resize, tf_strided_slice,\
     tf_squeeze, tf_transpose, tf_where, tf_gather, tf_range, tf_reduce_sum, tf_abs, tf_expand_dims, tf_concat, \
     tf_shape, tf_tile, tf_fill, tf_gather_nd, tf_reduce_sum, tf_zeros_like, tf_multiply, tf_tensor_scatter_nd_update,\
@@ -246,6 +246,28 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
         layers[node_name] = np.concatenate(layer_input, axis=params['axis'])
     else:
         logger.debug('Concat Keras layers.')
+        ref_keras = next((v for v in layer_input if tf.is_tensor(v) and K.is_keras_tensor(v)), None)
+        if ref_keras is not None:
+            expanded = []
+            for i, v in enumerate(layer_input):
+                if not (tf.is_tensor(v) and K.is_keras_tensor(v)):
+                    if is_numpy(v):
+                        arr = v
+                    elif tf.is_tensor(v) and not K.is_keras_tensor(v):
+                        try:
+                            arr = v.numpy()
+                        except Exception:
+                            arr = None
+                    else:
+                        arr = None
+                    if arr is not None and arr.ndim > 0 and arr.shape[0] > 1 and np.allclose(arr, arr[0:1], atol=1e-5, rtol=0):
+                        squeezed = np.ascontiguousarray(arr[0:1])
+                        batch_dim = tf_shape(ref_keras, out_type=tf.int32, tf_name=f"{params['cleaned_name']}_{i}_bshape")[0:1]
+                        ones = tf.ones([arr.ndim - 1], dtype=tf.int32)
+                        multiples = tf_concat([batch_dim, ones], axis=0, tf_name=f"{params['cleaned_name']}_{i}_tmult")
+                        v = tf_tile(tf.constant(squeezed), multiples, tf_name=f"{params['cleaned_name']}_{i}_tile")
+                expanded.append(v)
+            layer_input = expanded
         if len(layer_input) > 1:
             if not np.array([tf.is_tensor(layer_input[i]) and K.is_keras_tensor(layer_input[i]) for i in
                              range(len(layer_input))]).all() or any(
@@ -264,6 +286,40 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
                                                              name=f"{params['cleaned_name']}_concat_2")
         else:
             layers[node_name] = layer_input[0]
+
+
+def _make_batch_dynamic(shape_arr):
+    arr = np.array([int(d) for d in shape_arr], dtype=np.int32)
+    if len(arr) > 0 and arr[0] > 0 and not np.any(arr == -1):
+        arr[0] = -1
+    return arr
+
+
+_LARGE_CONST_BYTES = 512 * 1024  # 512 KB
+
+
+def _wrap_large_const_as_embedding(data, name, ref_keras=None):
+    if not is_numpy(data) or data.ndim < 2 or data.nbytes <= _LARGE_CONST_BYTES:
+        return None
+    if ref_keras is None:
+        return None
+    last_dim = int(data.shape[-1])
+    n_tokens = int(np.prod(data.shape[:-1]))
+    flat = data.reshape(n_tokens, last_dim).astype(np.float32)
+    emb = tf.keras.layers.Embedding(
+        input_dim=n_tokens,
+        output_dim=last_dim,
+        weights=[flat],
+        trainable=False,
+        name=f"{name}_large_const_emb",
+    )
+    n = n_tokens
+    indices_kt = tf.keras.layers.Lambda(
+        lambda _, n=n: tf.cast(tf.range(n), tf.int32),
+        name=f"{name}_large_const_range",
+    )(ref_keras)
+    retrieved_kt = emb(indices_kt)
+    return tf_reshape(retrieved_kt, list(data.shape), tf_name=f"{name}_large_const_reshape")
 
 
 def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
@@ -376,13 +432,18 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                                 new_shape[dims_to_set_as_zero] = 0
                             elif dims_to_keep_unchanged is not None:
                                 new_shape[dims_to_keep_unchanged] = np.array(input_0.shape)[dims_to_keep_unchanged]
-                            layers[node_name] = tf_reshape(input_0, new_shape,
+                            layers[node_name] = tf_reshape(input_0, _make_batch_dynamic(new_shape),
                                                            tf_name=f"{params['cleaned_name']}_reshape_2")
                         else:
                             reshape = keras.layers.Reshape(np.int32(input_1[1:]),
                                                            name=f"{params['cleaned_name']}_reshape_input_2_3")
                             layers[node_name] = reshape(input_0)
     else:  # dynamic reshape
+        if tf.is_tensor(input_1) and not K.is_keras_tensor(input_1):
+            try:
+                input_1 = _make_batch_dynamic(input_1.numpy())
+            except Exception:
+                pass
         layers[node_name] = tf_reshape(input_0, input_1, tf_name=f"{params['cleaned_name']}_reshape_3")
 
 
@@ -461,6 +522,21 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
     """
     logger = logging.getLogger('onnx2keras.slice')
     max_ends_val = np.iinfo(np.int32).max
+
+    _orig_data = layers[node.input[0]]
+    _data_for_wrap = None
+    if is_numpy(_orig_data):
+        _data_for_wrap = _orig_data
+    elif tf.is_tensor(_orig_data) and not K.is_keras_tensor(_orig_data):
+        try:
+            _data_for_wrap = _orig_data.numpy()
+        except Exception:
+            pass
+    if _data_for_wrap is not None and _data_for_wrap.ndim >= 2 and _data_for_wrap.nbytes > _LARGE_CONST_BYTES:
+        _ref = next((v for v in layers.values() if K.is_keras_tensor(v)), None)
+        _wrapped = _wrap_large_const_as_embedding(_data_for_wrap, keras_name, _ref)
+        if _wrapped is not None:
+            layers[node.input[0]] = _wrapped
 
     if 'axes' in params:
         axes = list(params["axes"])
@@ -734,6 +810,20 @@ def convert_expand(node, params, layers, lambda_func, node_name, keras_name):
 
 
 def convert_tile(node, params, layers, lambda_func, node_name, keras_name):
+    _orig_data = layers[node.input[0]]
+    _data_for_wrap = None
+    if is_numpy(_orig_data):
+        _data_for_wrap = _orig_data
+    elif tf.is_tensor(_orig_data) and not K.is_keras_tensor(_orig_data):
+        try:
+            _data_for_wrap = _orig_data.numpy()
+        except Exception:
+            pass
+    if _data_for_wrap is not None and _data_for_wrap.ndim >= 2 and _data_for_wrap.nbytes > _LARGE_CONST_BYTES:
+        _ref = next((v for v in layers.values() if K.is_keras_tensor(v)), None)
+        _wrapped = _wrap_large_const_as_embedding(_data_for_wrap, keras_name, _ref)
+        if _wrapped is not None:
+            layers[node.input[0]] = _wrapped
     layers[node_name] = tf_tile(layers[node.input[0]], layers[node.input[1]], tf_name=f"{params['cleaned_name']}_tile")
 
 

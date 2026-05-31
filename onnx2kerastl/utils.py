@@ -36,6 +36,21 @@ def is_numpy(obj):
     return isinstance(obj, (np.ndarray, np.generic))
 
 
+def squeeze_batch_if_uniform(value):
+    if is_numpy(value):
+        arr = value
+    elif tf.is_tensor(value) and not keras.backend.is_keras_tensor(value):
+        try:
+            arr = value.numpy()
+        except Exception:
+            return value
+    else:
+        return value
+    if arr.ndim > 0 and arr.shape[0] > 1 and np.allclose(arr, arr[0:1], atol=1e-5, rtol=0):
+        return arr[0:1]
+    return arr
+
+
 def ensure_tf_type(obj, name="Const"):
     import numpy as np
     import tensorflow as tf
