@@ -7,7 +7,7 @@ from keras import backend as K
 from keras.engine.keras_tensor import KerasTensor
 from keras.layers import SlicingOpLambda, Lambda
 from typing import Union
-from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one, squeeze_batch_if_uniform
+from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
 from .tfops_funcs import tf_reshape, tf_shape, tf_cast, tf_stack, tf_image_resize, tf_strided_slice,\
     tf_squeeze, tf_transpose, tf_where, tf_gather, tf_range, tf_reduce_sum, tf_abs, tf_expand_dims, tf_concat, \
     tf_shape, tf_tile, tf_fill, tf_gather_nd, tf_reduce_sum, tf_zeros_like, tf_multiply, tf_tensor_scatter_nd_update,\
@@ -246,28 +246,6 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
         layers[node_name] = np.concatenate(layer_input, axis=params['axis'])
     else:
         logger.debug('Concat Keras layers.')
-        ref_keras = next((v for v in layer_input if tf.is_tensor(v) and K.is_keras_tensor(v)), None)
-        if ref_keras is not None:
-            expanded = []
-            for i, v in enumerate(layer_input):
-                if not (tf.is_tensor(v) and K.is_keras_tensor(v)):
-                    if is_numpy(v):
-                        arr = v
-                    elif tf.is_tensor(v) and not K.is_keras_tensor(v):
-                        try:
-                            arr = v.numpy()
-                        except Exception:
-                            arr = None
-                    else:
-                        arr = None
-                    if arr is not None and arr.ndim > 0 and arr.shape[0] > 1 and np.allclose(arr, arr[0:1], atol=1e-5, rtol=0):
-                        squeezed = np.ascontiguousarray(arr[0:1])
-                        batch_dim = tf_shape(ref_keras, out_type=tf.int32, tf_name=f"{params['cleaned_name']}_{i}_bshape")[0:1]
-                        ones = tf.ones([arr.ndim - 1], dtype=tf.int32)
-                        multiples = tf_concat([batch_dim, ones], axis=0, tf_name=f"{params['cleaned_name']}_{i}_tmult")
-                        v = tf_tile(tf.constant(squeezed), multiples, tf_name=f"{params['cleaned_name']}_{i}_tile")
-                expanded.append(v)
-            layer_input = expanded
         if len(layer_input) > 1:
             if not np.array([tf.is_tensor(layer_input[i]) and K.is_keras_tensor(layer_input[i]) for i in
                              range(len(layer_input))]).all() or any(
@@ -532,11 +510,12 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             _data_for_wrap = _orig_data.numpy()
         except Exception:
             pass
+    _slice_input = _orig_data
     if _data_for_wrap is not None and _data_for_wrap.ndim >= 2 and _data_for_wrap.nbytes > _LARGE_CONST_BYTES:
         _ref = next((v for v in layers.values() if K.is_keras_tensor(v)), None)
         _wrapped = _wrap_large_const_as_embedding(_data_for_wrap, keras_name, _ref)
         if _wrapped is not None:
-            layers[node.input[0]] = _wrapped
+            _slice_input = _wrapped
 
     if 'axes' in params:
         axes = list(params["axes"])
@@ -549,7 +528,7 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
         try:
             axes = list(layers[node.input[3]])
         except:
-            input_rank = len(layers[node.input[0]].shape)
+            input_rank = len(_slice_input.shape)
             axes = list(range(input_rank))
         try:
             steps = list(layers[node.input[4]])
@@ -557,7 +536,7 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             steps = list(params.get("steps", [None] * len(axes)))
 
     if params['change_ordering']:
-        input_rank = len(layers[node.input[0]].shape)
+        input_rank = len(_slice_input.shape)
         if input_rank >= 4:
             perm = [0] + list(range(2, input_rank)) + [1]
             axis_map = {old: new for new, old in enumerate(perm)}
@@ -574,10 +553,10 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             elif isinstance(ends[i], int) and ends[i] > max_ends_val:
                 ends[i] = np.int32(max_ends_val)
     try:
-        max_len = len(layers[node.input[0]].shape)
+        max_len = len(_slice_input.shape)
         axes_positives = [axis if axis >= 0 else max_len + axis for axis in axes]
     except ValueError as e:
-        if layers[node.input[0]].shape == None:  # tensor with unknown shape (not the same as dynamic)
+        if _slice_input.shape == None:  # tensor with unknown shape (not the same as dynamic)
             max_len = max(axes) + 1
             if any([axis < 0 for axis in axes]):
                 raise NotImplementedError("For a tensor with unknown shape, can't use negative axis")
@@ -602,14 +581,14 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
                 slice_spec_param.append({'start': start, 'step': step, 'stop': end})
             else:
                 slice_spec_param.append({'start': None, 'step': None, 'stop': None})
-        if is_numpy(layers[node.input[0]]) and np.array([_shape is None for _shape in layers[node.input[0]]]).any() \
-                and len(layers[node.input[0]].shape) == 1:  # slice numpy array which is a shape
-            sliced = layers[node.input[0]][start:end:step]
+        if is_numpy(_slice_input) and np.array([_shape is None for _shape in _slice_input]).any() \
+                and len(_slice_input.shape) == 1:  # slice numpy array which is a shape
+            sliced = _slice_input[start:end:step]
         else:
-            input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
+            input_0 = ensure_tf_type(_slice_input, name="%s_const" % keras_name)
             slicing_layer = SlicingOpLambda(tf.__operators__.getitem)
             sliced = slicing_layer(input_0, slice_spec=slice_spec_param)
-            if is_numpy(layers[node.input[0]]) and not K.is_keras_tensor(sliced):
+            if is_numpy(_slice_input) and not K.is_keras_tensor(sliced):
                 sliced = sliced.numpy()
         layers[node_name] = sliced
     else:
@@ -617,8 +596,8 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
             steps = list(layers[node.input[4]])
         except IndexError:
             steps = list(params.get("steps", [1] * len(axes)))
-        input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-        keras_shape = tf_shape(layers[node.input[0]], tf_name=f"{params['cleaned_name']}_shape")
+        input_0 = ensure_tf_type(_slice_input, name="%s_const" % keras_name)
+        keras_shape = tf_shape(_slice_input, tf_name=f"{params['cleaned_name']}_shape")
         start_vec = [0] * max_len
         end_vec = [keras_shape[i] for i in range(max_len)]
         step_vec = [1] * max_len
@@ -819,12 +798,13 @@ def convert_tile(node, params, layers, lambda_func, node_name, keras_name):
             _data_for_wrap = _orig_data.numpy()
         except Exception:
             pass
+    _tile_input = _orig_data
     if _data_for_wrap is not None and _data_for_wrap.ndim >= 2 and _data_for_wrap.nbytes > _LARGE_CONST_BYTES:
         _ref = next((v for v in layers.values() if K.is_keras_tensor(v)), None)
         _wrapped = _wrap_large_const_as_embedding(_data_for_wrap, keras_name, _ref)
         if _wrapped is not None:
-            layers[node.input[0]] = _wrapped
-    layers[node_name] = tf_tile(layers[node.input[0]], layers[node.input[1]], tf_name=f"{params['cleaned_name']}_tile")
+            _tile_input = _wrapped
+    layers[node_name] = tf_tile(_tile_input, layers[node.input[1]], tf_name=f"{params['cleaned_name']}_tile")
 
 
 def convert_gather_elements(node, params, layers, lambda_func, node_name, keras_name):
