@@ -161,6 +161,27 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
 
                 logger.debug('Found input {0} with shape {1}'.format(input_name, input_shape))
 
+    output_to_node = {out: node for node in onnx_nodes for out in node.output}
+    _rnn_direct = {
+        inp
+        for node in onnx_nodes
+        if node.op_type in ('GRU', 'LSTM', 'RNN')
+        for inp in list(node.input)[1:4]
+        if inp
+    }
+    _queue = list(_rnn_direct)
+    rnn_weight_inputs = set(_rnn_direct)
+    while _queue:
+        key = _queue.pop()
+        upstream = output_to_node.get(key)
+        if upstream is None:
+            continue
+        for inp in upstream.input:
+            if inp and inp not in rnn_weight_inputs:
+                rnn_weight_inputs.add(inp)
+                _queue.append(inp)
+    rnn_weight_inputs = frozenset(rnn_weight_inputs)
+
     keras_middle_outputs = {}
     error_info = None
     try:
@@ -173,6 +194,7 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
             # Add global converter info:
             node_params['change_ordering'] = change_ordering
             node_params['name_policy'] = name_policy
+            node_params['rnn_weight_inputs'] = rnn_weight_inputs
 
             node_name = str(node.output[0])
             keras_names = []

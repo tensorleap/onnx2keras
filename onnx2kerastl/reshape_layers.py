@@ -511,7 +511,8 @@ def convert_slice(node, params, layers, lambda_func, node_name, keras_name):
         except Exception:
             pass
     _slice_input = _orig_data
-    if _data_for_wrap is not None and _data_for_wrap.ndim >= 2 and _data_for_wrap.nbytes > _LARGE_CONST_BYTES:
+    _rnn_weight_inputs = params.get('rnn_weight_inputs', frozenset())
+    if node_name not in _rnn_weight_inputs and _data_for_wrap is not None and _data_for_wrap.ndim >= 2 and _data_for_wrap.nbytes > _LARGE_CONST_BYTES:
         _ref = next((v for v in layers.values() if K.is_keras_tensor(v)), None)
         _wrapped = _wrap_large_const_as_embedding(_data_for_wrap, keras_name, _ref)
         if _wrapped is not None:
@@ -799,7 +800,8 @@ def convert_tile(node, params, layers, lambda_func, node_name, keras_name):
         except Exception:
             pass
     _tile_input = _orig_data
-    if _data_for_wrap is not None and _data_for_wrap.ndim >= 2 and _data_for_wrap.nbytes > _LARGE_CONST_BYTES:
+    _rnn_weight_inputs = params.get('rnn_weight_inputs', frozenset())
+    if node_name not in _rnn_weight_inputs and _data_for_wrap is not None and _data_for_wrap.ndim >= 2 and _data_for_wrap.nbytes > _LARGE_CONST_BYTES:
         _ref = next((v for v in layers.values() if K.is_keras_tensor(v)), None)
         _wrapped = _wrap_large_const_as_embedding(_data_for_wrap, keras_name, _ref)
         if _wrapped is not None:
