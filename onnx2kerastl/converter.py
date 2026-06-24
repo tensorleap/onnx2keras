@@ -17,6 +17,7 @@ from .customonnxlayer import onnx_custom_layers
 from .exceptions import UnsupportedLayer, OnnxUnsupported
 from .layers import AVAILABLE_CONVERTERS
 from .tfops_funcs import tf_cast
+from .utils import set_constant_anchor
 import re
 
 onnx_imported = False
@@ -160,6 +161,10 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
                     layers[input_name] = tf_cast(layers[input_name], tf.bool, tf_name=f"{input_name}_float_to_bool")
 
                 logger.debug('Found input {0} with shape {1}'.format(input_name, input_shape))
+
+    # Anchor weight-backed large constants on a model input KerasTensor so they
+    # participate in the functional graph (see ensure_tf_type / OnnxConstant).
+    set_constant_anchor(keras_inputs[0] if keras_inputs else None)
 
     keras_middle_outputs = {}
     error_info = None

@@ -36,6 +36,21 @@ def is_numpy(obj):
     return isinstance(obj, (np.ndarray, np.generic))
 
 
+# Constants with more than this many elements are stored as a layer weight
+# (OnnxConstant) instead of being baked inline into the functional graph config,
+# which would otherwise freeze load_model while autopacking the inlined value.
+LARGE_CONSTANT_THRESHOLD = 10_000
+_constant_anchor = None
+
+
+def set_constant_anchor(tensor):
+    """Register a KerasTensor (e.g. a model input) used to anchor weight-backed
+    constants in the functional graph. ``call`` ignores it; it only creates a
+    graph edge so the constant node - and its weight - are part of the model."""
+    global _constant_anchor
+    _constant_anchor = tensor
+
+
 def ensure_tf_type(obj, name="Const"):
     import numpy as np
     import tensorflow as tf
@@ -48,6 +63,9 @@ def ensure_tf_type(obj, name="Const"):
     if is_numpy(obj): # TF < v1.16 assumes all ints are int32 and all floats are float32
         if obj.dtype == np.int64:
             obj = np.int32(obj)
+        if _constant_anchor is not None and obj.size > LARGE_CONSTANT_THRESHOLD:
+            from .customonnxlayer.onnxconstant import OnnxConstant
+            return OnnxConstant(value=obj, name=name)(_constant_anchor)
         return tf.constant(obj, name=name)
     else:
         return obj
