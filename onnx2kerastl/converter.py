@@ -221,6 +221,9 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
             cleaned_node_name = re.sub(pattern, '_', node.name.rstrip("/").lstrip("/"))
             if len(cleaned_node_name) == 0:
                 cleaned_node_name = re.sub(pattern, '_', node_name.rstrip("/").lstrip("/"))
+            # TF root scope names must start with [A-Za-z0-9.]; strip leading chars
+            # (e.g. underscores from torch module names like "_backbone") that violate this.
+            cleaned_node_name = re.sub(r'^[^A-Za-z0-9.]+', '', cleaned_node_name)
             node_params['cleaned_name'] = f'{cleaned_node_name}_tl'
             logger.debug('######')
             logger.debug(f"{node_index/len(onnx_nodes):.1%} completed")
