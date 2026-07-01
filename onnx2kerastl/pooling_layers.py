@@ -304,6 +304,35 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
     else:
         in_tensor = x
 
+    # When k is a static value there is no need to smuggle it through the input
+    # tensor (which tiles it across the batch and recovers it via k[0]); that
+    # recovery does a strided_slice of index 0 on the batch axis and crashes when
+    # a replica receives an empty shard (batch == 0) under distributed training.
+    # Closing over the constant k instead keeps top_k correct for any batch size.
+    k_is_static = is_numpy(k) or isinstance(k, (int, np.integer))
+    k_static = int(k) if k_is_static else None
+
+    def target_layer_static_k(in_tensor, to_sort=to_sort, axis=axis, k=k_static):
+        rank = len(in_tensor.shape)
+        if axis >= rank - 1 or axis == -1:
+            permuted = in_tensor
+        else:
+            ord_permute = np.arange(rank)
+            ord_permute[axis] = rank - 1
+            ord_permute[-1] = axis
+            permuted = tf.transpose(in_tensor, ord_permute)
+
+        topk_res = tf.math.top_k(permuted, k=k, sorted=to_sort)
+        values_pre_permute = topk_res[0]
+        indices_pre_permute = topk_res[1]
+        topk_concat = tf.stack([values_pre_permute, tf.cast(indices_pre_permute, tf.float32)])
+        if axis >= rank - 1 or axis == -1:
+            out = topk_concat
+        else:
+            ord_permute = [0] + (ord_permute + 1).tolist()
+            out = tf.transpose(topk_concat, ord_permute)
+        return out
+
     def target_layer(composed_input, to_sort=to_sort, axis=axis):
         in_tensor = composed_input[..., :-1]
         k = composed_input[..., -1]
@@ -331,22 +360,26 @@ def convert_topk(node, params, layers, lambda_func, node_name, keras_name):
             out = tf.transpose(topk_concat, ord_permute)
         return out
     in_shape = tf_shape(in_tensor, tf_name=f"{params['cleaned_name']}_topk_in_shape")
-    k_needed_shape_possible_keras_tensor = tf_concat(
-            [(in_shape)[:-1],[1]], axis=-1,tf_name=f"{params['cleaned_name']}_topk_k_needed_shape")
-
-    if hasattr(k_needed_shape_possible_keras_tensor, "_inferred_value") \
-            and k_needed_shape_possible_keras_tensor._inferred_value is not None \
-            and all(d is not None for d in k_needed_shape_possible_keras_tensor._inferred_value):
-        k_needed_shape = k_needed_shape_possible_keras_tensor._inferred_value
+    if k_is_static:
+        lambda_layer = keras.layers.Lambda(target_layer_static_k, name=f"{params['cleaned_name']}_topk")
+        result = lambda_layer(in_tensor)
     else:
-        k_needed_shape = k_needed_shape_possible_keras_tensor
-    k_unsqueezed = tf_ones(k_needed_shape, tf_name=f"{params['cleaned_name']}_topk_k_shape")*\
-                   tf_cast(k, tf.float32, tf_name=f"{params['cleaned_name']}_topk_k_cast")
-    k_reshaped = tf_cast(k_unsqueezed, in_tensor.dtype, tf_name=f"{params['cleaned_name']}_topk_k_reshaped")
-    composed_input = tf_concat([in_tensor, k_reshaped], axis=-1,
-                               tf_name=f"{params['cleaned_name']}_topk_k_concat")
-    lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_topk")
-    result = lambda_layer(composed_input)
+        k_needed_shape_possible_keras_tensor = tf_concat(
+                [(in_shape)[:-1],[1]], axis=-1,tf_name=f"{params['cleaned_name']}_topk_k_needed_shape")
+
+        if hasattr(k_needed_shape_possible_keras_tensor, "_inferred_value") \
+                and k_needed_shape_possible_keras_tensor._inferred_value is not None \
+                and all(d is not None for d in k_needed_shape_possible_keras_tensor._inferred_value):
+            k_needed_shape = k_needed_shape_possible_keras_tensor._inferred_value
+        else:
+            k_needed_shape = k_needed_shape_possible_keras_tensor
+        k_unsqueezed = tf_ones(k_needed_shape, tf_name=f"{params['cleaned_name']}_topk_k_shape")*\
+                       tf_cast(k, tf.float32, tf_name=f"{params['cleaned_name']}_topk_k_cast")
+        k_reshaped = tf_cast(k_unsqueezed, in_tensor.dtype, tf_name=f"{params['cleaned_name']}_topk_k_reshaped")
+        composed_input = tf_concat([in_tensor, k_reshaped], axis=-1,
+                                   tf_name=f"{params['cleaned_name']}_topk_k_concat")
+        lambda_layer = keras.layers.Lambda(target_layer, name=f"{params['cleaned_name']}_topk")
+        result = lambda_layer(composed_input)
     pos_axis = axis if axis > 0 else in_shape.shape[0]-1
     k_1d = [int(k)] if (is_numpy(k) or isinstance(k, (int, np.integer))) else \
            tf.reshape(tf.cast(k, tf.int32), [1])

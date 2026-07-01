@@ -772,9 +772,13 @@ def convert_gather_elements(node, params, layers, lambda_func, node_name, keras_
     indices_input = layers[node.input[1]]
 
     def torch_gather(x, indices, gather_axis):
-        all_indices = tf_where(tf_fill(indices.shape, True, tf_name=f"{params['cleaned_name']}_gather_fill"),
+        # Use the dynamic shape (tf_shape) rather than the static indices.shape so that
+        # partially-known shapes (e.g. dynamic batch/spatial dims, (None, None, None)) are
+        # supported. The static shape is only used for the rank, which is known at trace time.
+        indices_dynamic_shape = tf_shape(indices, tf_name=f"{params['cleaned_name']}_gather_indices_shape")
+        all_indices = tf_where(tf_fill(indices_dynamic_shape, True, tf_name=f"{params['cleaned_name']}_gather_fill"),
                                tf_name=f"{params['cleaned_name']}_gather_where")
-        gather_locations = tf_reshape(indices, [indices.shape.num_elements()],
+        gather_locations = tf_reshape(indices, [-1],
                                       tf_name=f"{params['cleaned_name']}_gather_reshape")
 
         gather_indices = []
@@ -788,7 +792,7 @@ def convert_gather_elements(node, params, layers, lambda_func, node_name, keras_
 
         gather_indices = tf_stack(gather_indices, axis=-1, tf_name=f"{params['cleaned_name']}_gather_indices")
         gathered = tf_gather_nd(x, gather_indices, tf_name=f"{params['cleaned_name']}_gather_nd")
-        reshaped = tf_reshape(gathered, indices.shape, tf_name=f"{params['cleaned_name']}_reshape")
+        reshaped = tf_reshape(gathered, indices_dynamic_shape, tf_name=f"{params['cleaned_name']}_reshape")
         return reshaped
 
     layers[node_name] = torch_gather(data_input, indices_input, axis)
