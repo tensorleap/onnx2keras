@@ -3,6 +3,7 @@ import tensorflow as tf
 from keras.layers import Layer
 
 
+@tf.keras.utils.register_keras_serializable(package="onnx2kerastl")
 class OnnxConstant(Layer):
     """Holds a (large) constant tensor as a non-trainable weight.
 
