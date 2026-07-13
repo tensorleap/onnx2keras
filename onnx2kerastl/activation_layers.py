@@ -179,7 +179,9 @@ def convert_mish(node, params, layers, lambda_func, node_name, keras_name):
         assert AttributeError('More than 1 input for an activation layer.')
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
-    layers[node_name] = input_0 * tf_math_tanh(tf_math_softplus(input_0))
+    softplus = tf_math_softplus(input_0, tf_name=f"{params['cleaned_name']}_mish_softplus")
+    layers[node_name] = input_0 * tf_math_tanh(softplus,
+                                               tf_name=f"{params['cleaned_name']}_mish_tanh")
 
 
 def convert_hard_swish(node, params, layers, lambda_func, node_name, keras_name):

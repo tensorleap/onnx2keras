@@ -181,16 +181,31 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
             if not is_numpy(layers[node.input[1]]):
                 indices = indices.numpy()
             indices = indices.tolist()
-        if "is_embedding" in params:
-            if len(input_0.shape) == 2:
-                emb = tf.keras.layers.Embedding(input_0.shape[0], input_0.shape[1], weights=[layers[node.input[0]]],
-                                                name=f"{params['cleaned_name']}_gather_emb")
-                if isinstance(indices, list):
-                    layers[node_name] = emb(np.array(indices))
-                else:
-                    layers[node_name] = emb(indices)
+        if "is_embedding" in params and len(input_0.shape) == 2:
+            emb = tf.keras.layers.Embedding(input_0.shape[0], input_0.shape[1], weights=[layers[node.input[0]]],
+                                            name=f"{params['cleaned_name']}_gather_emb")
+            if isinstance(indices, list):
+                layers[node_name] = emb(np.array(indices))
             else:
-                raise AttributeError("Cannot transform gather into embedding with non 2D array")
+                layers[node_name] = emb(indices)
+        elif "is_embedding" in params and len(input_0.shape) > 2 and axis == 0 \
+                and is_numpy(layers[node.input[0]]) \
+                and all(dim is not None for dim in input_0.shape) \
+                and not isinstance(indices, (list, int, np.integer)) \
+                and len(indices.shape) == 1:
+            # N-D lookup table selected by a per-sample runtime index (e.g. per-embodiment
+            # weight banks in VLA action heads): flatten to 2D so the table stays a proper
+            # model weight via Embedding, then restore the entry shape
+            table = layers[node.input[0]]
+            entry_shape = [int(dim) for dim in table.shape[1:]]
+            flat = table.reshape(table.shape[0], -1)
+            emb = tf.keras.layers.Embedding(flat.shape[0], flat.shape[1], weights=[flat],
+                                            trainable=False,
+                                            name=f"{params['cleaned_name']}_gather_emb_nd")
+            gathered_flat = emb(indices)
+            layers[node_name] = tf_reshape(
+                gathered_flat, np.array([-1] + entry_shape, dtype=np.int64),
+                tf_name=f"{params['cleaned_name']}_gather_emb_nd_reshape")
         else:
             if tf.is_tensor(indices) and indices.dtype not in [tf.int16, tf.int32, tf.int64]:
                 indices = tf_cast(indices, tf.int32, tf_name=f"{params['cleaned_name']}_gather_cast_indices")
@@ -392,10 +407,61 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                             new_shape = input_1.copy()
                             if dims_to_set_as_zero is not None:
                                 new_shape[dims_to_set_as_zero] = 0
+                                layers[node_name] = tf_reshape(input_0, new_shape,
+                                                               tf_name=f"{params['cleaned_name']}_reshape_2")
                             elif dims_to_keep_unchanged is not None:
-                                new_shape[dims_to_keep_unchanged] = np.array(input_0.shape)[dims_to_keep_unchanged]
-                            layers[node_name] = tf_reshape(input_0, new_shape,
-                                                           tf_name=f"{params['cleaned_name']}_reshape_2")
+                                keep_indices = set(np.atleast_1d(dims_to_keep_unchanged).tolist())
+                                kept_dims = [input_0.shape[i] for i in keep_indices]
+                                if any(dim is None for dim in kept_dims):
+                                    # a kept ('0') dim is dynamic (typically the batch): resolve
+                                    # it from the runtime shape instead of crashing on None.
+                                    # Pattern emitted by torch's GroupNorm decomposition and
+                                    # most stock transformer exports.
+                                    runtime_shape = tf_shape(input_0,
+                                                             tf_name=f"{params['cleaned_name']}_rt_shape")
+                                    shape_parts = []
+                                    for i, dim in enumerate(new_shape):
+                                        if i in keep_indices:
+                                            static_dim = input_0.shape[i]
+                                            shape_parts.append(runtime_shape[i] if static_dim is None
+                                                               else int(static_dim))
+                                        else:
+                                            shape_parts.append(int(dim))
+                                    target = tf_stack(shape_parts,
+                                                      tf_name=f"{params['cleaned_name']}_rt_target")
+                                    layers[node_name] = tf_reshape(input_0, target,
+                                                                   tf_name=f"{params['cleaned_name']}_reshape_2")
+                                    # a runtime-computed target erases the static shape, which
+                                    # downstream converters rely on — restore what is known
+                                    static_target = []
+                                    for i, dim in enumerate(new_shape):
+                                        if i in keep_indices:
+                                            static_dim = input_0.shape[i]
+                                            static_target.append(None if static_dim is None
+                                                                 else int(static_dim))
+                                        else:
+                                            static_target.append(None if int(dim) == -1 else int(dim))
+                                    if static_target.count(None) - sum(
+                                            1 for i in keep_indices if input_0.shape[i] is None) == 1 \
+                                            and -1 in [int(d) for d in new_shape]:
+                                        non_kept_input = [input_0.shape[i] for i in range(len(input_0.shape))
+                                                          if i not in keep_indices]
+                                        if all(d is not None for d in non_kept_input):
+                                            known_target = [d for i, d in enumerate(static_target)
+                                                            if i not in keep_indices and d is not None]
+                                            inferred = int(np.prod(non_kept_input)) // max(1, int(np.prod(known_target)))
+                                            static_target[[int(d) for d in new_shape].index(-1)] = inferred
+                                    try:
+                                        layers[node_name].set_shape(static_target)
+                                    except (AttributeError, ValueError):
+                                        pass
+                                else:
+                                    new_shape[dims_to_keep_unchanged] = np.array(input_0.shape)[dims_to_keep_unchanged]
+                                    layers[node_name] = tf_reshape(input_0, new_shape,
+                                                                   tf_name=f"{params['cleaned_name']}_reshape_2")
+                            else:
+                                layers[node_name] = tf_reshape(input_0, new_shape,
+                                                               tf_name=f"{params['cleaned_name']}_reshape_2")
                         else:
                             reshape = keras.layers.Reshape(np.int32(input_1[1:]),
                                                            name=f"{params['cleaned_name']}_reshape_input_2_3")

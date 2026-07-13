@@ -140,7 +140,17 @@ def onnx_to_keras(onnx_model, input_names, name_policy=None, verbose=True, chang
                 input_layer_dtype = tf.float32 if is_bool_input else dtype
                 input_shape = [i.dim_value for i in onnx_i.type.tensor_type.shape.dim]
                 input_shape = [shape if shape != 0 else None for shape in input_shape]
-                if len(input_shape) <= 1:
+                if len(input_shape) == 1 and input_shape[0] is None:
+                    # rank-1 input whose only dim is the dynamic batch (e.g. a per-sample
+                    # scalar like a diffusion timestep). The keras input must be (batch,):
+                    # the historical input_shape=[None] + [0]-slice built a rank-2 input and
+                    # fed the graph only batch row 0, silently breaking every batch>1 run.
+                    input_tensor = keras.layers.InputLayer(input_shape=(), name=input_name,
+                                                           dtype=input_layer_dtype).output
+                    layers[input_name] = input_tensor
+                    keras_inputs.append(input_tensor)
+
+                elif len(input_shape) <= 1:
                     input_tensor = keras.layers.InputLayer(input_shape=input_shape, name=input_name, dtype=input_layer_dtype).output
                     layers[input_name] = input_tensor[0]
                     keras_inputs.append(input_tensor)

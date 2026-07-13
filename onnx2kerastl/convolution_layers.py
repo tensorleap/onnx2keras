@@ -8,7 +8,7 @@ import tensorflow as tf
 from tensorflow.python.framework.ops import EagerTensor
 
 from .utils import ensure_tf_type, is_numpy
-from .tfops_funcs import tf_transpose, tf_pad, tf_shape, tf_reshape
+from .tfops_funcs import tf_transpose, tf_pad, tf_shape, tf_reshape, tf_expand_dims, tf_squeeze
 
 
 def _normalize_output_padding(output_padding, rank):
@@ -471,7 +471,13 @@ def convert_conv(node, params, layers, lambda_func, node_name, keras_name):
         if padding:
             # find the dimension to pad and use the exact padding values
             input_shape = np.asarray(keras.backend.int_shape(input_0))
-            partitioned_dim = np.argwhere(input_shape == channels * n_groups)[0][0]
+            channel_matches = np.argwhere(input_shape == channels * n_groups)
+            if len(channel_matches) > 0:
+                partitioned_dim = channel_matches[0][0]
+            else:
+                # static dims unknown (e.g. after a runtime-shaped reshape): ONNX Conv
+                # inputs are channels-first by spec
+                partitioned_dim = 1
             padding_dim = 2 if partitioned_dim == 1 else 1
             tf_padding = np.zeros((2, len(input_shape))).astype(int)
             tf_padding[:, padding_dim] = [padding[0], padding[1]]
@@ -528,6 +534,23 @@ def convert_convtranspose(node, params, layers,
     dilation_has_unsupported = any(v > 1 for v in dilations)
     pads = params['pads'] if 'pads' in params else [0, 0]
     strides = params['strides'] if 'strides' in params else [1, 1]
+
+    is_1d_lifted = False
+    if len(W.shape) == 3:
+        # 1D transposed convolution (e.g. diffusion-UNet upsampling): run it as the exact 2D
+        # equivalent over a trailing unit spatial dim, squeeze the result back at the end
+        is_1d_lifted = True
+        W = W[..., None] if is_W_constant else tf.expand_dims(W, -1)
+        input_0 = tf_expand_dims(input_0, -1, tf_name=f"{params['cleaned_name']}_ct1d_lift")
+        pads = [pads[0], 0, pads[1], 0] if len(pads) == 2 else [0, 0, 0, 0]
+        strides = [strides[0], 1] if len(strides) == 1 else [strides[0], 1]
+        params = dict(params)
+        params['pads'] = pads
+        params['strides'] = strides
+        if 'dilations' in params:
+            params['dilations'] = [params['dilations'][0], 1]
+        if 'output_padding' in params:
+            params['output_padding'] = [params['output_padding'][0], 0]
 
     if len(W.shape) == 5:  # 3D conv
         W = W.transpose(2, 3, 4, 1, 0)
@@ -693,6 +716,10 @@ def convert_convtranspose(node, params, layers,
             layers[node_name] = crop(input_0)
     else:
         raise AttributeError('Layer is not supported for now')
+
+    if is_1d_lifted:
+        layers[node_name] = tf_squeeze(layers[node_name], axis=-1,
+                                       tf_name=f"{params['cleaned_name']}_ct1d_unlift")
 
 
 def infer_output_shape(input_shape, filter_shape, strides, padding):
