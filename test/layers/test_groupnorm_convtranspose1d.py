@@ -52,6 +52,26 @@ def test_fused_groupnormalization(per_channel):
     assert np.allclose(out, ref, atol=1e-4)
 
 
+def test_fused_groupnormalization_dynamic_spatial():
+    channels, groups = 32, 4
+    rng = np.random.default_rng(0)
+    scale = numpy_helper.from_array(rng.standard_normal(groups).astype(np.float32), 'scale')
+    bias = numpy_helper.from_array(rng.standard_normal(groups).astype(np.float32), 'bias')
+    node = helper.make_node('GroupNormalization', ['x', 'scale', 'bias'], ['y'],
+                            num_groups=groups, epsilon=1e-5)
+    graph = helper.make_graph(
+        [node], 'gn_dyn',
+        [helper.make_tensor_value_info('x', TensorProto.FLOAT, ['batch', channels, 'height', 'width'])],
+        [helper.make_tensor_value_info('y', TensorProto.FLOAT, ['batch', channels, 'height', 'width'])],
+        [scale, bias])
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid('', 18)])
+
+    x = rng.standard_normal((3, channels, 5, 7)).astype(np.float32)
+    out, ref = _run(model, {'x': x}, ['x'])
+    assert out.shape == ref.shape
+    assert np.allclose(out, ref, atol=1e-4)
+
+
 def test_convtranspose_1d():
     rng = np.random.default_rng(0)
     weight = numpy_helper.from_array(

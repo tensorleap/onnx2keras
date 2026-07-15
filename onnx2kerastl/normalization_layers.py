@@ -5,7 +5,8 @@ import numpy as np
 import tensorflow as tf
 
 from .utils import ensure_tf_type
-from .tfops_funcs import tf_math_reduce_mean, tf_math_reduce_variance, tf_sqrt, tf_rank, tf_concat, tf_reshape
+from .tfops_funcs import tf_math_reduce_mean, tf_math_reduce_variance, tf_sqrt, tf_rank, tf_concat, tf_reshape, \
+    tf_shape, tf_stack
 
 
 def convert_batchnorm(node, params, layers, lambda_func, node_name, keras_name):
@@ -204,17 +205,17 @@ def convert_groupnorm(node, params, layers, lambda_func, node_name, keras_name):
     num_groups = int(params['num_groups'])
     epsilon = params.get('epsilon', 1e-5)
 
-    static_shape = input_0.shape
-    channels = static_shape[1]
-    spatial = static_shape[2:]
-    if channels is None or any(dim is None for dim in spatial):
-        raise AttributeError('GroupNormalization requires static channel/spatial dims')
+    channels = input_0.shape[1]
+    if channels is None:
+        raise AttributeError('GroupNormalization requires a static channel dim')
     channels = int(channels)
-    spatial = [int(dim) for dim in spatial]
     group_size = channels // num_groups
-    inner = group_size * int(np.prod(spatial)) if spatial else group_size
+    rank = len(input_0.shape)
 
-    grouped = tf_reshape(input_0, np.array([-1, num_groups, inner], dtype=np.int64),
+    in_shape = tf_shape(input_0, tf_name=f"{params['cleaned_name']}_gn_shape")
+    grouped_shape = tf_stack([in_shape[0], num_groups, -1],
+                             tf_name=f"{params['cleaned_name']}_gn_group_shape")
+    grouped = tf_reshape(input_0, grouped_shape,
                          tf_name=f"{params['cleaned_name']}_gn_group")
     mean = tf_math_reduce_mean(grouped, axis=2, keepdims=True,
                                tf_name=f"{params['cleaned_name']}_gn_mean")
@@ -222,7 +223,7 @@ def convert_groupnorm(node, params, layers, lambda_func, node_name, keras_name):
                                        tf_name=f"{params['cleaned_name']}_gn_var")
     normalized = (grouped - mean) / tf_sqrt(variance + epsilon,
                                             tf_name=f"{params['cleaned_name']}_gn_std")
-    restored = tf_reshape(normalized, np.array([-1, channels] + spatial, dtype=np.int64),
+    restored = tf_reshape(normalized, in_shape,
                           tf_name=f"{params['cleaned_name']}_gn_restore")
 
     scale = np.asarray(scale, dtype=np.float32)
@@ -230,5 +231,5 @@ def convert_groupnorm(node, params, layers, lambda_func, node_name, keras_name):
     if scale.shape[0] == num_groups and num_groups != channels:
         scale = np.repeat(scale, group_size)
         bias = np.repeat(bias, group_size)
-    affine_shape = [1, channels] + [1] * len(spatial)
+    affine_shape = [1, channels] + [1] * (rank - 2)
     layers[node_name] = restored * scale.reshape(affine_shape) + bias.reshape(affine_shape)
