@@ -20,7 +20,7 @@ from .reshape_layers import convert_transpose, convert_shape, convert_gather, co
     convert_concat, convert_reshape, convert_flatten, convert_slice, convert_squeeze, convert_expand, convert_resize, \
     convert_tile, convert_gather_elements, col2im_onnx
 from .constant_layers import convert_constant, convert_constant_of_shape, convert_one_hot
-from .normalization_layers import convert_batchnorm, convert_instancenorm, convert_dropout, convert_lrn, convert_layernorm
+from .normalization_layers import convert_batchnorm, convert_instancenorm, convert_dropout, convert_lrn, convert_layernorm, convert_groupnorm
 from .pooling_layers import convert_avgpool, convert_global_max_pool, convert_maxpool, convert_global_avg_pool, convert_topk, convert_roi_align
 from .padding_layers import convert_padding
 from .upsampling_layers import convert_upsample
@@ -78,6 +78,7 @@ AVAILABLE_CONVERTERS = {
     'Constant': convert_constant,
     'BatchNormalization': convert_batchnorm,
     'InstanceNormalization': convert_instancenorm,
+    'GroupNormalization': convert_groupnorm,
     'Dropout': convert_dropout,
     'LRN': convert_lrn,
     'MaxPool': convert_maxpool,

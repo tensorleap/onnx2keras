@@ -5,7 +5,8 @@ import numpy as np
 import tensorflow as tf
 
 from .utils import ensure_tf_type
-from .tfops_funcs import tf_math_reduce_mean, tf_math_reduce_variance, tf_sqrt, tf_rank, tf_concat, tf_reshape
+from .tfops_funcs import tf_math_reduce_mean, tf_math_reduce_variance, tf_sqrt, tf_rank, tf_concat, tf_reshape, \
+    tf_shape, tf_stack
 
 
 def convert_batchnorm(node, params, layers, lambda_func, node_name, keras_name):
@@ -191,3 +192,44 @@ def convert_layernorm(node, params, layers, lambda_func, node_name, keras_name):
     else:
         layer_norm.set_weights([weight])
     layers[node_name] = layer_norm(input_x)
+
+
+def convert_groupnorm(node, params, layers, lambda_func, node_name, keras_name):
+    """
+    Convert the fused GroupNormalization op (opset 18+). Channels-first per ONNX spec;
+    scale/bias are per-group in opset 18 and per-channel from opset 21 — both accepted.
+    """
+    input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
+    scale = layers[node.input[1]]
+    bias = layers[node.input[2]]
+    num_groups = int(params['num_groups'])
+    epsilon = params.get('epsilon', 1e-5)
+
+    channels = input_0.shape[1]
+    if channels is None:
+        raise AttributeError('GroupNormalization requires a static channel dim')
+    channels = int(channels)
+    group_size = channels // num_groups
+    rank = len(input_0.shape)
+
+    in_shape = tf_shape(input_0, tf_name=f"{params['cleaned_name']}_gn_shape")
+    grouped_shape = tf_stack([in_shape[0], num_groups, -1],
+                             tf_name=f"{params['cleaned_name']}_gn_group_shape")
+    grouped = tf_reshape(input_0, grouped_shape,
+                         tf_name=f"{params['cleaned_name']}_gn_group")
+    mean = tf_math_reduce_mean(grouped, axis=2, keepdims=True,
+                               tf_name=f"{params['cleaned_name']}_gn_mean")
+    variance = tf_math_reduce_variance(grouped, axis=2, keepdims=True,
+                                       tf_name=f"{params['cleaned_name']}_gn_var")
+    normalized = (grouped - mean) / tf_sqrt(variance + epsilon,
+                                            tf_name=f"{params['cleaned_name']}_gn_std")
+    restored = tf_reshape(normalized, in_shape,
+                          tf_name=f"{params['cleaned_name']}_gn_restore")
+
+    scale = np.asarray(scale, dtype=np.float32)
+    bias = np.asarray(bias, dtype=np.float32)
+    if scale.shape[0] == num_groups and num_groups != channels:
+        scale = np.repeat(scale, group_size)
+        bias = np.repeat(bias, group_size)
+    affine_shape = [1, channels] + [1] * (rank - 2)
+    layers[node_name] = restored * scale.reshape(affine_shape) + bias.reshape(affine_shape)
