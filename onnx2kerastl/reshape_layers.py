@@ -283,6 +283,19 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
             if not np.array([tf.is_tensor(layer_input[i]) and K.is_keras_tensor(layer_input[i]) for i in
                              range(len(layer_input))]).all() or any(
                 [layer_input[i].shape == None for i in range(len(layer_input))]):
+                # harmonize mixed integer dtypes (e.g. int32 tf.shape results
+                # concatenated with int64 constants) before tf.concat
+                np_dtypes = [np.dtype(t.dtype) if is_numpy(t) else np.dtype(t.dtype.as_numpy_dtype)
+                             for t in layer_input]
+                if (all(np.issubdtype(d, np.integer) for d in np_dtypes)
+                        and len(set(np_dtypes)) > 1):
+                    target = max(np_dtypes, key=lambda d: d.itemsize)
+                    layer_input = [
+                        t if d == target else
+                        (t.astype(target) if is_numpy(t)
+                         else tf_cast(t, target, tf_name=f"{params['cleaned_name']}_cast_{i}"))
+                        for i, (t, d) in enumerate(zip(layer_input, np_dtypes))
+                    ]
                 try:
                     layers[node_name] = tf_concat(layer_input, axis=params['axis'],
                                                   tf_name=f"{params['cleaned_name']}_concat")

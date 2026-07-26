@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.egg-info
 *.onnx
+*.onnx.data
 *.h5
 *.npy
 *.pth
@@ -14,5 +15,6 @@ poetry.lock
 test/models/custom_conversion_tests
 
 .vscode/
+.venv/
 gallery_models
 .DS_Store
