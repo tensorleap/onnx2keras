@@ -415,6 +415,19 @@ def convert_scatter_nd(node, params, layers, lambda_func, node_name, keras_name)
     data = ensure_tf_type(layers[node.input[0]])
     indices = ensure_tf_type(layers[node.input[1]])
     updates = ensure_tf_type(layers[node.input[2]])
+    # harmonize mixed integer dtypes (e.g. int32 tf.shape results scattered
+    # with int64 constants) — tf.tensor_scatter_nd_update requires data and
+    # updates to share a dtype, widening to the largest like convert_concat
+    data_dtype = np.dtype(data.dtype.as_numpy_dtype)
+    updates_dtype = np.dtype(updates.dtype.as_numpy_dtype)
+    if (data_dtype != updates_dtype
+            and np.issubdtype(data_dtype, np.integer)
+            and np.issubdtype(updates_dtype, np.integer)):
+        target = max(data_dtype, updates_dtype, key=lambda d: d.itemsize)
+        if data_dtype != target:
+            data = tf_cast(data, target, tf_name=f"{params['cleaned_name']}_cast_data")
+        if updates_dtype != target:
+            updates = tf_cast(updates, target, tf_name=f"{params['cleaned_name']}_cast_updates")
     layers[node_name] = tf_tensor_scatter_nd_update(data, indices, updates,
                                                     tf_name=f"{params['cleaned_name']}_scatter_nd")
 

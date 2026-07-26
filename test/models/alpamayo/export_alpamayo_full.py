@@ -82,38 +82,59 @@ def load_action_in_proj_module(alpamayo_src):
     return mod
 
 
+N_LAYERS = 36
+N_KV_HEADS = 8
+HEAD_DIM = 128
+PAST_LEN = 32  # trace-time VLM prompt-cache length; the axis is exported as dynamic
+
+
 class AlpamayoDenoiser(torch.nn.Module):
-    """Self-contained step_fn: noisy action + timestep -> predicted vector field."""
+    """step_fn with the VLM prompt KV-cache as explicit inputs.
+
+    At inference AlpamayoR1's diffusion loop runs the expert conditioned on the
+    VLM's past_key_values (the expert shares the VLM cache layout: 8 KV heads x 128).
+    Inputs mirror that call:
+      noisy_action (1, 64, 2), timesteps (1, 1, 1)
+      position_ids (3, 1, 64)  mrope positions (arange(64) + rope_delta + prompt offset)
+      attention_mask (1, 1, 64, P+64) additive float mask (zeros = attend,
+          large negative = masked; the real pipeline masks left-padding this way)
+      past_key_values.{i}.key/.value (1, 8, P, 128) x 36 - feed the VLM decoder's
+          present.* outputs here
+    Output: vector_field (1, 64, 2). No present.* outputs: the pipeline crops the
+    cache back to the prompt length after every denoising step, so the expert's
+    appended entries are never reused.
+
+    The loop reimplements Qwen3VLTextModel.forward with the same submodules so the
+    cache is built from plain tensors and the input mask reaches attention directly.
+    """
 
     def __init__(self, action_in_proj, expert, action_out_proj):
         super().__init__()
         self.action_in_proj = action_in_proj
         self.expert = expert
         self.action_out_proj = action_out_proj
-        # mrope positions (3, B, T): text-only rollout uses the same arange on all
-        # three rows; the prompt-length shift at inference only offsets RoPE phases.
-        self.register_buffer(
-            "position_ids",
-            torch.arange(N_WAYPOINTS).view(1, 1, -1).expand(3, 1, -1).contiguous(),
-            persistent=False,
-        )
-        # expert_non_causal_attention=True -> all 64 action tokens fully visible:
-        # an explicit all-zero float mask (B, 1, T, T) sidesteps causal-mask creation.
-        self.register_buffer(
-            "attention_mask",
-            torch.zeros(1, 1, N_WAYPOINTS, N_WAYPOINTS),
-            persistent=False,
-        )
 
-    def forward(self, x, t):
-        future_token_embeds = self.action_in_proj(x, t)  # (B, 64, 2048)
-        expert_out = self.expert(
-            inputs_embeds=future_token_embeds,
-            position_ids=self.position_ids,
-            attention_mask=self.attention_mask,
-            use_cache=False,
-        )
-        last_hidden = expert_out.last_hidden_state[:, -N_WAYPOINTS:]
+    def forward(self, x, t, position_ids, attention_mask, *past_flat):
+        from transformers.cache_utils import DynamicCache
+
+        cache = DynamicCache(config=self.expert.config)
+        for i in range(N_LAYERS):
+            cache.update(past_flat[2 * i], past_flat[2 * i + 1], i)
+
+        hidden = self.action_in_proj(x, t)  # (B, 64, 2048)
+        position_embeddings = self.expert.rotary_emb(hidden, position_ids)
+        text_position_ids = position_ids[0]
+        for layer in self.expert.layers:
+            hidden = layer(
+                hidden,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
+                position_ids=text_position_ids,
+                past_key_values=cache,
+                use_cache=True,
+            )
+        hidden = self.expert.norm(hidden)
+        last_hidden = hidden[:, -N_WAYPOINTS:]
         return self.action_out_proj(last_hidden).view(-1, N_WAYPOINTS, ACTION_DIM)
 
 
@@ -172,34 +193,63 @@ def main():
     assert not unexpected, f"unexpected weights: {unexpected[:5]}"
     model.eval()
 
+    torch.manual_seed(0)
     x = torch.rand(1, N_WAYPOINTS, ACTION_DIM)
     t = torch.rand(1, 1, 1)
+    pos = (torch.arange(N_WAYPOINTS) + PAST_LEN).view(1, 1, -1).expand(3, 1, -1).contiguous()
+    mask = torch.zeros(1, 1, N_WAYPOINTS, PAST_LEN + N_WAYPOINTS)
+    past = [torch.randn(1, N_KV_HEADS, PAST_LEN, HEAD_DIM) * 0.1
+            for _ in range(2 * N_LAYERS)]
+    inputs = (x, t, pos, mask, *past)
     with torch.no_grad():
-        ref = model(x, t)
+        ref = model(*inputs)
     print("torch output:", tuple(ref.shape))
 
-    # non-causality check: with full attention, perturbing the LAST token must
-    # change the FIRST token's output.
+    # parity check: the reimplemented loop must match the official
+    # Qwen3VLTextModel.forward with an equivalent prefilled DynamicCache
+    from transformers.cache_utils import DynamicCache
+
+    cache = DynamicCache(config=model.expert.config)
+    for i in range(N_LAYERS):
+        cache.update(past[2 * i], past[2 * i + 1], i)
+    with torch.no_grad():
+        embeds = model.action_in_proj(x, t)
+        official = model.expert(
+            inputs_embeds=embeds, position_ids=pos, attention_mask=mask,
+            past_key_values=cache, use_cache=True,
+        ).last_hidden_state
+        official = model.action_out_proj(official[:, -N_WAYPOINTS:]).view(
+            -1, N_WAYPOINTS, ACTION_DIM)
+    parity = (official - ref).abs().max().item()
+    assert parity < 1e-5, f"wrapper diverges from official forward: {parity}"
+    print(f"official-forward parity ok (max delta {parity:.2e})")
+
+    # non-causality check: with a zero mask, perturbing the LAST action token
+    # must change the FIRST token's output.
     x2 = x.clone()
     x2[0, -1] += 0.5
     with torch.no_grad():
-        ref2 = model(x2, t)
+        ref2 = model(x2, t, pos, mask, *past)
     first_tok_delta = (ref2[0, 0] - ref[0, 0]).abs().max().item()
     assert first_tok_delta > 0, "expert attention is causal - non-causal path not active"
     print(f"non-causal check ok (first-token delta {first_tok_delta:.2e})")
 
     print("Exporting ONNX (external data for >2GB)...")
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
-    kwargs = dict(
-        input_names=["noisy_action", "timesteps"],
+    past_names = []
+    for i in range(N_LAYERS):
+        past_names += [f"past_key_values.{i}.key", f"past_key_values.{i}.value"]
+    dynamic_axes = {n: {2: "past_len"} for n in past_names}
+    dynamic_axes["attention_mask"] = {3: "past_len_plus_64"}
+    torch.onnx.export(
+        model, inputs, args.out,
+        input_names=["noisy_action", "timesteps", "position_ids",
+                     "attention_mask", *past_names],
         output_names=["vector_field"],
+        dynamic_axes=dynamic_axes,
         opset_version=17,
         do_constant_folding=True,
     )
-    try:
-        torch.onnx.export(model, (x, t), args.out, dynamo=False, **kwargs)
-    except TypeError:
-        torch.onnx.export(model, (x, t), args.out, **kwargs)
     print("exported", args.out)
 
     # the classic exporter scatters one external-data file per tensor;
@@ -223,10 +273,21 @@ def main():
     import onnxruntime as ort
 
     sess = ort.InferenceSession(args.out)
-    out = sess.run(None, {"noisy_action": x.numpy(), "timesteps": t.numpy()})[0]
+    feeds = {"noisy_action": x.numpy(), "timesteps": t.numpy(),
+             "position_ids": pos.numpy(), "attention_mask": mask.numpy(),
+             **{n: p.numpy() for n, p in zip(past_names, past)}}
+    out = sess.run(None, feeds)[0]
     diff = np.abs(out - ref.numpy())
     print(f"onnxruntime vs torch: mean={diff.mean():.3e} max={diff.max():.3e}")
     assert diff.mean() < 1e-4 and diff.max() < 1e-3
+
+    # prove the past axis is truly dynamic: rerun with P=3
+    small = {**feeds,
+             "attention_mask": np.zeros((1, 1, N_WAYPOINTS, 3 + N_WAYPOINTS),
+                                        np.float32),
+             **{n: p.numpy()[:, :, :3] for n, p in zip(past_names, past)}}
+    assert sess.run(None, small)[0].shape == (1, N_WAYPOINTS, ACTION_DIM)
+    print("dynamic past OK")
     print("OK")
 
 

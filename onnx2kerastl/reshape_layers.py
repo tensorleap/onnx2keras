@@ -408,10 +408,18 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                     if len(np.int32(input_1[1:])) == 1 and np.int32(input_1[1:])[0] == -1:
                         if input_0.shape.rank == 1:
                             input_0 = tf_expand_dims(input_0, 0, tf_name=f"{params['cleaned_name']}_expand_dims")
-                        logger.debug('The first argument is Keras/tf layer. Apply keras.Flatten.')
-                        flatten = keras.layers.Reshape(target_shape=input_1[1:],
-                                                       name=f"{params['cleaned_name']}_reshape_input_2_2")
-                        layers[node_name] = flatten(input_0)
+                        if (input_0.shape[0] is not None and int(input_1[0]) > 0
+                                and int(input_1[0]) != int(input_0.shape[0])):
+                            # target [X, -1] where X is NOT the batch dim (e.g. ONNX
+                            # Reshape([768, -1]) of a (1, 768, 16, 72) tensor) — keras
+                            # Reshape would keep the batch and fold X into the -1
+                            layers[node_name] = tf_reshape(input_0, np.int64(input_1),
+                                                           tf_name=f"{params['cleaned_name']}_reshape_flat")
+                        else:
+                            logger.debug('The first argument is Keras/tf layer. Apply keras.Flatten.')
+                            flatten = keras.layers.Reshape(target_shape=input_1[1:],
+                                                           name=f"{params['cleaned_name']}_reshape_input_2_2")
+                            layers[node_name] = flatten(input_0)
                     elif len(input_1) == 1 and input_1[0] == -1:
                         layers[node_name] = tf_reshape(input_0, [-1], tf_name=f"{params['cleaned_name']}_reshape_1")
                     else:
