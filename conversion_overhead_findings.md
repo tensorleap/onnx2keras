@@ -1,10 +1,17 @@
 # ONNX → Keras conversion overhead: findings and fix plan
 
 Investigation of whether `onnx2kerastl` produces "overblown" Keras models that make
-inference slow. Triggered by `overwatch/model/v7_5_raw.onnx`, then generalised to the
-13 ONNX models available locally in this repo.
+inference slow. Triggered by `overwatch/model/v7_5_raw.onnx`, then generalised to a
+12-model sample of the ~22 ONNX models held in this repo (see §5 for what was left out
+and why).
 
 **Status:** findings validated, fix plan approved, implementation not started.
+
+A critical review of this document is in
+[`conversion_overhead_findings_review.md`](conversion_overhead_findings_review.md). Its
+findings on the Defect B causal story (§5.2 here), the transpose share (§4.6), survey
+scope (§5), and the shape-lambda gap in the fix plan (§7.1) have been accepted and folded
+in.
 
 ---
 
@@ -14,8 +21,8 @@ There are **two independent defects**, both general (not specific to any one mod
 
 | # | Defect | Who it hits | Cost |
 |---|---|---|---|
-| **A** | **Transpose sandwich** — every `Conv`/`Pooling` layer is wrapped in its own `Permute`-in/`Permute`-out pair, so the tensor ping-pongs NHWC↔NCHW around every convolution | every CNN, without exception (~2.0–2.6 Permutes per conv) | **22–30% of all compute**; 2.5× slower than onnxruntime on `v7_5_raw`, up to **40.6×** on `x3d_s` |
-| **B** | **Lambda explosion + eager dispatch** — transformer graphs expand into thousands of `TFOpLambda`/`Lambda` layers, and running them eagerly costs pure Python dispatch | transformers (`swin` 3992 lambdas, `rtdetrv2` 1225, `traffic_light` 559, `dinov2` 407) | eager-vs-graph penalty of **2×–37×**, zero of it real compute |
+| **A** | **Transpose sandwich** — every `Conv`/`Pooling` layer is wrapped in its own `Permute`-in/`Permute`-out pair, so the tensor ping-pongs NHWC↔NCHW around every convolution | every CNN, without exception (~2.0–2.6 Permutes per conv) | est. **30–50% of graph-mode wall time** (§4.6 — an interval, not a measurement); 2.5× slower than onnxruntime on `v7_5_raw`. `x3d_s` is 40.6× but its attribution to this defect is **unvalidated** (§5.1) |
+| **B** | **Eager dispatch, inflated by lambda explosion** — running a converted model eagerly costs **~0.1–0.3 ms per Keras layer** in Python dispatch, and transformer graphs expand into thousands of `TFOpLambda`/`Lambda` layers | anything with a high layer count; worst is `swin` at 4369 layers / 3992 lambdas | **~2.2 s per call** on `swin`, ~142 ms on `ctformer`. Note the eager/graph *ratio* does **not** track lambda count (§5.2) |
 
 For the originating question — **`v7_5_raw` is defect A, not B.** Its 57 lambda layers are
 all scalar shape plumbing (`Shape`/`Gather`/`Unsqueeze` on `()`- and `(4,)`-shaped tensors)
@@ -76,12 +83,13 @@ where absolute times drift.
 
 ### 3.1 Conversion pipeline under test
 
-The pipeline is exactly what `onnx2kerastl/convert_model.py:8-26` does in production:
+Modelled on `onnx2kerastl/convert_model.py:8-26`:
 
 ```python
 onnx_model = onnx.load(path)
-input_features = [inp.name for inp in onnx_model.graph.input]   # minus initializers
-keras_model = onnx_to_keras(onnx_model, input_names=input_features,
+initializers = {n.name for n in onnx_model.graph.initializer}
+input_names = [i.name for i in onnx_model.graph.input if i.name not in initializers]
+keras_model = onnx_to_keras(onnx_model, input_names=input_names,
                             name_policy='attach_weights_name',
                             allow_partial_compilation=False).converted_model
 final_model = convert_channels_first_to_last(keras_model,
@@ -90,8 +98,28 @@ final_model = convert_channels_first_to_last(keras_model,
 
 The second step matters: `onnx_to_keras` alone emits a **channels-first** model, which
 cannot run on CPU at all (`Conv2D op currently only supports the NHWC tensor format on the
-CPU`). So every measurement below is of the post-`convert_channels_first_to_last` model,
-i.e. what actually ships.
+CPU`). So every measurement below is of the post-`convert_channels_first_to_last` model.
+
+> **Two deliberate departures from `convert_model.py`.** That script filters nothing from
+> `graph.input` (initializers included) and passes `verbose=True`; the harness filters
+> initializers and runs quiet. Neither affects the resulting graph.
+>
+> **One that needed checking: `should_transform_inputs_and_outputs`.** The library default
+> is `False` (`converterapi.py:14`) and that is what is measured here, but
+> `convert_model.py:8` defaults its own `transform_io` to `True`, so this is not that
+> script's default path. Measured both on `v7_5_raw`:
+>
+> ```
+> transform_io=False: 350 layers, 136 Permute, 867 graph ops, maxdiff 1.9e-05
+> transform_io=True:  354 layers, 140 Permute, 875 graph ops, input (1,None,3,None)
+> ```
+>
+> The flag adds **4 boundary transposes** and leaves the 136 internal ones untouched, so
+> it does not affect any conclusion here. It also transposes the model's I/O: since this
+> model's ONNX input is already NHWC, `True` yields a model that rejects the natural input
+> tensor with a shape error and returns transposed outputs. `False` is the correct setting
+> for it. Which setting Tensorleap actually invokes in production is still worth
+> confirming, and §7.2 commits to preserving both.
 
 ### 3.2 Timing protocol
 
@@ -121,9 +149,10 @@ Four execution modes were timed, because they differ substantially:
 - **Frozen graph check**: `convert_variables_to_constants_v2(concrete_fn)` then the same
   counter, to rule out variable-reading noise.
 
-### 3.4 Per-op cost attribution (the 30% figure)
+### 3.4 Per-op cost attribution (the transpose share)
 
-Two independent methods, which agree:
+Three methods. **They do not agree, and an earlier revision of this document wrongly
+claimed they did** — see §4.6 for the reconciled range.
 
 **Method 1 — standalone re-timing.** For each `Permute` layer, recover its true input
 shape by running a sub-model up to that layer, allocate a real `tf.Variable` of that
@@ -139,8 +168,20 @@ for o, l in zip(outs, perm_layers):
     ... time f(src) over 20 iterations
 ```
 
-Result for `v7_5_raw`: **26.1 ms** across 136 Permutes, against a 94.7 ms full-model eager
-time → ≈28%.
+Result for `v7_5_raw`: **26.1 ms** of graph-mode wall time across 136 Permutes (20
+iterations each).
+
+> **Denominator warning.** An earlier revision divided this by the 94.7 ms full-model
+> *eager* time to get ≈28%, which is wrong: the numerator is graph-mode wall time and the
+> eager denominator contains ~47 ms of Python dispatch that the numerator does not (§4.4).
+> Against the quantity a fix would actually reduce — graph-mode wall time, 50.9 ms —
+> Method 1 gives **26.1 / 50.9 ≈ 51%**.
+>
+> Method 1 also over-attributes: standalone re-timing pays full call-entry and cold-cache
+> cost per op and loses in-graph locality. Held to a consistent eager baseline, §4.7's
+> layer types (44.0 ms) plus these Permutes (26.1 ms) plus dispatch (47.3 ms) total
+> 117.4 ms against a measured 98.2 ms — **120% of runtime**, before MaxPool, ConcatV2,
+> BiasAdd and 57 lambdas. So ~51% is an upper bound, not a point estimate.
 
 > An earlier attempt that timed `tf.transpose(tf.zeros(shape), perm)` returned 0.4 ms and
 > was **discarded** — TF constant-folds `transpose(zeros)` at trace time, so it measured
@@ -171,6 +212,32 @@ for plane in xspace.planes:
 > is how they are used below, and not as absolute latencies. The `ExecutorState::Process`
 > scope (126.88 ms, 139 events) is the executor wrapper enclosing the real ops and is
 > excluded from the share denominator to avoid double-counting.
+>
+> **A thread-time share is not a wall-time share.** Converting one to the other assumes
+> every op parallelises equally well, which is false here — see Method 3.
+
+**Method 3 — single-threaded profiler.** The same profiler run with
+`tf.config.threading.set_intra_op_parallelism_threads(1)` and
+`set_inter_op_parallelism_threads(1)`. At one thread, thread-time is wall-time, so the
+share is directly interpretable — confirmed by the leaf-op sum landing at 232.2 ms
+against 238.0 ms wall, a ratio of **0.98**:
+
+```
+1 thread: onnx 22.4 ms | keras graph 238.0 ms | 10.62x
+  _FusedConv2D    58    163.27 ms   70.3%
+  Transpose      115     30.78 ms   13.3%
+  LeakyRelu       55     30.00 ms   12.9%
+  Pad             21      3.49 ms    1.5%
+  MaxPool          6      2.50 ms    1.1%
+  ConcatV2        17      1.96 ms    0.8%
+```
+
+This does **not** simply resolve the multi-thread question — it answers a different one,
+giving 13.3% under single-thread conditions that nobody deploys. Its real value is the
+comparison against Method 2: `Transpose` costs ~31–34 ms at both 1 and 16 threads
+(**parallelism ≈ 1.1×, effectively serial**), while `_FusedConv2D` drops from 163.27 ms
+of single-thread work to 56.42 ms of summed thread-time. Convolutions parallelise;
+transposes do not.
 
 ### 3.5 Input shapes for the survey
 
@@ -190,6 +257,11 @@ Both backends received the identical tensor, so the **ratios for these two rows 
 valid**; only the absolute milliseconds are meaningless. `test/model.onnx` (a BERT-like
 model) ran at sequence length 1, which is trivially small — its absolute times should
 likewise be ignored.
+
+> **The harness has since been fixed** (`benchmarks/common.py:resolve_dim`): axis 0 now
+> resolves to 1 unconditionally, regardless of its symbolic name. The §5 numbers were
+> produced *before* that fix and are reported as measured; re-running the survey will
+> change the `swin` and `chip` rows.
 
 ---
 
@@ -311,19 +383,52 @@ are of the 111.34 ms of real op time, excluding the `ExecutorState::Process` wra
 | `ResizeNearestNeighbor` | 2 | 0.23 | 0.2% |
 | everything else | — | 0.06 | 0.1% |
 
-Method 1 (standalone re-timing, §3.4) independently gave ≈28%.
+A repeat of the same run on a more loaded machine (onnxruntime 20.1 → 32.3 ms) gave
+`_FusedConv2D` 56.6% and `Transpose` **22.4%**.
 
-A later repeat of the same profiler run on a more loaded machine (onnxruntime 20.1 →
-32.3 ms) gave `_FusedConv2D` 56.6% and `Transpose` **22.4%**. So the honest statement is
-that **transposes are consistently 22–30% of op time**, i.e. between a fifth and a third
-of the entire model, and roughly 40–60% of what the convolutions themselves cost. The
-ordering — conv first, transpose second, everything else far behind — was stable across
-every run.
+#### Reconciling the methods
+
+These numbers measure different things and an earlier revision of this document wrongly
+presented them as mutual corroboration. What each one actually says:
+
+| method | quantity | `Transpose` |
+|---|---|---|
+| 2 — profiler, 16 threads | share of **thread-time** | 22–30% |
+| 3 — profiler, 1 thread | share of **wall time, single-threaded** | 13.3% |
+| 1 — standalone re-timing | graph wall / graph wall, **over-attributes** | ≤51% |
+
+The multi-threaded *wall* share — the quantity that matters — is bounded rather than
+measured. Total op thread-time is 111.34 ms against ~51 ms wall, so average parallelism
+is 2.18×. If `Transpose` parallelised at that average its wall share would be ~30%; if it
+were fully serial, 33.84 ms of thread-time is 33.84 ms of wall time, or ~66%.
+
+Method 3 settles which end applies: **transposes are effectively serial** (~31–34 ms of
+work at both 1 and 16 threads) while convolutions parallelise well. That pushes the true
+value toward the upper part of the interval, and Method 1's upper bound of ~51% is
+consistent with it.
+
+> **Best current estimate: transposes are ~30–50% of multi-threaded graph wall time.**
+> The 30.4% figure carried by earlier revisions of this document is the **floor**, not the
+> estimate. The error direction favours the fix.
+>
+> This remains an interval, not a measurement. The only decisive test is a prototype with
+> the transposes actually removed, timed against the current model — no profiler
+> configuration substitutes for it. Treat §7.3's projection accordingly.
 
 TF fused `Conv2D`+`BiasAdd` into `_FusedConv2D` but did **not** fuse `LeakyRelu` —
 onnxruntime does, which is part of why it stays ahead even after this is fixed.
 
-### 4.7 Cross-check: per-layer-type standalone timings
+#### Unexplained op-count gap
+
+The profiler reports 115 `Transpose` and 21 `Pad` per iteration, but §4.2 counts 136
+`Permute` and 23 `ZeroPadding2D`, and §4.5 confirms all 136 survive into the frozen
+graph. **21 transposes and 2 pads are unaccounted for.** Either they execute on
+constant/weight paths and are folded at runtime — in which case "136 Permutes" overstates
+the runtime problem by ~15% — or the profiler is dropping events, in which case the
+shares above are understated. Not yet resolved; it should be before §7.3's projection is
+relied on.
+
+### 4.7 Sanity check only: per-layer-type standalone timings
 
 Independent re-timing of each layer type in isolation, against a 97.9 ms eager baseline:
 
@@ -333,9 +438,12 @@ LeakyReLU        n= 55      8.7 ms   8.8%
 Conv2D           n= 58     31.9 ms  32.6%
 ```
 
-Consistent with the profiler ordering. (The script errored out before reaching
-`Concatenate`/`MaxPooling2D` on a multi-input layer; those are ≤2% per the profiler and
-were not chased.)
+This reproduces the profiler's *ordering* and nothing more, which is close to zero
+information — two methods both ranking convolution first was never in doubt. It is not
+quantitative corroboration, and these shares suffer the same over-attribution as Method 1
+(§3.4). The original run also errored out before reaching `Concatenate`/`MaxPooling2D` on
+a multi-input layer; that bug is fixed in `benchmarks/layer_costs.py`, and those types are
+≤2% per the profiler.
 
 ### 4.8 Model size
 
@@ -344,10 +452,23 @@ issue; graph structure is.**
 
 ---
 
-## 5. Survey: 13 local models
+## 5. Survey: 13 surveyed models (12 local + `v7_5_raw`)
 
-Same pipeline, same protocol. `Conv` column counts `Conv*`/`Dense`/`Separable`/`Depthwise`
-layers. `Lambdas` counts `TFOpLambda` + `SlicingOpLambda` + `Lambda`.
+Same pipeline, same protocol, `--iters 10 --warmup 3`. `Conv` column counts
+`Conv*`/`Dense`/`Separable`/`Depthwise` layers. `Lambdas` counts `TFOpLambda` +
+`SlicingOpLambda` + `Lambda`.
+
+> **This is a sample, not the corpus.** The repo holds ~22 unique ONNX models (29 files,
+> several duplicated between `./` and `./test/`). Not surveyed: `maskrcnn`, `clip`,
+> `lung_anatomy_merged`, `lung_anatomy_merged_ir9`, `mmdet_convnext`, `rfdetr-base`,
+> `interfuser_planKD`, `TrackerInferenceFcudarc3aug`, `raft`, `nms_v2`, `split_model`.
+>
+> They were excluded for **size and runtime** — most are 100–250 MB — **not because they
+> fail to convert**; that was never tested. The omission is not random and it matters:
+> `maskrcnn`, `nms_v2`, `raft` and `split_model` are the control-flow, NMS and
+> dynamic-shape graphs where the §7.1 layout rewrite is most likely to break. §7.4 leans
+> on this survey as ready-made regression coverage, so those models need converting at
+> least once before that claim holds.
 
 | model | ONNX nodes | Keras layers | Permute | Conv | Perm/Conv | Lambdas | graph ops | onnx | graph | eager | graph slowdown |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -360,6 +481,7 @@ layers. `Lambdas` counts `TFOpLambda` + `SlicingOpLambda` + `Lambda`.
 | ctformer | 645 | 481 | 15 | 22 | 0.7 | **363** | **11424** | 8.6 ms | 21.0 ms | 163.1 ms | 2.44× |
 | rtdetrv2 | 953 | 1766 | 161 | 114 | 1.4 | **1225** | 4106 | 102.1 ms | 137.4 ms | 335.4 ms | 1.35× |
 | traffic_light | 1281 | 884 | 130 | 55 | 2.4 | **559** | 2008 | 760.6 ms | 1249.8 ms | 1478.8 ms | 1.64× |
+| test/model.onnx (BERT-like) | 1183 | 1190 | 48 | 74 | 0.6 | **801** | 2068 | 2.2 ms | 8.6 ms | 84.0 ms | 3.87× † |
 | mnist-12 | 12 | 22 | 8 | 2 | 4.0 | 3 | 50 | 0.02 ms | 0.22 ms | 1.9 ms | 11.2× † |
 | infineon (Conv1D) | 96 | 114 | 10 | 10 | 1.0 | 72 | 312 | 0.03 ms | 0.21 ms | 7.8 ms | 6.3× † |
 | swin_v2_t ‡ | 6620 | 4369 | 57 | 53 | 1.1 | **3992** | 9691 | 4294.1 ms | 6466.2 ms | 8698.8 ms | 1.51× |
@@ -374,34 +496,76 @@ sometimes adds more.
 
 ### 5.1 Defect A is universal across CNNs
 
-`yolov7-tiny` is effectively a clone of your model's profile — **135 vs 136 Permutes, 58 vs
-58 convs, 2.57× vs 2.53×**. `v7_5_raw` is not a pathological export; this is simply what the
-converter does to every convolutional network. The ratio sits at ~2 Permutes per conv
-everywhere, which is exactly the signature of a per-layer wrap.
+`yolov7-tiny` is effectively a clone of `v7_5_raw`'s structure — **135 vs 136 Permutes
+over 58 vs 58 convs**. Layer counts are deterministic, so that comparison is exact.
+(Their slowdowns of 2.57× and 2.53× are *not* evidence of anything: the 1.6% difference
+sits far inside the ±10–20% variance disclosed in §2. The structural counts carry the
+argument alone.)
 
-`x3d_s` is the worst case by a wide margin at **40.6×**. 236 Permutes over 5-D NCDHW↔NDHWC
-tensors, and unlike the 2-D models it barely benefits from graph mode (2929.7 eager →
-2848.2 graph), meaning almost all of its cost is genuine memory traffic rather than
-dispatch.
+`v7_5_raw` is not a pathological export; this is simply what the converter does to every
+convolutional network. The ratio sits at ~2 Permutes per conv everywhere, which is
+exactly the signature of a per-layer wrap.
 
-### 5.2 Defect B is universal across transformers
+`x3d_s` is the worst case by a wide margin at **40.6×**, with 236 Permutes over 5-D
+NCDHW↔NDHWC tensors.
+
+> **Unvalidated: `x3d_s` has never been profiled.** Attributing its 40.6× to Defect A
+> rests only on `eager ≈ graph` (2929.7 → 2848.2 ms), which shows the cost is not Python
+> dispatch — it does not show the cost is transposes. TF's `Conv3D` kernels are
+> independently far slower than onnxruntime's, and that alternative has not been ruled
+> out. If most of the 40.6× is kernel quality, layout propagation will not fix it and the
+> §8.3 prioritisation is wrong. One `benchmarks/profile_ops.py` run settles it.
+
+### 5.2 Defect B: dispatch cost scales with layer count, and lambdas inflate layer count
 
 `swin_v2_t` produces **4369 Keras layers with 3992 lambdas** from 6620 ONNX nodes.
 `ctformer` turns 645 ONNX nodes into an **11,424-op** graph — a 17× expansion.
 
-The tell is the eager-vs-graph gap, which is pure Python dispatch:
+> **Correction.** An earlier revision framed this section around the eager-vs-graph
+> *ratio* and claimed lambda count predicts it. **It does not.** That framing also
+> presented a six-row table that omitted the three rows contradicting it, and led with
+> `infineon`, a row this document had already told the reader to ignore. Both are
+> corrected below.
 
-| model | eager | graph | dispatch penalty |
-|---|---|---|---|
-| infineon | 7.8 ms | 0.21 ms | **37×** |
-| test/model.onnx (BERT-like) | 84.0 ms | 8.6 ms | **9.8×** |
-| ctformer | 163.1 ms | 21.0 ms | **7.8×** |
-| mnist-12 | 1.9 ms | 0.22 ms | 8.6× |
-| dinov2 | 111.3 ms | 47.4 ms | 2.3× |
-| rtdetrv2 | 335.4 ms | 137.4 ms | 2.4× |
+Eager/graph ratio for **every** surveyed row, ordered by lambda count:
 
-`infineon` is the clean isolation of defect B: only 10 Permutes, but 72 lambdas from 96
-ONNX nodes, and a 37× eager penalty with essentially zero real compute.
+| lambdas | model | eager | graph | ratio |
+|---|---|---|---|---|
+| 3992 | swin_v2_t | 8698.8 ms | 6466.2 ms | **1.35×** |
+| 1225 | rtdetrv2 | 335.4 ms | 137.4 ms | 2.44× |
+| 801 | test/model.onnx | 84.0 ms | 8.6 ms | 9.8× |
+| 559 | traffic_light | 1478.8 ms | 1249.8 ms | **1.18×** |
+| 407 | dinov2 | 111.3 ms | 47.4 ms | 2.35× |
+| 363 | ctformer | 163.1 ms | 21.0 ms | 7.8× |
+| 101 | kiwibot | 138.8 ms | 85.3 ms | 1.63× |
+| 72 | infineon | 7.8 ms | 0.21 ms | 37× |
+| 3 | mnist-12 | 1.9 ms | 0.22 ms | 8.6× |
+
+**The two models with the most lambdas have the smallest ratios.** The asserted
+correlation is absent, arguably negative.
+
+What the data does support is a flat per-layer cost. `(eager − graph) / layer_count`:
+
+| model | µs/layer | | model | µs/layer |
+|---|---|---|---|---|
+| infineon | 67 | | kiwibot | 140 |
+| mnist-12 | 76 | | x3d_s | 140 |
+| dinov2 | 110 | | yolov7-tiny | 152 |
+| rtdetrv2 | 112 | | yolo11s | 234 |
+| test/model.onnx | 63 | | traffic_light | 259 |
+| v7_5_raw | 135 | | ctformer | 295 |
+| | | | swin_v2_t | 511 |
+
+(`chip` is an outlier at ~1230 µs/layer, consistent with its mis-resolved input per §3.5.)
+
+**Eager execution costs roughly 0.1–0.3 ms per Keras layer in Python dispatch.** The
+*ratio* varies 1.18×–37× only because it measures how little real compute a model has
+relative to its layer count — `infineon`'s 37× is a 7.6 ms absolute saving on a
+sub-millisecond model.
+
+Lambda explosion still matters, but through layer count rather than through the ratio: at
+4369 layers, `swin_v2_t` pays **~2.2 seconds per call** in dispatch. That is the argument
+for §8.1, and it has to be made in milliseconds.
 
 ---
 
@@ -515,9 +679,25 @@ layer into three buckets:
    *Note: for `ZeroPadding2D` the padding tuple itself is unchanged — it is
    `((top,bottom),(left,right))` in both formats — only `data_format` moves.*
 
-3. **Layout-fixed or unknown** — insert a transpose back to channels-first, exactly as
+3. **Shape-consuming** — any op that reads a tensor's *dimensions* rather than its
+   values: `Shape`, `Gather`/`Unsqueeze`/`Concat` on the shape path, and anything feeding
+   a dynamic `Reshape` target. **Must see the original layout**; transpose back before it.
+
+4. **Layout-fixed or unknown** — insert a transpose back to channels-first, exactly as
    today. `Reshape`, `Dense`, `TFOpLambda` with baked-in axes, the ONNX detect head, and
    **all model outputs**.
+
+> **Bucket 3 is the trap, and an earlier revision of this plan omitted it.** A `Shape` op
+> is neither elementwise (bucket 1) nor axis-baked (bucket 4), so a three-bucket taxonomy
+> silently routes it into "pass through and carry the tag". It would then read **NHWC**
+> dimensions where the consumer expects NCHW — producing a wrong reshape target rather
+> than a crash. That is **silent numerical corruption**, the worst possible failure mode
+> for this change.
+>
+> `v7_5_raw` has exactly this pattern: 9 `Shape` lambdas feeding `model.77`, whose outputs
+> build the three detect-head `Reshape` targets (§4.3). Any implementation must trace
+> shape provenance, not just op type. The §7.4 numeric gate would catch it — but only if
+> the affected models are in the gate, which is another reason §5's excluded models matter.
 
 For a CNN backbone this collapses the transposes to a handful at the head boundary. For
 `v7_5_raw` specifically, whose ONNX input is already NHWC, the ideal is near zero.
@@ -530,6 +710,10 @@ In `modelconverter.py`:
   alongside the existing `self._tensor_cache`.
 - Add `LAYOUT_AGNOSTIC_2D` and `LAYOUT_ADAPTABLE_2D` registries in `layer_utils.py`
   beside the existing `onnx_channel_first_cant_run_on_cpu_layers`.
+- Add shape-provenance tracking for bucket 3: mark any tensor derived from a `Shape` op,
+  and force its producer's input back to the original layout. Default any unrecognised
+  `TFOpLambda` into bucket 4 rather than bucket 1, so the failure mode is a redundant
+  transpose rather than a wrong result.
 - In `_convert_tensor`, before invoking a layer: determine its required layout, and emit a
   `Permute` **only** when the incoming tag differs from what is required.
 - Multi-input layers (`Concatenate`, `Add`): reconcile input tags. If they disagree,
@@ -540,28 +724,48 @@ In `modelconverter.py`:
 - Interaction with `should_transform_inputs_and_outputs` must be preserved; both settings
   need coverage.
 
-### 7.3 Expected result (estimate, not yet measured)
+### 7.3 Expected result
 
-From the §4.6 profile: removing substantially all transposes should take ~30% off
-graph-mode wall time, **51 → ~36 ms**, and drop the layer count **350 → ~215**, which cuts
-eager dispatch roughly proportionally, **98 → ~62 ms**. That moves `v7_5_raw` from 2.53× to
-roughly **1.8×** onnxruntime.
+An earlier revision projected "~30% off graph-mode wall time, 51 → ~36 ms". **That
+projection has been withdrawn**: it converted a thread-time share directly into a
+wall-time saving, which §4.6 shows is not valid.
 
-It will **not** reach parity. onnxruntime additionally fuses `Conv`+`LeakyRelu` (TF fuses
-only `Conv`+`BiasAdd`, per §4.6) and uses better convolution kernels. Closing that
-remaining gap is out of scope here.
+What can be said:
+
+- **Layer count 350 → ~215** for `v7_5_raw`. This one is structural and reliable.
+- **Eager time should fall roughly proportionally** at ~0.1–0.3 ms/layer (§5.2): ~135
+  layers removed ≈ **18 ms** off the 98.2 ms eager figure.
+- **Graph-mode saving is bounded, not predicted** — somewhere inside the ~30–50% interval
+  of §4.6, and transposes being effectively serial (§3.4 Method 3) argues for the upper
+  part of it. Anything more precise requires the prototype.
+
+It will **not** reach parity regardless. onnxruntime additionally fuses `Conv`+`LeakyRelu`
+(TF fuses only `Conv`+`BiasAdd`, per §4.6) and uses better convolution kernels. Closing
+that remaining gap is out of scope here.
 
 ### 7.4 Correctness gate
 
 This changes **every** converted model, so it needs:
 
-- Numeric equivalence vs onnxruntime across the `test/` corpus — the 13 models in §5 make
-  a ready-made regression set, with `2.3e-05` as the demonstrated achievable tolerance.
+- Numeric equivalence vs onnxruntime, with `2.3e-05` as the demonstrated achievable
+  tolerance. The 13 models in §5 are a starting point, **not** ready-made coverage: the
+  ~10 unsurveyed models (§5) include the control-flow and dynamic-shape graphs most at
+  risk, and they must be converted at least once before this gate means anything.
+- **A model with a dynamic-shape head in the gate** — `v7_5_raw` itself, or any model with
+  `Shape`-derived `Reshape` targets — since bucket 3 (§7.1) fails silently and numerics
+  are the only thing that catches it.
 - Layer-count and `graph_transpose` assertions to prove the transposes actually went away
   and to catch regressions.
-- Both `should_transform_inputs_and_outputs=True` and `False`.
+- Both `should_transform_inputs_and_outputs=True` and `False`, now that §3.1 has baselined
+  the difference (4 boundary transposes).
 - Explicit check that 1-D and 3-D models (`infineon`, `x3d_s`) are **byte-identical** to
   today's output, since they are out of scope for this change.
+- **Downstream layer-graph stability.** Removing ~116 `Permute` layers changes the graph
+  Tensorleap displays and maps analyses onto, and changes layer names under
+  `name_policy='attach_weights_name'`. Saved analyses, visualisations and anything keyed
+  on layer identity may break. This is a product-visible side effect, not just a
+  numerical one, and it needs an owner outside this repo before the change ships.
+  (**Unvalidated** — no downstream consumer was inspected.)
 
 ---
 
@@ -569,19 +773,40 @@ This changes **every** converted model, so it needs:
 
 1. **Defect B — eager dispatch.** Largely not an `onnx2keras` problem: Tensorleap runs
    these h5 models eagerly. Wrapping the loaded model in `tf.function` at inference time
-   in the engine / code-loader would recover **2×–37×** on the transformer models for
-   free, with no conversion changes at all. Worth raising against those repos separately.
-   This is the single highest value-per-effort item in this document, and **on GPU it is
-   likely to outrank §7 outright** — dispatch overhead is fixed cost that does not shrink
-   when the kernels get faster, so its relative share grows. Confirm with a GPU run of
-   `benchmarks/survey.py`, comparing the `t_keras_eager` and `t_keras_graph` columns.
+   in the engine / code-loader costs no conversion changes at all and saves, in absolute
+   terms per call:
+
+   | model | saving | | model | saving |
+   |---|---|---|---|---|
+   | swin_v2_t | **2233 ms** | | dinov2 | 64 ms |
+   | traffic_light | **229 ms** | | test/model.onnx | 75 ms |
+   | rtdetrv2 | **198 ms** | | kiwibot | 54 ms |
+   | ctformer | 142 ms | | v7_5_raw | 47 ms |
+
+   Stated in milliseconds rather than as the ratio an earlier revision used — see the
+   correction in §5.2. This is still the highest value-per-effort item in this document,
+   and **on GPU it likely outranks §7 outright**: dispatch is fixed cost that does not
+   shrink as kernels get faster, so its relative share grows. Confirm with a GPU run of
+   `benchmarks/survey.py`, comparing `t_keras_eager` against `t_keras_graph`.
 
 2. **Defect B — lambda count itself.** `swin` at 3992 lambda layers and `ctformer`'s 17×
    node→op expansion suggest the ONNX→Keras op mapping emits far more ops than necessary
-   for transformer patterns. Separate investigation.
+   for transformer patterns. At ~0.1–0.3 ms/layer this is where the dispatch cost is
+   manufactured, so reducing it compounds with item 1. Separate investigation.
 
-3. **`Conv1D`/`Conv3D` layout propagation** — deferred out of §7 scope, but `x3d_s` at
-   **40.6×** is the worst offender measured and should be picked up next.
+3. **`Conv1D`/`Conv3D` layout propagation** — deferred out of §7 scope. `x3d_s` at
+   **40.6×** is the worst ratio measured, but per §5.1 that has **not** been attributed to
+   Defect A. Profile it before prioritising: if TF's `Conv3D` kernels rather than layout
+   are the cause, this item is worthless and should be dropped.
+
+4. **Resolve the 115-vs-136 transpose gap** (§4.6) — decides whether the runtime problem
+   is ~15% smaller than the layer count suggests, or the profiler shares are understated.
+
+5. **Verify the h5 round-trip.** Every measurement here is of the in-memory converted
+   model. Production saves an h5 and §8.1 notes Tensorleap loads and runs that file; the
+   two need not be the same graph, and `layer_utils.py:24` shows revived layers take a
+   distinct path through the converter. One save/load/re-measure closes it.
+   (**Unvalidated** — no evidence the h5 differs in practice.)
 
 4. **Unrelated bug on branch `fix-bug-reshap-layers`.** `v7_5_raw` fails to convert there
    entirely: `onnx2kerastl/reshape_layers.py:260` calls `K.is_keras_tensor()` on a raw
