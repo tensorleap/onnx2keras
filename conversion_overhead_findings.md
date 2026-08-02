@@ -14,7 +14,7 @@ There are **two independent defects**, both general (not specific to any one mod
 
 | # | Defect | Who it hits | Cost |
 |---|---|---|---|
-| **A** | **Transpose sandwich** — every `Conv`/`Pooling` layer is wrapped in its own `Permute`-in/`Permute`-out pair, so the tensor ping-pongs NHWC↔NCHW around every convolution | every CNN, without exception (~2.0–2.6 Permutes per conv) | **~30% of all compute**; 2.5× slower than onnxruntime on `v7_5_raw`, up to **40.6×** on `x3d_s` |
+| **A** | **Transpose sandwich** — every `Conv`/`Pooling` layer is wrapped in its own `Permute`-in/`Permute`-out pair, so the tensor ping-pongs NHWC↔NCHW around every convolution | every CNN, without exception (~2.0–2.6 Permutes per conv) | **22–30% of all compute**; 2.5× slower than onnxruntime on `v7_5_raw`, up to **40.6×** on `x3d_s` |
 | **B** | **Lambda explosion + eager dispatch** — transformer graphs expand into thousands of `TFOpLambda`/`Lambda` layers, and running them eagerly costs pure Python dispatch | transformers (`swin` 3992 lambdas, `rtdetrv2` 1225, `traffic_light` 559, `dinov2` 407) | eager-vs-graph penalty of **2×–37×**, zero of it real compute |
 
 For the originating question — **`v7_5_raw` is defect A, not B.** Its 57 lambda layers are
@@ -23,6 +23,26 @@ and cost essentially nothing. The 136 `Permute` layers are the problem.
 
 Conversion is **numerically correct** in all cases checked — max abs diff vs onnxruntime
 on `v7_5_raw` is `2.3e-05` across all three outputs.
+
+> ### ⚠ All measurements below are CPU. Tensorleap's usual target is GPU.
+>
+> These conclusions were established on CPU and **have not yet been reproduced on GPU**.
+> Expect them to shift, in both directions:
+>
+> - cuDNN natively prefers **NCHW** — the opposite of CPU — so TF may keep convolutions
+>   channels-first and emit fewer transposes, or none of the per-conv pattern at all.
+> - Transposes are bandwidth-bound and GPU bandwidth is far higher, so defect A's share
+>   should **fall**.
+> - Kernels get much faster while Python dispatch cost does not, so defect B's
+>   eager-vs-graph penalty should get **relatively worse**.
+>
+> Net expectation: **defect A shrinks on GPU, defect B grows.** If that holds, the fix
+> priority in §7 inverts and §8.1 (wrapping models in `tf.function` in the engine)
+> becomes the first thing to do. Re-run `benchmarks/` on GPU before committing effort to
+> the §7 converter work.
+
+Reproduce anything in this document with the tooling in
+[`benchmarks/`](benchmarks/) — see [`benchmarks/README.md`](benchmarks/README.md).
 
 ---
 
@@ -291,8 +311,14 @@ are of the 111.34 ms of real op time, excluding the `ExecutorState::Process` wra
 | `ResizeNearestNeighbor` | 2 | 0.23 | 0.2% |
 | everything else | — | 0.06 | 0.1% |
 
-Method 1 (standalone re-timing, §3.4) independently gave ≈28%. **Transposes cost roughly
-as much as one third of the entire model, and about 60% of what the convolutions cost.**
+Method 1 (standalone re-timing, §3.4) independently gave ≈28%.
+
+A later repeat of the same profiler run on a more loaded machine (onnxruntime 20.1 →
+32.3 ms) gave `_FusedConv2D` 56.6% and `Transpose` **22.4%**. So the honest statement is
+that **transposes are consistently 22–30% of op time**, i.e. between a fifth and a third
+of the entire model, and roughly 40–60% of what the convolutions themselves cost. The
+ordering — conv first, transpose second, everything else far behind — was stable across
+every run.
 
 TF fused `Conv2D`+`BiasAdd` into `_FusedConv2D` but did **not** fuse `LeakyRelu` —
 onnxruntime does, which is part of why it stays ahead even after this is fixed.
@@ -456,12 +482,18 @@ intervening layers have to be made layout-transparent first.
 
 ## 7. Approved fix plan
 
+> **Gated on GPU confirmation.** This plan was approved against CPU evidence. Per the
+> banner in §1, defect A may be much smaller on GPU, which is the usual deployment
+> target. Re-run `benchmarks/survey.py` and `benchmarks/profile_ops.py` on GPU first; if
+> the Permute share collapses there, do §8.1 instead of this.
+
 Decisions taken:
 
 - **Where:** in `keras-data-format-converter` (the source), not as a post-pass in
   `onnx2kerastl`. It is the correct home, benefits every consumer, avoids duplicating
   layout logic, and avoids a second full graph rebuild on every conversion. Requires
   releasing that repo and bumping the pin at `pyproject.toml:19` from `0.1.24`.
+  Repo: `git@github.com:tensorleap/keras-data-format-converter.git`
 - **Scope:** **2-D CNN path only** for the first change. Covers `v7_5_raw`, `yolov7-tiny`,
   `yolo11s`, `kiwibot`, `chip`, `traffic_light`. `Conv1D`/`Conv3D` (and therefore
   `x3d_s`, the 40.6× worst case) stay on today's path for now.
@@ -539,7 +571,10 @@ This changes **every** converted model, so it needs:
    these h5 models eagerly. Wrapping the loaded model in `tf.function` at inference time
    in the engine / code-loader would recover **2×–37×** on the transformer models for
    free, with no conversion changes at all. Worth raising against those repos separately.
-   This is probably the single highest value-per-effort item in this document.
+   This is the single highest value-per-effort item in this document, and **on GPU it is
+   likely to outrank §7 outright** — dispatch overhead is fixed cost that does not shrink
+   when the kernels get faster, so its relative share grows. Confirm with a GPU run of
+   `benchmarks/survey.py`, comparing the `t_keras_eager` and `t_keras_graph` columns.
 
 2. **Defect B — lambda count itself.** `swin` at 3992 lambda layers and `ctformer`'s 17×
    node→op expansion suggest the ONNX→Keras op mapping emits far more ops than necessary
