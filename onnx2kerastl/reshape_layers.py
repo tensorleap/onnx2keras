@@ -838,6 +838,13 @@ def convert_gather_elements(node, params, layers, lambda_func, node_name, keras_
     indices_input = layers[node.input[1]]
 
     def torch_gather(x, indices, gather_axis):
+        # ONNX allows a negative axis. It must be normalised before the
+        # `axis == gather_axis` test below, which compares against a loop
+        # counter that is always >= 0 -- otherwise the test never matches, every
+        # coordinate comes from the identity grid, and the op silently returns
+        # the input unchanged: correct shape, wrong values.
+        if gather_axis < 0:
+            gather_axis += len(indices.shape)
         # A fully-defined indices shape uses static python shapes so that tf_fill/tf_reshape
         # do not depend on a tf_shape tensor. This keeps the emitted graph free of the extra
         # multi-input coordinate wiring that downstream graph round-trips can reorder, while
