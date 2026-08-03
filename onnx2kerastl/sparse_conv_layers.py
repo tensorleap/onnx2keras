@@ -1,31 +1,40 @@
 from .customonnxlayer.onnxscattertodense import TLScatterToDense
-from .customonnxlayer.onnxsparseconv import TLSparseConv3DLayer
+from .customonnxlayer.onnxsparseconv import TLSparseConv3DCoords, TLSparseConv3DFeatures
 
 
 def convert_tl_sparse_conv3d(node, params, layers, lambda_func, node_name, keras_names):
     """Convert a TLSparseConv3D custom op node (our own export of a spconv-style
-    3D sparse convolution -- see onnxsparseconv.TLSparseConv3DLayer) into a
-    Keras layer call. Two inputs (coords, feats), two outputs (coords, feats).
+    3D sparse convolution -- see onnxsparseconv) into Keras.
+
+    Two inputs (coords, feats) and two ONNX outputs (coords, feats), emitted as
+    two SINGLE-output Keras layers: a multi-output layer breaks
+    keras_data_format_converter, which assumes one output per layer when it
+    walks the graph.
     """
     in_coords = layers[node.input[0]]
     in_feats = layers[node.input[1]]
     weight = layers[node.input[2]]
     bias = layers[node.input[3]]
 
-    layer = TLSparseConv3DLayer(
+    geometry = dict(
         kernel_size=params["kernel_size"],
         stride=params["stride"],
         padding=params["padding"],
         dilation=params.get("dilation", [1, 1, 1]),
         in_shape=params["in_shape"],
+        subm=bool(params.get("subm", 0)),
+    )
+    base_name = params.get("cleaned_name", node_name)
+
+    out_coords = TLSparseConv3DCoords(name=f"{base_name}_coords", **geometry)(in_coords)
+    out_feats = TLSparseConv3DFeatures(
         in_channels=weight.shape[-2],
         out_channels=weight.shape[-1],
-        subm=bool(params.get("subm", 0)),
         weight=weight,
         bias=bias,
-        name=params.get("cleaned_name", node_name),
-    )
-    out_coords, out_feats = layer([in_coords, in_feats])
+        name=f"{base_name}_feats",
+        **geometry,
+    )([in_coords, in_feats, out_coords])
 
     outputs = params["_outputs"]
     layers[outputs[0]] = out_coords
