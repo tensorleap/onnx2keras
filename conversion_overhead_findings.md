@@ -5,7 +5,10 @@ inference slow. Triggered by `overwatch/model/v7_5_raw.onnx`, then generalised t
 12-model sample of the ~22 ONNX models held in this repo (see §5 for what was left out
 and why).
 
-**Status:** findings validated, fix plan approved, implementation not started.
+**Status:** findings validated, fix plan approved, implementation not started. GPU
+reproduction for `v7_5_raw` is now done — see §9 — and it confirms the §1 prediction:
+defect A shrinks on GPU, defect B grows. The other 12 surveyed models are not yet
+re-run on GPU.
 
 A critical review of this document is in
 [`conversion_overhead_findings_review.md`](conversion_overhead_findings_review.md). Its
@@ -31,10 +34,10 @@ and cost essentially nothing. The 136 `Permute` layers are the problem.
 Conversion is **numerically correct** in all cases checked — max abs diff vs onnxruntime
 on `v7_5_raw` is `2.3e-05` across all three outputs.
 
-> ### ⚠ All measurements below are CPU. Tensorleap's usual target is GPU.
+> ### ⚠ Sections 1–8 below are CPU. Tensorleap's usual target is GPU.
 >
-> These conclusions were established on CPU and **have not yet been reproduced on GPU**.
-> Expect them to shift, in both directions:
+> These conclusions were established on CPU. §9 now confirms the prediction below on one
+> model (`v7_5_raw`, one box) — the other 12 surveyed models are still unconfirmed on GPU.
 >
 > - cuDNN natively prefers **NCHW** — the opposite of CPU — so TF may keep convolutions
 >   channels-first and emit fewer transposes, or none of the per-conv pattern at all.
@@ -43,10 +46,11 @@ on `v7_5_raw` is `2.3e-05` across all three outputs.
 > - Kernels get much faster while Python dispatch cost does not, so defect B's
 >   eager-vs-graph penalty should get **relatively worse**.
 >
-> Net expectation: **defect A shrinks on GPU, defect B grows.** If that holds, the fix
-> priority in §7 inverts and §8.1 (wrapping models in `tf.function` in the engine)
-> becomes the first thing to do. Re-run `benchmarks/` on GPU before committing effort to
-> the §7 converter work.
+> Net expectation: **defect A shrinks on GPU, defect B grows.** §9 confirms this for
+> `v7_5_raw`: graph-mode slowdown 2.90x (CPU) → 1.19x (GPU), eager slowdown 7.45x (CPU) →
+> 21.5x (GPU). The fix priority in §7 **does invert** — §8.1 (wrapping models in
+> `tf.function` in the engine) is the first thing to do. Re-run `benchmarks/` on GPU for
+> the remaining 12 models before committing further effort to the §7 converter work.
 
 Reproduce anything in this document with the tooling in
 [`benchmarks/`](benchmarks/) — see [`benchmarks/README.md`](benchmarks/README.md).
@@ -815,3 +819,121 @@ This changes **every** converted model, so it needs:
    `tf.is_tensor(inp)` check reordered ahead of the `K.is_keras_tensor(inp)` call.
    `master` is unaffected. All measurements in this document were taken on `master`
    @ `b54841e`.
+
+---
+
+## 9. GPU validation — `v7_5_raw` only
+
+Runs the §1 banner's prediction against real GPU hardware, on the one model available
+locally on this box at the time. **This is one model, one GPU, one run each** — it
+confirms the *direction* of the CPU→GPU prediction, not a full re-survey. The other 12
+models in §5 are still unconfirmed on GPU; re-running them is the natural next step and
+should use the same `LD_LIBRARY_PATH` fix below.
+
+### 9.1 Environment
+
+```
+platform        Linux (Ubuntu), x86_64
+GPU             NVIDIA A10G, driver 580.126.09, compute capability 8.6
+tensorflow      2.12.0   (same version as §2)
+onnxruntime-gpu 1.17.1
+cuDNN           8.6.0 (via pip nvidia-cudnn-cu11)
+CUDA (pip)      11.8 runtime/cublas (via nvidia-cuda-runtime-cu11 / nvidia-cublas-cu11)
+CUDA (system)   12.6 / 12.8 / 12.9 / 13.0 toolkits under /usr/local
+```
+
+**Gotcha that will bite the next person running this.** `nvidia-smi` on this box shows a
+working A10G, but `tf.config.list_physical_devices('GPU')` returned `[]` and onnxruntime
+silently fell back to `CPUExecutionProvider`, out of the box. Not a missing-driver
+problem — TF 2.12 / onnxruntime-gpu 1.17 are built against **CUDA 11.x**, and their
+matching `libcublasLt.so.11` / `libcudart.so.11.0` ship as pip packages
+(`nvidia-cublas-cu11`, `nvidia-cuda-runtime-cu11`, already in this project's poetry lock).
+Those `.so` files exist, under
+`<venv>/lib/python3.10/site-packages/nvidia/*/lib/`, but the shell's
+`LD_LIBRARY_PATH` pointed only at the system-wide **CUDA 12.9** install, which has no
+`.so.11` files, and the dynamic linker never looked in the venv. Fix:
+
+```bash
+VENV=$(poetry env info --path)
+SITE=$VENV/lib/python3.10/site-packages
+export LD_LIBRARY_PATH="$(find $SITE/nvidia -maxdepth 2 -type d -name lib | tr '\n' ':')${LD_LIBRARY_PATH}"
+```
+
+After this, `tf.config.list_physical_devices('GPU')` reports the device, and
+`ort.InferenceSession(..., providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+.get_providers()` confirms `CUDAExecutionProvider` is actually selected (checked
+explicitly — a provider being *available* is not the same as a session *using* it).
+
+### 9.2 Structural counts reproduce exactly
+
+Independent of CPU vs GPU — conversion happens once, before either backend runs the
+graph. On this box: **350 Keras layers, 136 Permute, 58 Conv2D, 57 lambdas** — identical
+to §4.2's 350/136/58/57. Same numeric-correctness result too (finite, matching output
+shapes on all three heads).
+
+### 9.3 Timings (640×640, `benchmarks.survey` / `benchmarks.profile_ops`)
+
+```
+                    CPU (this box)   GPU (this box)
+onnxruntime              28.8 ms          4.7 ms
+keras graph              83.5 ms          5.6 ms   (0.99x in a separate profiler run)
+keras eager             214.7 ms        100.7 ms
+slowdown, graph          2.90x            1.19x
+slowdown, eager          7.45x           21.5x
+```
+
+(The CPU column is this box, not §4.4's macOS numbers — included here only to show the
+CPU→GPU *shift* on one consistent machine. It is in the same ballpark as §4.4: 2.90x vs
+2.53x graph, 7.45x vs 4.88x eager, within the ±10–20% cross-machine variance §2
+discloses.)
+
+**This confirms both halves of the §1 prediction:**
+
+- **Defect A collapses.** Graph-mode slowdown drops from 2.90x to essentially parity
+  (1.19x, one run as low as 0.99x). onnxruntime's convolutions speed up on GPU by roughly
+  the same factor as Keras's do, so the transpose tax that dominated the CPU gap becomes
+  a rounding error against ~5 ms of wall time.
+- **Defect B gets much worse.** Eager slowdown nearly triples, 7.45x → 21.5x. Python
+  dispatch cost per layer does not fall with faster kernels, so at GPU speeds it goes
+  from "a meaningful tax" to "the entire story" — the model has 350 layers regardless of
+  backend, and every one of them still pays a Python round-trip in eager mode.
+
+`profile_ops.py` on GPU (leaf events on `/device:GPU:0`, thread-time not wall-time, same
+caveat as §3.4 Method 2): the transpose-family kernel (`...Dimension<3>, unsigned int...`
+— cuDNN/XLA event names are truncated by the profiler's metadata table, but the op count
+is 115, matching §4.6's `Transpose` count exactly) is **~23% of device time**, in the same
+range as §4.6's multi-thread CPU estimate (22–30%). The *kernel-level* attribution barely
+moved; what moved is that total wall time shrank from ~83 ms to ~5 ms, so the same
+percentage share is a much smaller absolute cost, and onnxruntime's GPU kernels got
+proportionally faster too.
+
+### 9.4 New finding: GPU numeric tolerance is not the CPU tolerance
+
+§7.4 proposes `2.3e-05` (§1, CPU) as the correctness-gate tolerance. On GPU it does not
+hold:
+
+```
+TF32 enabled (TF default):   max abs diff vs onnxruntime ≈ 0.025–0.029 across p3/p4/p5
+TF32 disabled (fp32 exact):  max abs diff vs onnxruntime ≈ 0.008–0.010
+```
+
+Disabling TF32 (`tf.config.experimental.enable_tensor_float_32_execution(False)`) cuts
+the diff by ~3× but does not close it to CPU levels — the remainder is ordinary
+fp32 accumulation-order divergence compounding across 58 convolutions on different
+kernels (cuDNN vs onnxruntime's own GPU kernels), not a bug. **Any §7.4 gate that runs on
+GPU needs its own, looser tolerance** — `2.3e-05` was only ever demonstrated on CPU.
+
+### 9.5 What this does and doesn't settle
+
+- It validates the §1 banner's *direction* on the one model this box had available.
+  Re-running §5's other 12 models on GPU (with the `LD_LIBRARY_PATH` fix above) is the
+  natural next step and would turn this from "one model confirms the prediction" into
+  "the survey confirms it."
+- It makes item 8.1 (`tf.function` wrapping in the engine) look more urgent, not less —
+  on GPU it is now the dominant cost by a wide margin (21.5x eager slowdown vs 1.19x
+  graph slowdown), and it requires no changes to this repo at all.
+- It does **not** settle whether the §7 converter fix is still worth doing on GPU. At
+  1.19x, the remaining CPU-motivated case for §7 (layout propagation) is much weaker for
+  `v7_5_raw` specifically; whether that generalises depends on the untested models,
+  especially `x3d_s` (Conv3D, the worst CPU offender at 40.6x) and the transformer-heavy
+  rows where defect B already dominates on CPU.
