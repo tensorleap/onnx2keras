@@ -7,7 +7,7 @@ from keras import backend as K
 from keras.engine.keras_tensor import KerasTensor
 from keras.layers import SlicingOpLambda, Lambda
 from typing import Union
-from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
+from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one, big_constant_to_graph_tensor
 from .tfops_funcs import tf_reshape, tf_shape, tf_cast, tf_stack, tf_image_resize, tf_strided_slice,\
     tf_squeeze, tf_transpose, tf_where, tf_gather, tf_range, tf_reduce_sum, tf_abs, tf_expand_dims, tf_concat, \
     tf_shape, tf_tile, tf_gather_nd, tf_reduce_sum, tf_zeros_like, tf_multiply, tf_tensor_scatter_nd_update,\
@@ -834,7 +834,9 @@ def convert_gather_elements(node, params, layers, lambda_func, node_name, keras_
     """
     logger = logging.getLogger('onnx2keras.gather_elements')
     axis = params.get('axis', 0)
-    data_input = layers[node.input[0]]
+    # A constant data operand (e.g. a fixed coordinate grid) must not be baked
+    # into the graph as a literal -- see big_constant_to_graph_tensor.
+    data_input = big_constant_to_graph_tensor(layers[node.input[0]], name=f"{params['cleaned_name']}_data")
     indices_input = layers[node.input[1]]
 
     def torch_gather(x, indices, gather_axis):
