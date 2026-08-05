@@ -108,3 +108,37 @@ def test_gather_elements_large_constant_data_not_embedded():
     elapsed = time.time() - t0
     assert elapsed < 10.0, f"to_json() took {elapsed:.1f}s -- large constant likely baked into config"
     assert len(json_str) < 200_000, f"to_json() output is {len(json_str)} bytes -- large constant likely embedded"
+
+
+def test_gather_elements_coordinate_operands_have_distinct_tensor_names():
+    # rank >= 3 leaves two non-gather axes, so torch_gather emits two identity-grid
+    # coordinate tensors. tf.where already returns int64, so casting them to int64 is
+    # a no-op that produces no TF op -- both KerasTensors then fall back to the
+    # generic name "Placeholder:0". The h5 wires the stack by LAYER name and stays
+    # correct, but consumers that wire by TENSOR name collapse the duplicate key and
+    # feed one axis' coordinates into both slots, so GatherNd indexes the wrong axis.
+    data_shape = (1, 32, 2)
+    indices_shape = (1, 4, 2)
+    gather_axis = 1
+
+    rng = np.random.default_rng(7)
+    data = rng.standard_normal(data_shape).astype(np.float32)
+    picks = rng.integers(0, data_shape[gather_axis], size=indices_shape).astype(np.float32)
+
+    model = _build_model_constant_data(data, gather_axis, indices_shape)
+    keras_model = onnx_to_keras(model, input_names=['indices'],
+                                name_policy='attach_weights_name',
+                                allow_partial_compilation=False).converted_model
+
+    # substring, not endswith: keras uniquifies repeated layer names across tests
+    # sharing a process, so this can come out as "..._gather_indices_1".
+    stack = next(l for l in keras_model.layers if '_gather_indices' in l.name)
+    operand_names = [t.name for t in stack.input]
+    assert len(set(operand_names)) == len(operand_names), (
+        f"stack operands must have unique tensor names, got {operand_names}")
+    assert not any(name.startswith('Placeholder') for name in operand_names), (
+        f"stack operands must not fall back to the generic placeholder name: {operand_names}")
+
+    out = np.array(keras_model([picks]))
+    ref = np.take_along_axis(data, picks.astype(np.int64), axis=gather_axis)
+    assert np.allclose(out, ref)

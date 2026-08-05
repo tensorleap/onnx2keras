@@ -881,11 +881,28 @@ def convert_gather_elements(node, params, layers, lambda_func, node_name, keras_
         gather_indices = []
         for axis in range(len(indices.shape)):
             if axis == gather_axis:
-                gather_indices.append(tf_cast(gather_locations, dtype=tf.int64,
-                                              tf_name=f"{params['cleaned_name']}_gather_cast_loc"))
+                located = gather_locations
+                if located.dtype != tf.int64:
+                    located = tf_cast(located, dtype=tf.int64,
+                                      tf_name=f"{params['cleaned_name']}_gather_cast_loc")
+                gather_indices.append(located)
             else:
-                gather_indices.append(tf_cast(all_indices[:, axis], dtype=tf.int64,
-                                              tf_name=f"{params['cleaned_name']}_gather_cast_all"))
+                # tf.where already yields int64, so casting to int64 here is a no-op:
+                # TF creates no op for it, and the resulting KerasTensor carries the
+                # generic name "Placeholder:0" instead of a layer-qualified one. With
+                # rank >= 3 there are two such coordinates, so BOTH serialize under the
+                # same name. The h5 wires the stack by layer name and so stays correct,
+                # but consumers that wire by TENSOR name (leap_model_parser) collapse
+                # the duplicate key and feed one axis' coordinates into both slots --
+                # the gathered coordinate then indexes the wrong axis and GatherNd
+                # fails with "does not index into param shape". Keep the already-int64
+                # slice as-is (its strided_slice name is unique per axis) and name the
+                # cast per-axis when one is genuinely needed.
+                coordinate = all_indices[:, axis]
+                if coordinate.dtype != tf.int64:
+                    coordinate = tf_cast(coordinate, dtype=tf.int64,
+                                         tf_name=f"{params['cleaned_name']}_gather_cast_all_{axis}")
+                gather_indices.append(coordinate)
 
         gather_indices = tf_stack(gather_indices, axis=-1, tf_name=f"{params['cleaned_name']}_gather_indices")
         gathered = tf_gather_nd(x, gather_indices, tf_name=f"{params['cleaned_name']}_gather_nd")
