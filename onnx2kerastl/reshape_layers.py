@@ -10,8 +10,8 @@ from typing import Union
 from .utils import is_numpy, ensure_tf_type, unsqueeze_tensors_of_rank_one
 from .tfops_funcs import tf_reshape, tf_shape, tf_cast, tf_stack, tf_image_resize, tf_strided_slice,\
     tf_squeeze, tf_transpose, tf_where, tf_gather, tf_range, tf_reduce_sum, tf_abs, tf_expand_dims, tf_concat, \
-    tf_shape, tf_tile, tf_fill, tf_gather_nd, tf_reduce_sum, tf_zeros_like, tf_multiply, tf_tensor_scatter_nd_update,\
-    tf_ones
+    tf_shape, tf_tile, tf_gather_nd, tf_reduce_sum, tf_zeros_like, tf_multiply, tf_tensor_scatter_nd_update,\
+    tf_ones, tf_ones_like
 
 
 def convert_transpose(node, params, layers, lambda_func, node_name, keras_name):
@@ -845,20 +845,33 @@ def convert_gather_elements(node, params, layers, lambda_func, node_name, keras_
         # the input unchanged: correct shape, wrong values.
         if gather_axis < 0:
             gather_axis += len(indices.shape)
-        # A fully-defined indices shape uses static python shapes so that tf_fill/tf_reshape
-        # do not depend on a tf_shape tensor. This keeps the emitted graph free of the extra
-        # multi-input coordinate wiring that downstream graph round-trips can reorder, while
-        # partially-known shapes fall back to the dynamic tf_shape path.
+        # A fully-defined indices shape uses a static python shape list for the final
+        # reshape target, so that path doesn't depend on a tf_shape tensor. This keeps
+        # the emitted graph free of the extra multi-input coordinate wiring that
+        # downstream graph round-trips can reorder, while partially-known shapes fall
+        # back to the dynamic tf_shape path.
+        #
+        # The boolean filler feeding tf.where below is intentionally always derived
+        # from `indices` itself (via tf_ones_like) rather than from a plain python
+        # shape list. tf.fill(python_list, True) has no KerasTensor operand, so on a
+        # fully-defined shape it executes eagerly instead of becoming a graph op; the
+        # resulting per-axis identity/broadcast coordinate grid then gets threaded into
+        # the tf.stack below alongside the one genuinely-symbolic gather axis, and
+        # Keras's layer-config serialization bakes that whole concrete grid in as
+        # literal nested lists -- for a large `indices` tensor this is a
+        # multi-hundred-thousand-element blow-up on to_json()/get_config().
+        # tf.ones_like(indices, ...) keeps this a graph op end-to-end regardless of
+        # whether the shape is static or dynamic, at no extra runtime cost (it's
+        # shape-only, never touches indices' values).
         static_shape = indices.shape
         if static_shape.is_fully_defined():
-            fill_shape = static_shape.as_list()
             reshape_target = static_shape.as_list()
             gather_flat_shape = [static_shape.num_elements()]
         else:
-            fill_shape = tf_shape(indices, tf_name=f"{params['cleaned_name']}_gather_indices_shape")
-            reshape_target = fill_shape
+            reshape_target = tf_shape(indices, tf_name=f"{params['cleaned_name']}_gather_indices_shape")
             gather_flat_shape = [-1]
-        all_indices = tf_where(tf_fill(fill_shape, True, tf_name=f"{params['cleaned_name']}_gather_fill"),
+        all_indices = tf_where(tf_ones_like(indices, dtype=tf.bool,
+                                            tf_name=f"{params['cleaned_name']}_gather_fill"),
                                tf_name=f"{params['cleaned_name']}_gather_where")
         gather_locations = tf_reshape(indices, gather_flat_shape,
                                       tf_name=f"{params['cleaned_name']}_gather_reshape")
