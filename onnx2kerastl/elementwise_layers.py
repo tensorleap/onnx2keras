@@ -412,9 +412,16 @@ def convert_scatter_nd(node, params, layers, lambda_func, node_name, keras_name)
     if len(node.input) < 3:
         assert AttributeError('Less than 3 inputs')
 
-    data = ensure_tf_type(layers[node.input[0]])
-    indices = ensure_tf_type(layers[node.input[1]])
-    updates = ensure_tf_type(layers[node.input[2]])
+    # Large ScatterND operands (e.g. a BEV heatmap zero-canvas, or a fixed
+    # index/update table) must not be baked into the graph as literal
+    # constants -- see big_constant_to_graph_tensor. Any of the three operands
+    # can be a large constant, not just the target/data.
+    data = big_constant_to_graph_tensor(layers[node.input[0]], name=f"{params['cleaned_name']}_data")
+    data = ensure_tf_type(data)
+    indices = big_constant_to_graph_tensor(layers[node.input[1]], name=f"{params['cleaned_name']}_indices")
+    indices = ensure_tf_type(indices)
+    updates = big_constant_to_graph_tensor(layers[node.input[2]], name=f"{params['cleaned_name']}_updates")
+    updates = ensure_tf_type(updates)
     layers[node_name] = tf_tensor_scatter_nd_update(data, indices, updates,
                                                     tf_name=f"{params['cleaned_name']}_scatter_nd")
 

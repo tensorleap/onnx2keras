@@ -86,6 +86,9 @@ jobs:
           role-to-assume: arn:aws:iam::898022457080:role/github-action-test-s3-access-role
           aws-region: us-east-1
       - name: Test with pytest
+        env:
+          TF_ENABLE_ONEDNN_OPTS: "0"
         run: |
           source .venv/bin/activate
+          lscpu | grep -E '^Model name|^Flags' | cut -c1-200
           pytest test/${{ matrix.pytest_target }}/

@@ -27,12 +27,15 @@ from .upsampling_layers import convert_upsample
 from .caffe2_layers import convert_alias_with_name, convert_resize_nearest
 from .sampling_layers import convert_gridsample, convert_range, convert_unique, random_uniform_like
 from .fft_layers import convert_dft
+from .sparse_conv_layers import convert_tl_scatter_to_dense, convert_tl_sparse_conv3d
 
 AVAILABLE_CONVERTERS = {
     'Abs': convert_abs,
     'AliasWithName': convert_alias_with_name,
     'Conv': convert_conv,
     'ConvTranspose': convert_convtranspose,
+    'TLSparseConv3D': convert_tl_sparse_conv3d,
+    'TLScatterToDense': convert_tl_scatter_to_dense,
     'Relu': convert_relu,
     'Resize': convert_resize,
     'Elu': convert_elu,
