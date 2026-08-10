@@ -64,7 +64,16 @@ def big_constant_to_graph_tensor(value, name="Const"):
     Only used at genuine graph-entry points. Constants that are consumed as
     layer weights or that participate in constant folding must NOT go through
     here - they need to stay numpy (see ``ensure_tf_type``).
+
+    ``value`` can also be a concrete (eager) tf.Tensor rather than a numpy
+    array: helper converters (e.g. Where/Equal/Mul/Expand) call real tf ops
+    even when every input is a numpy constant, and under eager execution
+    that always returns an EagerTensor -- a fully materialized value just
+    like a numpy array, but not caught by ``is_numpy``. Coerce it first so
+    the same size-based protection still applies.
     """
+    if tf.is_tensor(value) and not isinstance(value, KerasTensor):
+        value = value.numpy()
     if _constant_anchor is not None and is_numpy(value) and value.size > LARGE_CONSTANT_THRESHOLD:
         from .customonnxlayer.onnxconstant import OnnxConstant
         return OnnxConstant(value=value, name=name)(_constant_anchor)
