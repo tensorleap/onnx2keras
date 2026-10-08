@@ -259,6 +259,29 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
             layers[node_name] = tf_gather(input_0, indices, axis=axis, tf_name=f"{params['cleaned_name']}_gather")
 
 
+def _unify_integer_dtypes(inputs, cleaned_name):
+    """tf.concat refuses mixed dtypes. The ONNX graph is well-typed, but the converter itself can hand
+    one branch an int32 (tf.shape / tf.range defaults) and another an int64 constant; cast the integer
+    inputs to the widest integer dtype among them. Floats and mixed float/int are left alone."""
+    kinds = []
+    for t in inputs:
+        dtype = getattr(t, 'dtype', None)
+        if dtype is None:
+            return inputs
+        try:
+            dtype = tf.as_dtype(dtype)
+        except TypeError:
+            return inputs
+        if not dtype.is_integer:
+            return inputs
+        kinds.append(dtype)
+    if len(set(kinds)) <= 1:
+        return inputs
+    widest = max(kinds, key=lambda d: d.size)
+    return [t if tf.as_dtype(t.dtype) == widest
+            else tf_cast(t, widest, tf_name=f"{cleaned_name}_concat_cast_{i}") for i, t in enumerate(inputs)]
+
+
 def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert concat.
@@ -273,6 +296,7 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
     logger = logging.getLogger('onnx2keras.concat')
 
     layer_input = [layers[node.input[i]] for i in range(len(node.input))]
+    layer_input = _unify_integer_dtypes(layer_input, params['cleaned_name'])
 
     if all([is_numpy(layers[node.input[i]]) for i in range(len(node.input))]):
         logger.debug('Concat numpy arrays.')
