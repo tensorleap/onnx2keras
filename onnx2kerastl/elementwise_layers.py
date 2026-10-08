@@ -5,7 +5,7 @@ import logging
 from .utils import is_numpy, ensure_tf_type, big_constant_to_graph_tensor
 from .tfops_funcs import tf_tensor_scatter_nd_update, tf_maximum, tf_minimum, tf_cast, tf_expand_dims, tf_repeat,\
     tf_equal, tf_where, tf_round, tf_sign, tf_abs, tf_math_mod, tf_bitwise_left_shift, tf_bitwise_right_shift,\
-    tf_logical_not, tf_add, tf_divide, tf_multiply, tf_subtract
+    tf_logical_not, tf_add, tf_divide, tf_multiply, tf_subtract, tf_tensor_scatter_nd_add, tf_shape, tf_where, tf_range, tf_reshape, tf_broadcast_to, tf_stack
 import tensorflow as tf
 from tensorflow.python.framework.ops import EagerTensor
 
@@ -424,6 +424,49 @@ def convert_scatter_nd(node, params, layers, lambda_func, node_name, keras_name)
     updates = ensure_tf_type(updates)
     layers[node_name] = tf_tensor_scatter_nd_update(data, indices, updates,
                                                     tf_name=f"{params['cleaned_name']}_scatter_nd")
+
+
+def convert_scatter_elements(node, params, layers, lambda_func, node_name, keras_name):
+    """
+    Convert ScatterElements: out = data; out[..., indices[p], ...] = updates[p] along `axis` for every
+    position p of `indices` (torchvision's box post-processing writes class-wise box columns this way).
+    Lowered to tensor_scatter_nd_update: each element position becomes a full N-D coordinate whose
+    `axis` component is the gathered index. `reduction` add maps to tensor_scatter_nd_add; mul is not
+    supported (TF 2.12 has no scatter-mul).
+    """
+    if len(node.input) < 3:
+        assert AttributeError('Less than 3 inputs')
+    axis = params.get('axis', 0)
+    reduction = params.get('reduction', b'none')
+    if isinstance(reduction, bytes):
+        reduction = reduction.decode('utf-8')
+    name = params['cleaned_name']
+    data = ensure_tf_type(big_constant_to_graph_tensor(layers[node.input[0]], name=f"{name}_data"))
+    indices = ensure_tf_type(big_constant_to_graph_tensor(layers[node.input[1]], name=f"{name}_indices"))
+    updates = ensure_tf_type(big_constant_to_graph_tensor(layers[node.input[2]], name=f"{name}_updates"))
+    rank = len(indices.shape)
+    if axis < 0:
+        axis += rank
+    indices = tf_cast(indices, tf.int64, tf_name=f"{name}_scatter_idx_cast")
+    # ONNX allows negative indices along the axis.
+    dim = tf_cast(tf_shape(data, tf_name=f"{name}_scatter_data_shape")[axis], tf.int64,
+                  tf_name=f"{name}_scatter_dim_cast")
+    indices = tf_where(indices < 0, indices + dim, indices, tf_name=f"{name}_scatter_idx_wrap")
+    idx_shape = tf_shape(indices, tf_name=f"{name}_scatter_idx_shape")
+    coords = []
+    for k in range(rank):
+        if k == axis:
+            coords.append(indices)
+            continue
+        grid = tf_range(tf_cast(idx_shape[k], tf.int64, tf_name=f"{name}_scatter_len_{k}"),
+                        tf_name=f"{name}_scatter_range_{k}")
+        grid = tf_reshape(grid, [-1 if j == k else 1 for j in range(rank)], tf_name=f"{name}_scatter_grid_{k}")
+        coords.append(tf_broadcast_to(grid, idx_shape, tf_name=f"{name}_scatter_bcast_{k}"))
+    nd_indices = tf_stack(coords, axis=-1, tf_name=f"{name}_scatter_nd_indices")
+    scatter = {'none': tf_tensor_scatter_nd_update, 'add': tf_tensor_scatter_nd_add}.get(reduction)
+    if scatter is None:
+        raise NotImplementedError(f"ScatterElements reduction '{reduction}' is not supported")
+    layers[node_name] = scatter(data, nd_indices, updates, tf_name=f"{name}_scatter_elements")
 
 
 def convert_round(node, params, layers, lambda_func, node_name, keras_name):
