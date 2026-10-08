@@ -416,7 +416,11 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                     logger.debug('The first argument is Keras/tf layer. Apply keras.Reshape.')
                     logger.debug('Target shape :')
                     logger.debug(np.int32(input_1[1:]))
-                    if len(np.int32(input_1[1:])) == 1 and np.int32(input_1[1:])[0] == -1:
+                    # keras.Reshape keeps dim 0 as the batch: only valid when the target's leading dim is
+                    # the input's batch (dynamic, or equal). A static leading dim that differs (e.g. torch's
+                    # `x.reshape(num_images, -1)` on an (N, 1) tensor) is a real reshape -> tf.reshape below.
+                    leading_dim_is_batch = input_1[0] is None or len(input_0.shape) == 0 or input_0.shape[0] is None or input_1[0] == input_0.shape[0]
+                    if len(np.int32(input_1[1:])) == 1 and np.int32(input_1[1:])[0] == -1 and leading_dim_is_batch:
                         if input_0.shape.rank == 1:
                             input_0 = tf_expand_dims(input_0, 0, tf_name=f"{params['cleaned_name']}_expand_dims")
                         logger.debug('The first argument is Keras/tf layer. Apply keras.Flatten.')
