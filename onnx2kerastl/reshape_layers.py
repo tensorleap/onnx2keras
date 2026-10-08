@@ -152,16 +152,9 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
     axis = params.get('axis', 0)
     if is_numpy(layers[node.input[0]]) and is_numpy(layers[node.input[1]]) and not 'is_embedding' in params:
         logger.debug('Gather from numpy array')
-        if axis == 0:
-            gathered = np.array(layers[node.input[0]][layers[node.input[1]]])
-        elif axis == 1:
-            gathered = np.array(layers[:, node.input[0]][layers[node.input[1]]])
-        elif axis == 2:
-            gathered = np.array(layers[:, :, node.input[0]][layers[node.input[1]]])
-        elif axis == 3:
-            gathered = np.array(layers[:, :, :, node.input[0]][layers[node.input[1]]])
-        else:
-            raise AttributeError('Can\'t gather by axis more than 3.')
+        # ONNX Gather on constants: take along `axis` (any rank, any index shape). The former
+        # per-axis branches indexed the `layers` dict with a slice for axis > 0 and crashed.
+        gathered = np.take(np.asarray(layers[node.input[0]]), np.asarray(layers[node.input[1]]), axis=axis)
 
         if gathered.dtype == np.object0:
             try:
