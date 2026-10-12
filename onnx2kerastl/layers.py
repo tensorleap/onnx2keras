@@ -14,7 +14,7 @@ from .operation_layers import convert_clip, convert_exp, convert_neg, convert_re
     convert_einsum
 from .elementwise_layers import convert_elementwise_div, convert_elementwise_add, convert_elementwise_mul, \
     convert_elementwise_sub, convert_max, convert_min, convert_mean, convert_equal, convert_where, convert_scatter_nd, \
-    convert_round, convert_mod, convert_bitshift
+    convert_round, convert_mod, convert_bitshift, convert_scatter_elements
 from .linear_layers import convert_gemm, convert_det
 from .reshape_layers import convert_transpose, convert_shape, convert_gather, convert_unsqueeze, \
     convert_concat, convert_reshape, convert_flatten, convert_slice, convert_squeeze, convert_expand, convert_resize, \
@@ -153,6 +153,7 @@ AVAILABLE_CONVERTERS = {
     "BitShift": convert_bitshift,
     "TopK": convert_topk,
     'GatherElements': convert_gather_elements,
+    'ScatterElements': convert_scatter_elements,
     'NonMaxSuppression': convert_nms,
     'Unique': convert_unique,
     'If': convert_if,

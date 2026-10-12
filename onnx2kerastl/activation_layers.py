@@ -199,11 +199,13 @@ def convert_hard_swish(node, params, layers, lambda_func, node_name, keras_name)
         assert AttributeError('More than 1 input for an activation layer.')
 
     input_0 = ensure_tf_type(layers[node.input[0]], name="%s_const" % keras_name)
+    # ONNX HardSwish: x * max(0, min(1, x / 6 + 0.5)). Python's max/min cannot take a symbolic
+    # tensor (KerasTensor has no __len__ / truth value), so clip with a tf op instead.
     alpha = 1 / 6
     beta = 0.5
-    hard_sigmoid = max(0, min(1, alpha * input_0 + beta))
-    hard_swish = input_0 * hard_sigmoid
-    layers[node_name] = hard_swish
+    hard_sigmoid = tf_clip_by_value(alpha * input_0 + beta, 0.0, 1.0,
+                                    tf_name=f"{params['cleaned_name']}_hard_sigmoid")
+    layers[node_name] = input_0 * hard_sigmoid
 
 
 def convert_gelu(node, params, layers, lambda_func, node_name, keras_name):

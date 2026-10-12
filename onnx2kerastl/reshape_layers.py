@@ -152,16 +152,9 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
     axis = params.get('axis', 0)
     if is_numpy(layers[node.input[0]]) and is_numpy(layers[node.input[1]]) and not 'is_embedding' in params:
         logger.debug('Gather from numpy array')
-        if axis == 0:
-            gathered = np.array(layers[node.input[0]][layers[node.input[1]]])
-        elif axis == 1:
-            gathered = np.array(layers[:, node.input[0]][layers[node.input[1]]])
-        elif axis == 2:
-            gathered = np.array(layers[:, :, node.input[0]][layers[node.input[1]]])
-        elif axis == 3:
-            gathered = np.array(layers[:, :, :, node.input[0]][layers[node.input[1]]])
-        else:
-            raise AttributeError('Can\'t gather by axis more than 3.')
+        # ONNX Gather on constants: take along `axis` (any rank, any index shape). The former
+        # per-axis branches indexed the `layers` dict with a slice for axis > 0 and crashed.
+        gathered = np.take(np.asarray(layers[node.input[0]]), np.asarray(layers[node.input[1]]), axis=axis)
 
         if gathered.dtype == np.object0:
             try:
@@ -259,6 +252,29 @@ def convert_gather(node, params, layers, lambda_func, node_name, keras_name):
             layers[node_name] = tf_gather(input_0, indices, axis=axis, tf_name=f"{params['cleaned_name']}_gather")
 
 
+def _unify_integer_dtypes(inputs, cleaned_name):
+    """tf.concat refuses mixed dtypes. The ONNX graph is well-typed, but the converter itself can hand
+    one branch an int32 (tf.shape / tf.range defaults) and another an int64 constant; cast the integer
+    inputs to the widest integer dtype among them. Floats and mixed float/int are left alone."""
+    kinds = []
+    for t in inputs:
+        dtype = getattr(t, 'dtype', None)
+        if dtype is None:
+            return inputs
+        try:
+            dtype = tf.as_dtype(dtype)
+        except TypeError:
+            return inputs
+        if not dtype.is_integer:
+            return inputs
+        kinds.append(dtype)
+    if len(set(kinds)) <= 1:
+        return inputs
+    widest = max(kinds, key=lambda d: d.size)
+    return [t if tf.as_dtype(t.dtype) == widest
+            else tf_cast(t, widest, tf_name=f"{cleaned_name}_concat_cast_{i}") for i, t in enumerate(inputs)]
+
+
 def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
     """
     Convert concat.
@@ -273,6 +289,7 @@ def convert_concat(node, params, layers, lambda_func, node_name, keras_name):
     logger = logging.getLogger('onnx2keras.concat')
 
     layer_input = [layers[node.input[i]] for i in range(len(node.input))]
+    layer_input = _unify_integer_dtypes(layer_input, params['cleaned_name'])
 
     if all([is_numpy(layers[node.input[i]]) for i in range(len(node.input))]):
         logger.debug('Concat numpy arrays.')
@@ -392,7 +409,11 @@ def convert_reshape(node, params, layers, lambda_func, node_name, keras_name):
                     logger.debug('The first argument is Keras/tf layer. Apply keras.Reshape.')
                     logger.debug('Target shape :')
                     logger.debug(np.int32(input_1[1:]))
-                    if len(np.int32(input_1[1:])) == 1 and np.int32(input_1[1:])[0] == -1:
+                    # keras.Reshape keeps dim 0 as the batch: only valid when the target's leading dim is
+                    # the input's batch (dynamic, or equal). A static leading dim that differs (e.g. torch's
+                    # `x.reshape(num_images, -1)` on an (N, 1) tensor) is a real reshape -> tf.reshape below.
+                    leading_dim_is_batch = input_1[0] is None or len(input_0.shape) == 0 or input_0.shape[0] is None or input_1[0] == input_0.shape[0]
+                    if len(np.int32(input_1[1:])) == 1 and np.int32(input_1[1:])[0] == -1 and leading_dim_is_batch:
                         if input_0.shape.rank == 1:
                             input_0 = tf_expand_dims(input_0, 0, tf_name=f"{params['cleaned_name']}_expand_dims")
                         logger.debug('The first argument is Keras/tf layer. Apply keras.Flatten.')
