@@ -76,6 +76,9 @@ def big_constant_to_graph_tensor(value, name="Const"):
         value = value.numpy()
     if _constant_anchor is not None and is_numpy(value) and value.size > LARGE_CONSTANT_THRESHOLD:
         from .customonnxlayer.onnxconstant import OnnxConstant
+        if value.dtype == np.bool_:
+            as_uint8 = OnnxConstant(value=value.astype(np.uint8), name=name)(_constant_anchor)
+            return tf.cast(as_uint8, tf.bool)
         return OnnxConstant(value=value, name=name)(_constant_anchor)
     return value
 
