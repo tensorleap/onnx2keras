@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 import tensorflow as tf
 from typing import Callable
@@ -6,10 +7,31 @@ import logging
 logger = logging.getLogger('onnx2keras.tfops_funcs')
 
 layer_names_counter = {}
+_large_const_counter = itertools.count()
+
+
+def _protect_large_constants(args, kwargs, tf_name):
+    from keras.engine.keras_tensor import KerasTensor
+    from .utils import big_constant_to_graph_tensor
+
+    def is_const(a):
+        return isinstance(a, np.ndarray) or (tf.is_tensor(a) and not isinstance(a, KerasTensor))
+
+    if not any(isinstance(a, KerasTensor) for a in list(args) + list(kwargs.values())):
+        return args, kwargs
+    base = tf_name if isinstance(tf_name, str) and tf_name else "const"
+
+    def convert(a):
+        if is_const(a):
+            return big_constant_to_graph_tensor(a, name=f"{base}_bigconst_{next(_large_const_counter)}")
+        return a
+
+    return tuple(convert(a) for a in args), {k: convert(v) for k, v in kwargs.items()}
 
 
 def named_tfop(func: Callable):
     def wrapped_function(*args, tf_name=None, **kwargs):
+        args, kwargs = _protect_large_constants(args, kwargs, tf_name)
         result = func(*args, **kwargs)
         if tf_name is None or tf_name=="" or not isinstance(tf_name, str):
             raise ValueError(f"The layer {result.node.layer} with name"

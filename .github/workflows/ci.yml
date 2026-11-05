@@ -5,10 +5,10 @@ permissions:
     contents: read  # This is required for actions/checkout
 jobs:
   python-setup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
-        os: [ubuntu-24.04]
+        os: [ubuntu-22.04]
     steps:
       - name: Check out repository
         uses: actions/checkout@v2
@@ -52,11 +52,11 @@ jobs:
         python-version: ${{ steps.setup-python.outputs.python-version }}
         cache_key: ${{ steps.compute-cache-key.outputs.cache_key }}
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: python-setup
     strategy:
       matrix:
-        os: [ubuntu-24.04]
+        os: [ubuntu-22.04]
         pytest_target: [models, layers]
     name: test-${{ matrix.pytest_target }}
     steps:
